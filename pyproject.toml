@@ -1,0 +1,100 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "universal-business-core"
+version = "0.1.0"
+description = "Universal Business Core - Architectural Baseline (Entrega 0.1)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+authors = [
+    { name = "Universal Business Core Team" },
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Typing :: Typed",
+    "Intended Audience :: Developers",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.4",
+    "mypy>=1.10",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["universal_business*"]
+
+# ---------------- pytest ----------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q --strict-markers"
+
+# ---------------- ruff ----------------
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src"]
+exclude = [
+    "docs/_gen_plan_pdf.py",  # script auxiliar de generación, no pertenece al core
+]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "W",   # pycodestyle warnings
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # line-length handled by formatter
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["universal_business", "tests"]
+case-sensitive = true
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = true
+
+# ---------------- mypy ----------------
+[tool.mypy]
+python_version = "3.11"
+mypy_path = "src"
+explicit_package_bases = true
+strict = true
+show_error_codes = true
+show_column_numbers = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+
+[[tool.mypy.overrides]]
+module = [
+    "universal_business.domain.catalog.*",
+    "universal_business.domain.resources.*",
+    "universal_business.domain.availability.*",
+    "universal_business.domain.reservations.*",
+    "universal_business.domain.orders.*",
+    "universal_business.domain.fulfillment.*",
+]
+strict = false
+disallow_untyped_defs = false

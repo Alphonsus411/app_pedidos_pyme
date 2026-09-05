@@ -4,13 +4,12 @@ Plan Entrega 0.1: Architectural Baseline
 """
 from __future__ import annotations
 
-import sys
 import re
+import sys
 import textwrap
 from pathlib import Path
 
 from fpdf import FPDF
-
 
 MD_PATH = Path(__file__).parent / "plan_entrega_0.1_architectural_baseline.md"
 PDF_PATH = Path(__file__).parent / "plan_entrega_0.1_architectural_baseline.pdf"
