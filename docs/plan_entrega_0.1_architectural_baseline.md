@@ -1,695 +1,813 @@
 # PLAN DE IMPLEMENTACIÓN — ENTREGA 0.1: ARCHITECTURAL BASELINE
 
-**Documento:** Plan detallado de implementación
-**Versión:** 1.0
+**Documento:** Plan detallado de implementación (revisado v2.0 — correcciones arquitectónicas)
+**Versión:** 2.0 (1ª revisión de plan, 18 correcciones arquitectónicas aplicadas)
 **Fecha:** 5 de septiembre de 2026
 **Branch:** `feat/architectural-baseline`
 **Documento de autoridad:** `hoja_ruta_universal_business_core.pdf`
+**Estado:** Espera de aprobación arquitectónica antes de implementar código
 
 ---
 
 ## A. Evaluación actual del repositorio
 
-**Estado actual:** El repositorio está prácticamente vacío.
+**Estado actual:** Repositorio esencialmente vacío.
 
 | Elemento | Estado |
 |---|---|
-| Código Python | ❌ Inexistente |
+| Código Python / paquete `src/universal_business/` | ❌ Inexistente |
 | `pyproject.toml` | ❌ Inexistente |
-| Estructura de paquetes | ❌ Inexistente |
-| Tests | ❌ Inexistentes |
-| Documentación arquitectónica | ❌ Inexistente (ARCHITECTURE.md, ADRs) |
-| Configuración CI | ❌ Inexistente |
-| `.gitignore` | ✅ Existente, razonablemente completo |
-| Branch | ✅ `feat/architectural-baseline` activo |
+| Estructura de paquetes y módulos | ❌ Inexistente |
+| Tests (`tests/`) | ❌ Inexistentes |
+| Documentación arquitectónica (`ARCHITECTURE.md`, ADRs) | ❌ Inexistente |
+| Configuración CI (`.github/workflows/ci.yml`) | ❌ Inexistente |
+| `.gitignore` | ✅ Existente (cubre venv, cachés, logs, .env, sqlite) |
+| Branch actual | ✅ `feat/architectural-baseline` (protegido master) |
 
 **Activos disponibles:**
-- `.gitignore` — Listo para usar (venv, cachés, logs, .env, DBs sqlite).
-- `hoja_ruta_universal_business_core.pdf` — Especificación de autoridad.
+- `.gitignore` — listo para usar.
+- `hoja_ruta_universal_business_core.pdf` — documento de autoridad (12 pp.).
+- `docs/plan_entrega_0.1_architectural_baseline.md` — este documento (fuente de verdad de la entrega).
 
 ---
 
-## B. Árbol de directorios propuesto
+## B. Árbol de directorios PROPUESTO (versión CORREGIDA y mínima)
+
+> **Principio anti-inflación (Corrección 6):** No se crean archivos vacíos. Cada archivo listado cumple AL MENOS UNA de estas funciones: contiene entidad/VO útil, define un contrato real, marca límite arquitectónico, contiene test útil o es `__init__.py` estrictamente necesario para marcar paquete.
 
 ```
 app_pedidos_pyme/
 ├── .gitignore                                    # [ya existe]
 ├── hoja_ruta_universal_business_core.pdf         # [ya existe]
-├── pyproject.toml                                # ← NUEVO: metadata, deps, pytest/ruff/mypy config
-├── .pre-commit-config.yaml                       # ← NUEVO: hooks opcionales
+├── pyproject.toml                                # ← metadata + deps + pytest/ruff/mypy
 │
 ├── docs/
-│   ├── ARCHITECTURE.md                           # ← NUEVO: arquitectura al detalle
+│   ├── ARCHITECTURE.md                           # ← 4 capas + tenancy + extensiones verticales
+│   ├── plan_entrega_0.1_architectural_baseline.md  # ← ESTE DOCUMENTO
+│   ├── plan_entrega_0.1_architectural_baseline.pdf # ← versión PDF (auto-generado)
 │   └── adr/
 │       ├── ADR-001-modular-monolith-vs-microservices.md
 │       ├── ADR-002-multi-tenancy-strategy.md
 │       ├── ADR-003-catalog-item-model.md
 │       ├── ADR-004-domain-events-and-outbox.md
-│       └── ADR-005-vertical-extension-model.md
+│       ├── ADR-005-vertical-extension-model.md
+│       ├── ADR-006-resources-and-availability-model.md   # ← NUEVO (Corrección 1)
+│       └── ADR-007-idempotency-for-orders-and-reservations.md  # ← NUEVO (Corrección 1)
 │
 ├── src/
 │   └── universal_business/
-│       ├── __init__.py
+│       ├── __init__.py                           # marcador de paquete
 │       │
-│       ├── domain/                               # ← PURO, sin imports de infra/api
+│       ├── domain/                               # 🔒 PURO — sin imports de infra/api/verticals
 │       │   ├── __init__.py
 │       │   │
-│       │   ├── shared/                           # ← Value objects y primitivas transversales
+│       │   ├── shared/                           # Utilidades TRANSVERSALES de dominio
 │       │   │   ├── __init__.py
 │       │   │   ├── value_objects/
 │       │   │   │   ├── __init__.py
-│       │   │   │   ├── ids.py                    # TenantId, BusinessId, LocationId, CustomerId
-│       │   │   │   ├── money.py                  # Money, Currency (Decimal + ISO-4217)
-│       │   │   │   ├── temporal.py               # DateRange, TimeRange, timezone-aware helpers
-│       │   │   │   └── status.py                 # LifecycleStatus, StatusTransition
-│       │   │   ├── entities.py                   # BaseEntity + AggregateRoot (genéricos)
-│       │   │   ├── errors.py                     # DomainError, InvariantViolation, etc.
-│       │   │   └── events.py                     # DomainEvent base + event metadata
+│       │   │   │   ├── ids.py                    # IDs fuertes (TenantId, BusinessId, LocationId, CustomerId, EntityId[T])
+│       │   │   │   ├── money.py                  # Money (Decimal + Currency) + política redondeo/precisión
+│       │   │   │   ├── temporal.py               # DateRange / TimeRange / datetime timezone-aware guards
+│       │   │   │   └── status.py                 # StatusTransition (utilidad), NO enum universal
+│       │   │   ├── entities.py                   # BaseEntity + AggregateRoot (SI aportan valor real: id, timestamps, events)
+│       │   │   ├── errors.py                     # DomainError + StatusTransitionError + MoneyError + TemporalError + TenantBoundaryError
+│       │   │   └── events.py                     # DomainEvent base (mínimo útil)
 │       │   │
-│       │   ├── business/                         # ← Módulo: Tenant, Business, Location
+│       │   ├── business/                         # Tenant / Business / Location
 │       │   │   ├── __init__.py
-│       │   │   ├── entities.py                   # Tenant, Business, Location, BusinessSettings
-│       │   │   ├── value_objects.py              # Address, ContactInfo, OperatingHours
-│       │   │   └── ports.py                      # ITenant, IBusiness, ILocation repositories
+│       │   │   ├── entities.py                   # Tenant (limite SaaS), Business, Location
+│       │   │   ├── value_objects.py              # Address, ContactInfo, OperatingHours, BusinessSettings
+│       │   │   └── ports.py                      # ITenantRepository · IBusinessRepository · ILocationRepository  (Protocol)
 │       │   │
-│       │   ├── customers/                        # ← Módulo: Customers
+│       │   ├── customers/                        # Customer + CustomerStatus
 │       │   │   ├── __init__.py
-│       │   │   ├── entities.py                   # Customer, ContactPoint, Address, Consent
-│       │   │   ├── value_objects.py              # CustomerPreferences, ConsentType
-│       │   │   └── ports.py                      # ICustomerRepository
+│       │   │   ├── entities.py                   # Customer, ContactPoint, Consent
+│       │   │   ├── value_objects.py              # CustomerPreferences, ConsentType, CustomerStatus enum
+│       │   │   └── ports.py                      # ICustomerRepository  (Protocol)
 │       │   │
-│       │   ├── catalog/                          # ← ESQUELETO
+│       │   ├── catalog/                          # CONTRATOS SOLAMENTE (sin entidades placeholder)
+│       │   │   ├── __init__.py                   # marcador de paquete (establece límite de módulo)
+│       │   │   └── ports.py                      # ICatalogRepository (contrato, por ahora mínimo)
+│       │   │
+│       │   ├── resources/                        # CONTRATOS SOLAMENTE
 │       │   │   ├── __init__.py
-│       │   │   ├── entities.py                   # CatalogItem, Category, Variant placeholders
-│       │   │   └── ports.py                      # ICatalogRepository
+│       │   │   └── ports.py                      # IResourceRepository
 │       │   │
-│       │   ├── resources/                        # ← ESQUELETO
+│       │   ├── availability/                     # CONTRATOS SOLAMENTE
 │       │   │   ├── __init__.py
-│       │   │   ├── entities.py                   # Resource, ResourceType, Schedule placeholders
-│       │   │   └── ports.py
+│       │   │   └── ports.py                      # IAvailabilityRepository
 │       │   │
-│       │   ├── availability/                     # ← ESQUELETO
+│       │   ├── reservations/                     # CONTRATOS + ReservationStatus (solo enum)
 │       │   │   ├── __init__.py
-│       │   │   ├── entities.py                   # AvailabilityRule, Block placeholders
-│       │   │   └── ports.py
+│       │   │   ├── value_objects.py              # ReservationStatus (enum propio del módulo)
+│       │   │   └── ports.py                      # IReservationRepository
 │       │   │
-│       │   ├── reservations/                     # ← ESQUELETO
+│       │   ├── orders/                           # CONTRATOS + OrderStatus (solo enum)
 │       │   │   ├── __init__.py
-│       │   │   ├── entities.py                   # Reservation, ReservationStatus placeholders
-│       │   │   └── ports.py
+│       │   │   ├── value_objects.py              # OrderStatus (enum propio del módulo)
+│       │   │   └── ports.py                      # IOrderRepository
 │       │   │
-│       │   ├── orders/                           # ← ESQUELETO
-│       │   │   ├── __init__.py
-│       │   │   ├── entities.py                   # Order, OrderItem, OrderStatus placeholders
-│       │   │   └── ports.py
-│       │   │
-│       │   └── fulfillment/                      # ← ESQUELETO
+│       │   └── fulfillment/                      # CONTRATOS + FulfillmentStatus (solo enum)
 │       │       ├── __init__.py
-│       │       ├── entities.py                   # Fulfillment, FulfillmentType placeholders
-│       │       └── ports.py
+│       │       ├── value_objects.py              # FulfillmentStatus (enum propio del módulo)
+│       │       └── ports.py                      # IFulfillmentRepository
 │       │
-│       ├── application/                          # ← Casos de uso, comandos, queries
-│       │   ├── __init__.py
-│       │   └── ports/
-│       │       ├── __init__.py
-│       │       └── repositories.py               # Re-exporta todos los IRepository
+│       ├── application/                          # Casos de uso (FASE 1 en adelante) — en 0.1: SOLO marcadores de paquete
+│       │   └── __init__.py                       # marcador (límite arquitectónico: domain <-- application)
+│       │                                           # NOTA: NO existe application/ports/repositories.py (Corrección 7)
 │       │
-│       ├── infrastructure/                       # ← SIN IMPLEMENTAR (solo marcador)
-│       │   └── __init__.py
+│       ├── infrastructure/                       # SIN IMPLEMENTAR — solo marcador
+│       │   └── __init__.py                       # límite: solo marcador, nada de SQLAlchemy/Postgres
 │       │
-│       ├── api/                                  # ← SIN IMPLEMENTAR (solo marcador)
-│       │   └── __init__.py
+│       ├── api/                                  # SIN IMPLEMENTAR — solo marcador
+│       │   └── __init__.py                       # límite: NO FastAPI, no endpoints
 │       │
-│       └── verticals/                            # ← SIN IMPLEMENTAR (solo marcador)
-│           └── __init__.py
+│       └── verticals/                            # SIN IMPLEMENTAR — solo marcador
+│           └── __init__.py                       # límite: NO pica-pollo, NO nombres sectoriales
 │
 └── tests/
     ├── __init__.py
-    ├── conftest.py                               # pytest fixtures base (IDs, tz, etc.)
+    ├── conftest.py                               # Fixtures base: TENANT_ID / BUSINESS_ID / LOCATION_ID / CUSTOMER_ID / TZ / CURRENCY
     │
-    ├── architecture/                             # Tests de límites de dependencia
+    ├── architecture/                             # B. Tests arquitectónicos (Corrección 14.B)
     │   ├── __init__.py
-    │   └── test_architecture_boundaries.py
+    │   └── test_architecture_boundaries.py       # Reglas: dom→infra? dom→api? dom→FastAPI? dom→SQLAlchemy? pica-pollo names?
     │
-    └── unit/
+    ├── imports/                                  # C. Tests de importación (Corrección 14.C)
+    │   ├── __init__.py
+    │   └── test_import_without_externals.py      # universal_business se importa sin servicios externos
+    │
+    └── unit/                                     # A. Tests unitarios (Corrección 14.A)
         ├── __init__.py
         │
-        ├── domain/
-        │   ├── __init__.py
-        │   │
-        │   ├── shared/
-        │   │   ├── __init__.py
-        │   │   ├── test_ids.py
-        │   │   ├── test_money.py
-        │   │   ├── test_temporal.py
-        │   │   ├── test_status.py
-        │   │   └── test_domain_events.py
-        │   │
-        │   ├── business/
-        │   │   ├── __init__.py
-        │   │   ├── test_tenant.py
-        │   │   ├── test_business.py
-        │   │   └── test_location.py
-        │   │
-        │   └── customers/
-        │       ├── __init__.py
-        │       └── test_customer.py
-        │
-        └── application/
-            └── __init__.py
+        └── domain/
+            ├── __init__.py
+            │
+            ├── shared/
+            │   ├── __init__.py
+            │   ├── test_ids.py
+            │   ├── test_money.py
+            │   ├── test_temporal.py
+            │   ├── test_status_transition.py     # NO LifecycleStatus; StatusTransition utility + cada dominio su propio enum
+            │   ├── test_domain_events.py
+            │   └── test_base_entities.py         # BaseEntity / AggregateRoot (valor real: timestamps, events)
+            │
+            ├── business/
+            │   ├── __init__.py
+            │   ├── test_tenant.py                # Tenant NO es necesariamente entidad legal
+            │   ├── test_business.py
+            │   └── test_location.py
+            │
+            └── customers/
+                ├── __init__.py
+                └── test_customer.py              # location_id NO obligatorio
 
 └── .github/
     └── workflows/
-        └── ci.yml                                # pytest + ruff + mypy en cada push/PR
+        └── ci.yml                                # MÍNIMO: ruff check, mypy, pytest
 ```
+
+### Notas importantes sobre el árbol (Correción 6 aplicada)
+- **NO** existen `entities.py` vacíos en `catalog/resources/availability`. Si un módulo no tiene entidades reales para la 0.1, **solo** trae `__init__.py` (marcador de límite arquitectónico) y `ports.py` (contrato real para FASE 1).
+- `reservations/orders/fulfillment` **sí** tienen `value_objects.py` porque necesitan exponer sus propios `*Status` enums (Corrección 2).
+- `application/` NO contiene subcarpeta `ports/` (Corrección 7). Los contratos viven en `domain/<modulo>/ports.py` y cada caso de uso importa solo los que necesita.
 
 ---
 
-## C. Archivos a crear (resumen por categoría)
+## C. Archivos a crear (resumen CORREGIDO por categoría)
 
-### Configuración raíz (3 archivos)
-1. `pyproject.toml` — metadata, dependencias, configuración de pytest/ruff/mypy
-2. `.pre-commit-config.yaml` — hooks opcionales de calidad
-3. `.github/workflows/ci.yml` — pipeline de CI
+> **Inflación cero:** cada archivo tiene propósito explícito. El número baja de ~63 a ~49.
 
-### Documentación (6 archivos)
+### Configuración raíz (2 archivos)
+1. `pyproject.toml` — metadata + deps + pytest/ruff/mypy (sin bandit, sin import-linter, sin pre-commit hard requirement)
+2. `.github/workflows/ci.yml` — pipeline MÍNIMO (ruff + mypy + pytest)
+3. `.pre-commit-config.yaml` — **opcional** (se crea solo si aporta valor; si no, se omite)
+
+### Documentación (9 archivos)
 4. `docs/ARCHITECTURE.md`
 5. `docs/adr/ADR-001-modular-monolith-vs-microservices.md`
 6. `docs/adr/ADR-002-multi-tenancy-strategy.md`
 7. `docs/adr/ADR-003-catalog-item-model.md`
 8. `docs/adr/ADR-004-domain-events-and-outbox.md`
 9. `docs/adr/ADR-005-vertical-extension-model.md`
+10. `docs/adr/ADR-006-resources-and-availability-model.md` — **NUEVO (Corrección 1)**
+11. `docs/adr/ADR-007-idempotency-for-orders-and-reservations.md` — **NUEVO (Corrección 1)**
 
-### Paquete fuente `src/universal_business/` (~44 archivos)
-
+### Paquete fuente `src/universal_business/` (~27 archivos, reducido)
 **Shared / Domain base:**
-10. `src/universal_business/__init__.py`
-11. `domain/__init__.py`
-12. `domain/shared/__init__.py`
-13. `domain/shared/value_objects/__init__.py`
-14. `domain/shared/value_objects/ids.py`
-15. `domain/shared/value_objects/money.py`
-16. `domain/shared/value_objects/temporal.py`
-17. `domain/shared/value_objects/status.py`
-18. `domain/shared/entities.py`
-19. `domain/shared/errors.py`
-20. `domain/shared/events.py`
+12. `src/universal_business/__init__.py`
+13. `domain/__init__.py`
+14. `domain/shared/__init__.py`
+15. `domain/shared/value_objects/__init__.py`
+16. `domain/shared/value_objects/ids.py` — IDs fuertes (wrapper dataclass, runtime safe)
+17. `domain/shared/value_objects/money.py` — Money Decimal + Currency (Corrección 5)
+18. `domain/shared/value_objects/temporal.py` — DateRange/TimeRange + tz guards
+19. `domain/shared/value_objects/status.py` — **Solo StatusTransition** (NO enum universal, Corrección 2)
+20. `domain/shared/entities.py` — BaseEntity + AggregateRoot (valor real: timestamps + events, Corrección 12)
+21. `domain/shared/errors.py` — DomainError + transición + moneda + temporal + boundary
+22. `domain/shared/events.py` — DomainEvent base mínimo útil
 
-**Módulo `business/` (completo):**
-21. `domain/business/__init__.py`
-22. `domain/business/entities.py` — Tenant, Business, Location, BusinessSettings
-23. `domain/business/value_objects.py` — Address, ContactInfo, OperatingHours
-24. `domain/business/ports.py` — Interfaces de repositorio
+**business (completo, 3):**
+23. `domain/business/__init__.py`
+24. `domain/business/entities.py` — Tenant / Business / Location
+25. `domain/business/value_objects.py` — Address, ContactInfo, OperatingHours, BusinessSettings
+26. `domain/business/ports.py` — 3 Protocolos
 
-**Módulo `customers/` (completo):**
-25. `domain/customers/__init__.py`
-26. `domain/customers/entities.py` — Customer, ContactPoint, Consent
-27. `domain/customers/value_objects.py` — CustomerPreferences, ConsentType
-28. `domain/customers/ports.py` — ICustomerRepository
+**customers (completo, 3):**
+27. `domain/customers/__init__.py`
+28. `domain/customers/entities.py` — Customer / ContactPoint / Consent
+29. `domain/customers/value_objects.py` — CustomerPreferences, ConsentType, **CustomerStatus** (propio enum)
+30. `domain/customers/ports.py` — ICustomerRepository Protocol
 
-**6 módulos esqueleto (2 archivos cada uno = 12):**
-29-40. `catalog/`, `resources/`, `availability/`, `reservations/`, `orders/`, `fulfillment/` — cada uno con `entities.py` (placeholder) + `ports.py`
+**6 módulos con CONTRATOS MÍNIMOS (2 archivos cada uno = 12):**
+31-42. `catalog/`, `resources/`, `availability/` → `__init__.py` + `ports.py` (solo contrato)
+43-48. `reservations/`, `orders/`, `fulfillment/` → `__init__.py` + `value_objects.py` (Status enum) + `ports.py`
 
-**Application, Infrastructure, API, Verticals (marcadores):**
-41. `application/__init__.py`
-42. `application/ports/__init__.py`
-43. `application/ports/repositories.py`
-44. `infrastructure/__init__.py`
-45. `api/__init__.py`
-46. `verticals/__init__.py`
+**Marcadores de capa (3):**
+49. `application/__init__.py`
+50. `infrastructure/__init__.py`
+51. `api/__init__.py`
+52. `verticals/__init__.py`
 
-### Tests (~17 archivos)
-47. `tests/__init__.py`
-48. `tests/conftest.py`
-49. `tests/architecture/__init__.py`
-50. `tests/architecture/test_architecture_boundaries.py`
-51-56. `tests/unit/domain/shared/` (5 archivos de test + init)
-57-60. `tests/unit/domain/business/` (3 archivos de test + init)
-61-63. `tests/unit/domain/customers/` (test + 2 inits)
+### Tests (~15 archivos)
+53. `tests/__init__.py`
+54. `tests/conftest.py`
+55-56. `tests/architecture/` (test + init)
+57-58. `tests/imports/` (test + init)
+59-70. `tests/unit/domain/shared/` — 6 archivos: ids, money, temporal, status_transition, domain_events, base_entities
+71-74. `tests/unit/domain/business/` — 3 + init
+75-76. `tests/unit/domain/customers/` — test + init
 
-**ESTIMACIÓN TOTAL:** ~63 archivos nuevos.
+**ESTIMACIÓN FINAL: ~51 archivos** (solo aquellos que aportan valor real).
 
 ---
 
 ## D. Responsabilidades de cada módulo
 
-### `domain/shared/` — Núcleo agnóstico transversal
+### D.1 `domain/shared/` — Núcleo transversal (VALOR REAL)
 
 | Submódulo | Responsabilidad |
 |---|---|
-| `value_objects/ids.py` | Tipos fuertes de identidad: `TenantId`, `BusinessId`, `LocationId`, `CustomerId`, `EntityId[T]` genérico. Todos incluyen validación. Multi-tenant desde el diseño. |
-| `value_objects/money.py` | `Money` (Decimal + currency code ISO-4217) + `Currency`. **INVARIANTE: nunca float.** Operaciones: add, subtract, multiply (solo entero), zero. Moneda distinta = error. |
-| `value_objects/temporal.py` | `DateRange` (fecha local inclusiva), `TimeRange` (datetime OBLIGATORIAMENTE timezone-aware). Helpers: `require_aware()`, `same_timezone()`, `overlap()`, `as_utc()`. **INVARIANTE: ningún datetime ingenuo (tz=None) cruza el dominio.** |
-| `value_objects/status.py` | `LifecycleStatus` enum (DRAFT/ACTIVE/SUSPENDED/CANCELLED/COMPLETED/ARCHIVED). `StatusTransition` (from→to válido + método `ensure()` que lanza `StatusTransitionError`). Base para máquinas de estado finitas. |
-| `entities.py` | `BaseEntity[T]` (id tipado genérico, created_at, updated_at, equalidad por ID). `AggregateRoot[T]` (extiende BaseEntity + colección de DomainEvent). |
-| `errors.py` | Jerarquía de excepciones: `DomainError` → `InvariantViolation`, `StatusTransitionError`, `MoneyCurrencyMismatchError`, `TemporalRangeError`, `TenantBoundaryViolationError`. |
-| `events.py` | `DomainEvent` dataclass base: event_id, occurred_at (UTC), aggregate_id/type, tenant_id/business_id/location_id opcionales, metadata dict. |
+| `value_objects/ids.py` | Wrapper dataclass inmutable por tipo (`TenantId`, `BusinessId`, `LocationId`, `CustomerId`, `EntityId[T]`). Validación runtime (UUID v4 o UUID str válido). NO `NewType` (sin seguridad runtime). |
+| `value_objects/money.py` | `Money` = `Decimal` + currency code ISO-4217. Admite `int` y `Decimal` en operaciones (NO `float`). Política de **redondeo**, **precisión**, **comportamiento mezcla monedas**. Ver sección F.2 completa. |
+| `value_objects/temporal.py` | `DateRange` (fecha local inclusiva), `TimeRange` (ambos extremos timezone-aware **OBLIGATORIO**). Guards: `require_aware(dt)` lanza `TemporalRangeError` si `tzinfo is None`. Helpers: `overlap()`, `as_utc()`, `same_timezone()`. |
+| `value_objects/status.py` | **SOLAMENTE UTILIDADES.** `StatusTransition.validate(from, to, valid_map)` + `TransitionGuard`. **NO enum universal de estados.** Cada dominio define SU PROPIO `XxxStatus(str, Enum)`. |
+| `entities.py` | **`BaseEntity` y `AggregateRoot` SI aportan valor real (Corrección 12):** identidad tipada, `created_at: datetime` UTC-aware, `updated_at: datetime` UTC-aware, igualdad por ID. `AggregateRoot` extiende BaseEntity y añade colección inmutable de `DomainEvent` con `record_event()/events()/clear_events()`. **NO es herencia cosmética.** |
+| `errors.py` | Jerarquía `DomainError` → `InvariantViolation`, `StatusTransitionError`, `MoneyCurrencyMismatchError`, `MoneyRoundingError`, `TemporalRangeError`, `TenantBoundaryViolationError`, `IdempotencyViolationError`. |
+| `events.py` | `DomainEvent` base **sencillo y útil (Corrección 13):** `event_id`, `occurred_at` (UTC aware), `aggregate_id`, `aggregate_type` (OBLIGATORIOS). **Opcionales cuando procedan:** `tenant_id`, `business_id`, `location_id`, `metadata`. |
 
-### `domain/business/` — Jerarquía multi-tenant
-
-| Archivo | Responsabilidad |
-|---|---|
-| `entities.py` | `Tenant` (raíz legal), `Business` (unidad operativa bajo Tenant), `Location` (establecimiento físico/virtual bajo Business), `BusinessSettings` (VO embebido). Cada entidad lleva su cadena de tenancy completa (tenant_id + business_id + location_id cuando corresponde) para aislamiento lógico sin JOINs. |
-| `value_objects.py` | `Address` (línea 1/2, ciudad, región, código postal, país ISO-3166, coordenadas opcionales). `ContactInfo` (teléfono, email, web). `OperatingHours` (7 días, cada uno con TimeRange opcional). |
-| `ports.py` | Protocolos (typing.Protocol) `ITenantRepository` (get, list), `IBusinessRepository` (get, list_by_tenant), `ILocationRepository` (get, list_by_business). |
-
-### `domain/customers/` — Gestión universal de clientes
+### D.2 `domain/business/` — Jerarquía tenancy (Tenant = límite SaaS)
 
 | Archivo | Responsabilidad |
 |---|---|
-| `entities.py` | `Customer` (bajo Tenant/Business/Location), `ContactPoint` (canal + verificación), `Consent` (tipo + fecha + revocable). Customer.contact_points requiere ≥1 para estado ACTIVE. |
-| `value_objects.py` | `CustomerPreferences` (idioma, canal preferido, retención). `ConsentType` enum (marketing, profiling, terms, data_sharing). |
-| `ports.py` | `ICustomerRepository` (get, get_by_external_ref, search). |
+| `entities.py` | **`Tenant`** = **límite superior de aislamiento SaaS (Corrección 4)**. Representa cuenta/holding/franquicia/organización; NO necesariamente entidad legal. Contiene `tenant_id` (pk), `name` (nombre visible), `legal_name` (**opcional**, solo si hay persona jurídica), `status` (enum `TenantStatus` propio). **`Business`** = unidad operativa subordinada a Tenant. **`Location`** = establecimiento/lugar subordinado a Business. |
+| `value_objects.py` | `Address` (país ISO-3166 α-2 obligatorio), `ContactInfo` (email/teléfono/web), `OperatingHours` (7 días × TimeRange opcionales por día), `BusinessSettings` (default_currency, feature_flags mínimo: `has_reservations`, `has_delivery`). |
+| `ports.py` | `ITenantRepository` (get, list), `IBusinessRepository` (get, list_by_tenant), `ILocationRepository` (get, list_by_business). Protocol (NO ABC). Cada método **requiere contexto tenant_id** cuando le corresponde. |
 
-### Módulos esqueleto (Catalog, Resources, Availability, Reservations, Orders, Fulfillment)
-- **Objetivo en 0.1:** Establecer topología y contratos, **no lógica**.
-- **Cada módulo contiene:**
-  - `entities.py`: una `@dataclass` placeholder por entidad con los campos mínimos de tenancy (`id`, `tenant_id`, `business_id`), y un docstring `TODO: Implementación detallada en FASE 1`.
-  - `ports.py`: `I[Modulo]Repository` como Protocol con métodos `get(id)` y `list_by_business(business_id)`.
+### D.3 `domain/customers/` — Cliente (location_id NO obligatorio, Corrección 3)
 
-### `application/`
 | Archivo | Responsabilidad |
 |---|---|
-| `ports/repositories.py` | Re-exporta (con `__all__`) todos los `I*Repository` de domain como conveniencia. NO introduce lógica. Los casos de uso commands/queries vienen en FASE 1. |
+| `entities.py` | **`Customer`:** `customer_id`, `tenant_id` (**OBLIGATORIO**), `business_id` (**OBLIGATORIO**), `location_id` (**OPCIONAL, NO parte de la identidad**). Un customer puede relacionarse con múltiples Locations del mismo Business/Tenant sin duplicarse. `given_name`, `family_name?`, `full_name` computed, `contact_points: list[ContactPoint]`, `addresses: list[Address]`, `consents`, `preferences`, `status: CustomerStatus`. |
+| `value_objects.py` | `CustomerPreferences` (idioma ISO 639-1, canal notif preferido, retención datos), `ConsentType` enum (marketing, profiling, terms, data_sharing), **`CustomerStatus(str, Enum)` = DRAFT / ACTIVE / SUSPENDED / ANONYMIZED / ARCHIVED (propio del módulo)**. |
+| `ports.py` | `ICustomerRepository` → `get(customer_id)`, `get_by_external_ref(tenant_id, business_id?, external_ref)`, `search(tenant_id, business_id?, query)`. |
 
-### `infrastructure/`, `api/`, `verticals/`
-- Solo `__init__.py` vacíos. Cualquier import desde domain hacia ellos falla en los tests de arquitectura.
+### D.4 Módulos de dominio verticales (catalog/resources/availability/reservations/orders/fulfillment)
+
+> **Corrección 6 aplicada:** Mínimo viable para 0.1 — **solo contratos y enums de estado necesarios**. NO entidades placeholder.
+
+| Módulo | Archivos en 0.1 | Qué aportan |
+|---|---|---|
+| `catalog/` | `__init__.py` + `ports.py` | Establece límite arquitectónico del módulo; define `ICatalogRepository` Protocol mínimo para FASE 1. |
+| `resources/` | `__init__.py` + `ports.py` | Idem; `IResourceRepository` — en FASE 1 contendrá Resource/ResourceType. |
+| `availability/` | `__init__.py` + `ports.py` | Idem; `IAvailabilityRepository` — reglas de disponibilidad en FASE 1. |
+| `reservations/` | `__init__.py` + `value_objects.py` + `ports.py` | **`ReservationStatus(str, Enum)` propio:** DRAFT / CONFIRMED / CHECKED_IN / COMPLETED / CANCELLED / NO_SHOW. Contrato `IReservationRepository`. |
+| `orders/` | `__init__.py` + `value_objects.py` + `ports.py` | **`OrderStatus(str, Enum)` propio:** DRAFT / VALIDATED / CONFIRMED / PREPARING / READY / DELIVERING / COMPLETED / CANCELLED / REFUNDED. Contrato `IOrderRepository`. |
+| `fulfillment/` | `__init__.py` + `value_objects.py` + `ports.py` | **`FulfillmentStatus(str, Enum)` propio:** PENDING / ASSIGNED / IN_PROGRESS / COMPLETED / FAILED / CANCELLED. Contrato `IFulfillmentRepository`. |
+
+### D.5 `application/`
+**Solo `__init__.py`.**
+
+- **Corrección 7 aplicada:** NO existe `application/ports/repositories.py` (punto central de acoplamiento). Cada caso de uso (FASE 1) importará directamente `from universal_business.domain.customers.ports import ICustomerRepository` — solo los puertos que realmente necesite.
+
+### D.6 `infrastructure/`, `api/`, `verticals/`
+Solo `__init__.py` cada uno. **Sin implementación alguna en 0.1.** Marcan límites arquitectónicos y permiten que los tests de arquitectura detecten imports inversos.
+
+### D.7 BaseEntity / AggregateRoot (justificación de herencia — Corrección 12)
+Se **mantienen** las dos clases base porque aportan valor real, no cosmético:
+- **Identidad compartida:** Todas las entidades tienen PK UUID + igualdad por ID.
+- **Timestamps consistentes:** `created_at` y `updated_at` UTC-aware se gestionan en un solo lugar, evitando que 10 módulos lo implementen de 10 maneras distintas.
+- **Mecanismo de eventos agregado:** `AggregateRoot.events()` es el único punto de salida de eventos de dominio; esencial para el patrón outbox (ADR-004 / FASE 3).
+- **Comparte validación:** `__post_init__` central puede validar tz-aware en timestamps.
+
+**No hay** `BaseAuditable`, `BaseSoftDelete`, `BaseVersioned` ni otras jerarquías prematuras.
 
 ---
 
-## E. Plan de ADRs (ADR-001 a ADR-005)
+## E. Plan de ADRs (ADR-001 a ADR-007) — Corrección 1 aplicada
 
-**Formato estándar de cada ADR:**
-```
-# ADR-NNN: <Título>
-## Contexto
-## Decisión
-## Consecuencias
-- Positivas:
-- Negativas:
-- Riesgos y mitigaciones:
-```
+> **Formato estándar** de cada ADR: **Contexto → Alternativas consideradas → Decisión → Consecuencias (positivas / negativas / mitigaciones)**.
 
 ### ADR-001: Monolito modular vs Microservicios
-- **Contexto:** El PDF recomienda monolito modular inicial. ¿Por qué no microservicios desde el día 1?
-- **Decisión:**
-  - Adoptar monolito modular con límites estrictos por paquete.
-  - Separación fuerte por test de arquitectura (import-guard).
-  - Migrar a microservicios SOLO cuando se cumplan TRES condiciones: (a) 2+ verticales en producción, (b) límites de dominio validados empíricamente, (c) necesidad operacional demostrada (escalado independiente / equipos autónomos).
-- **Consecuencias:** Despliegue único → simplicidad. Riesgo de "monolito distribuido" si los límites se rompen → mitigado por tests arquitectónicos.
+*(sin cambios respecto v1, pero se añade sección "Alternativas consideradas" para cumplir Corrección 1)*
+
+| Sección | Contenido |
+|---|---|
+| **Contexto** | El roadmap recomienda monolito modular inicial. ¿Por qué no microservicios desde el día 1? |
+| **Alternativas consideradas** | A) Microservicios desde cero (1 servicio por módulo: 12 servicios + API Gateway + service mesh); B) Modular monolith con strict boundaries + architecture tests; C) Single-tier sin límites. |
+| **Decisión** | Opción **B**. Migrar a microservicios SOLO cuando: (a) 2+ verticales en producción, (b) límites validados empíricamente, (c) necesidad operacional demostrada. |
+| **Consecuencias** | [= plan v1] Despliegue único; límites por paquete; riesgo de monolito distribuido mitigado por tests arquitectónicos. |
 
 ### ADR-002: Estrategia multi-tenant y aislamiento
-- **Contexto:** PDF requiere multi-tenant desde el diseño. Jerarquía `Tenant → Business → Location`.
-- **Decisión:**
-  - **Aislamiento lógico por columna:** TODAS las tablas/entidades operacionales llevan `tenant_id` + `business_id` + `location_id` (cuando aplica).
-  - **Redundancia intencional:** Location lleva `tenant_id` aunque se pueda inferir via Business → Tenant (justificación: queries sin JOIN, filtros simples, auditoría simple). Invariante: `location.tenant_id == location.business.tenant_id`.
-  - **NO multi-schema ni multi-DB** en esta fase.
-  - Repositorios validan en cada consulta que no crucen boundaries de tenant.
-- **Consecuencias:** Baja complejidad operativa; filtros obligatorios en queries (probar con tests de isolation).
+*(actualizado según Corrección 4 + Corrección 10: Tenant NO es necesariamente entidad legal; tabla matriz tenancy)*
+
+| Sección | Contenido |
+|---|---|
+| **Contexto** | Roadmap requiere multi-tenant from-day-one. Jerarquía `Tenant → Business → Location`. Hay que definir: qué entidades llevan cada ID; cuándo es obligatorio/opcional. |
+| **Alternativas consideradas** | A) Aislamiento físico por DB/schema; B) Lógico por columna + redundancia; C) Híbrido. |
+| **Decisión** | Opción **B** + redefinición de **Tenant = límite SaaS, no necesariamente persona jurídica**. Matriz de tenancy al final de este ADR. Redundancia intencional de `tenant_id` en todas las entidades operacionales (incluidas las subordinadas) para evitar JOINs en queries de aislamiento. |
+| **Consecuencias** | Baja complejidad operacional; filtros obligatorios; una sola DB para todos los tenants. |
+
+**Matriz de tenancy ADR-002 (Corrección 10):**
+
+| Entidad | `tenant_id` | `business_id` | `location_id` | Notas |
+|---|---|---|---|---|
+| **Tenant** | PK (si mismo) | N/A | N/A | Raíz del aislamiento. |
+| **Business** | ✅ **OBLIGATORIO** | PK (si mismo) | N/A | Business siempre pertenece a 1 Tenant. |
+| **Location** | ✅ **OBLIGATORIO** (redundante) | ✅ **OBLIGATORIO** | PK (si mismo) | Invariante: `location.tenant_id == location.business.tenant_id`. |
+| **Customer** | ✅ **OBLIGATORIO** | ✅ **OBLIGATORIO** | ⚠️ **OPCIONAL (NO parte de identidad)** | Corrección 3: un customer se relaciona con múltiples locations del business sin duplicarse. |
+| **CatalogItem** (FASE 1) | ✅ OBLIGATORIO | ✅ OBLIGATORIO | ⚠️ OPCIONAL | Si opcional → catálogo de business entero. |
+| **Resource** (FASE 1) | ✅ OBLIGATORIO | ✅ OBLIGATORIO | ✅ **OBLIGATORIO** | Un Resource está en una Location física (mesa, sala, profesional). |
+| **Reservation** (FASE 1) | ✅ OBLIGATORIO | ✅ OBLIGATORIO | ✅ OBLIGATORIO | La reserva es siempre en una Location concreta. |
+| **Order** (FASE 1) | ✅ OBLIGATORIO | ✅ OBLIGATORIO | ✅ OBLIGATORIO | El pedido se factura y/o entrega en una Location. |
+| **Fulfillment** (FASE 1) | ✅ OBLIGATORIO | ✅ OBLIGATORIO | ✅ OBLIGATORIO | Cumplimiento ligado a Location origen. |
+| **DomainEvent** | ⚠️ OPCIONAL (si aplica) | ⚠️ OPCIONAL | ⚠️ OPCIONAL | Eventos transversales sin tenancy permitidos (ej: system-level). |
 
 ### ADR-003: Modelo Product / Service / CatalogItem
-- **Contexto:** El core debe representar productos físicos, servicios y composiciones sin conceptos específicos.
-- **Decisión:**
-  - `CatalogItem` (entidad base) con `type: CatalogItemType` (`PRODUCT`, `SERVICE`, `BUNDLE`, `DIGITAL`).
-  - `Variant` = SKU/precio específico por combinación de atributos.
-  - `ModifierGroup` / `ModifierOption` = extras configurables.
-  - Nombres **prohibidos** en core: `PiezaDePollo`, `ComboPicaPollo`, `Yuca`, `Platano`, `MesaRestaurante`. Se mapean: pica-pollo combos → `BUNDLE` + `ModifierOption`; peluquería corte → `SERVICE` + `Variant.duration_minutes`.
-  - Detalle de implementación: FASE 1. Este ADR fija la estructura.
-- **Consecuencias:** Ambas verticales (pica-pollo / peluquería) se representan sin tocar el core. Riesgo de sobre-abstracción → mitigado por feature flags en BusinessSettings.
+*(= v1, añadida sección "Alternativas consideradas")*
+
+| Sección | Contenido |
+|---|---|
+| **Contexto** | Core agnóstico debe representar productos físicos, servicios, composiciones. |
+| **Alternativas consideradas** | A) `Product` y `Service` como entidades separadas (duplicación); B) `CatalogItem` superclase con `type` discriminator; C) Tabla por tipo + JOIN. |
+| **Decisión** | Opción **B.** `CatalogItem.type ∈ {PRODUCT, SERVICE, BUNDLE, DIGITAL}`, `Variant` con SKU, `ModifierGroup/ModifierOption`. Nombres prohibidos: PiezaDePollo, ComboPicaPollo, Yuca, MesaRestaurante. |
+| **Consecuencias** | Ambas verticales (pica / peluquería) se representan sin tocar core. Riesgo sobre-abstracción mitigado con BusinessSettings. |
 
 ### ADR-004: Eventos de dominio y patrón Outbox
-- **Contexto:** PDF requiere desacoplar notificaciones, auditoría e integraciones vía eventos.
-- **Decisión:**
-  - `AggregateRoot` colecciona `DomainEvent` lista (no persistida en la entidad misma).
-  - FASE 2: Application services persisten aggregate + eventos en tabla `outbox` en la MISMA transacción (consistencia ACID). Un dispatcher separado lee outbox y publica.
-  - **ENTREGA 0.1:** Solo `DomainEvent` base + mecanismo `record_event()/events()/clear_events()` en `AggregateRoot`. Persistencia outbox en FASE 3.
-  - Campos obligatorios en todo evento: `event_id` (UUID v4), `occurred_at` (UTC aware), `aggregate_id`, `aggregate_type`, `tenant_id` (si aplica), `metadata`.
-- **Consecuencias:** Consistencia transaccional. Complejidad de entrega → mitigado por outbox table.
+*(actualizado para Corrección 13: evento base mínimo; NO implementar dispatcher/outbox físico)*
+
+| Sección | Contenido |
+|---|---|
+| **Contexto** | Desacoplar auditoría, notificaciones e integraciones. |
+| **Alternativas consideradas** | A) Llamadas directas a notifier/repository dentro de aggregate methods (acoplamiento); B) Aggregate recolecta DomainEvents + aplicación persiste en outbox TX única; C) Event bus transaccional. |
+| **Decisión** | Opción **B** pero **faseada:** (0.1) solo `DomainEvent` base + `AggregateRoot.event_collection`. (FASE 2/3) implementar tabla outbox + dispatcher. **En ningún caso el domain envía eventos directamente.** |
+| **Consecuencias** | Consistencia transaccional (cuando se implemente). Complejidad futura planificada. |
 
 ### ADR-005: Modelo de extensiones verticales (Regla de Oro)
-- **Contexto:** El pica-pollo NO debe contaminar el core. ¿Cómo se extiende sin romper el core?
-- **Decisión — 3 niveles, ordenados por preferencia:**
-  1. **Configuración:** `BusinessSettings` + feature flags.
-  2. **Datos semilla:** `/verticals/<name>/seeds/` (catalogo, modifier groups, zonas).
-  3. **Entidades específicas de vertical (solo si 1 y 2 son insuficientes):** `/verticals/<name>/extensions/` con subclases o entidades propias.
-- **DIRECCIÓN DEPENDENCIAS (SOLO ESTA PERMITIDA):**
-  ```
-  verticals → application → domain
-  ```
-  `domain` NUNCA importa de `verticals`. `application` NUNCA importa de `verticals`. Se valida con architecture tests.
-- **Consecuencias:** Nuevos verticales son carpetas nuevas. Riesgo de "feature envy" en el core → mitigado por el test de nombres prohibidos.
+*(= v1, sección "Alternativas consideradas" añadida)*
+
+| Sección | Contenido |
+|---|---|
+| **Contexto** | Pica-pollo NO contamina core. Cómo extender sin romper. |
+| **Alternativas consideradas** | A) Monkeypatching; B) Herencia en core para cada vertical; C) 3 niveles en orden: Configuración → Datos semilla → Extensiones específicas de vertical. |
+| **Decisión** | Opción **C** + dirección de dependencias **solo vertical → application → domain** (tests arquitectónicos verifican imports inversos). |
+| **Consecuencias** | Nuevos verticales son carpetas nuevas. "Feature envy" detectado por test de nombres prohibidos. |
+
+### ADR-006: Representación de Recursos y Disponibilidad — NUEVO (Corrección 1)
+
+| Sección | Contenido |
+|---|---|
+| **Contexto** | PDF define `Resources` como "mesa, profesional, sala, pista, equipo" y `Availability` como "calendarios, capacidad, ventanas, bloqueos y reglas". Ambos conceptos se usan en múltiples verticales: restaurante (mesa / horario apertura), peluquería (profesional / turnos), clínica (sala / agenda). |
+| **Alternativas consideradas** | A) `Resource` genérico + `AvailabilityRule` separado; B) `Availability` mergeado dentro de `Resource` (1:1); C) `Schedule` entidad separada con relación N:M a Resource. |
+| **Decisión** | Opción **A** (detallado a implementar en FASE 1): (a) `Resource` = cosa reservable atómica con `ResourceType` (TABLE, ROOM, STAFF, EQUIPMENT, SLOT, OTHER...) y `location_id` OBLIGATORIO (un Resource pertenece físicamente a una Location); (b) `AvailabilityRule` = entidad separada con `effective_range: DateRange`, `time_ranges: list[TimeRange]`, `capacity: int?`, `recurrence`, `priority`, `resource_id?` (para 1 recurso) o `resource_type?` (para todos del mismo tipo) o `location_id` (global); (c) `Block` = excepción explícita a rules (feriado, baja, mantenimiento). El **motor de disponibilidad** (FASE 1) evalúa reglas + blocks para un `(resource_id or resource_type, location_id, date_range_or_time_range)` y retorna slots disponibles + capacidad residual. **En 0.1: solo contrato `IResourceRepository` + `IAvailabilityRepository`.** |
+| **Consecuencias positivas** | Una misma Location puede tener Resources múltiples (pica-pollo: mesas; peluquería: sillas + profesionales); reglas compartidas vs. específicas bien diferenciadas. |
+| **Consecuencias negativas / mitigaciones** | Modelo potencialmente complejo → mitigado por ADR con decisiones tomadas a priori; motor de disponibilidad unit-testable sin infraestructura. |
+
+### ADR-007: Idempotencia para Pedidos y Reservas — NUEVO (Corrección 1)
+
+| Sección | Contenido |
+|---|---|
+| **Contexto** | PDF establece: "Las operaciones externas sensibles utilizarán idempotencia para evitar pedidos o reservas duplicados." Pedidos/reservas son las operaciones más sensibles; un reintento de cliente (o un webhook reenviado) NO debe duplicarlas. |
+| **Alternativas consideradas** | A) Idempotency-Key en capa HTTP + tabla `idempotency_keys` por endpoint; B) `IdempotencyKey` entidad de dominio con `(scope, key)` único, donde `scope ∈ {ORDER_CREATE, RESERVATION_CREATE, ORDER_CONFIRM, RESERVATION_CONFIRM...}`; C) LLaves por customer `external_ref` + fecha (débil, colisiones). |
+| **Decisión** | Opción **B.** `IdempotencyKey` es un value object/entidad compartida (FASE 1) con: `idempotency_id: UUID`, `scope: IdempotencyScope enum`, `key: str`, `aggregate_type`, `aggregate_id?`, `created_at`, `locked_until?` (TTL). **Contrato estricto:** (a) Los casos de uso `create_order` / `create_reservation` (FASE 1) REQUIEREN un `IdempotencyKey` como parámetro; (b) Si la llave ya existe → retornar el aggregate ya creado (sin repetir副作用); (c) Si la llave NO existe → crear aggregate + registrar llave con su aggregate_id en la MISMA transacción. **Exclusión a nivel `(scope, key, tenant_id, business_id)` (único por tenant/business, no global).** En 0.1: NO se implementa la entidad `IdempotencyKey`, pero SÍ se define su contrato y se reserva espacio en `domain/shared/` (el test de arquitectura lo puede referenciar por nombre sin que exista el archivo, o crear el VO con el mínimo). Dejar explícito que application services (FASE 2) lo validarán. |
+| **Consecuencias positivas** | Reintentos seguros por diseño; trazabilidad de operaciones; integración con webhooks. |
+| **Consecuencias negativas / mitigaciones** | Toda API de mutación requiere llave → mitigado con valor por defecto (hash determinista) en canales que no la proveen; TTL configurables por scope para evitar crecimiento infinito de la tabla. |
 
 ---
 
-## F. Diseño de Value Objects
+## F. Diseño de Value Objects (revisado)
 
 ### F.1 IDs (`domain/shared/value_objects/ids.py`)
-
-**Decisión de diseño (Riesgo 2 resuelto):** Wrapper dataclass inmutable en lugar de NewType, para obtener validación en runtime, no solo en mypy.
-
-```python
-# Pseudocódigo — estructura (NO es el código final)
-from __future__ import annotations
-import uuid
-from dataclasses import dataclass
-from typing import Generic, TypeVar
-
-T = TypeVar("T")
-
-@dataclass(frozen=True)
-class EntityId(Generic[T]):
-    value: uuid.UUID
-
-    @classmethod
-    def new(cls) -> "EntityId[T]":
-        return cls(uuid.uuid4())
-
-    def __post_init__(self) -> None:
-        if self.value is None or not isinstance(self.value, uuid.UUID):
-            raise ValueError("EntityId debe ser un UUID válido")
-
-# Aliases específicos (también wrappers para type safety total)
-@dataclass(frozen=True)
-class TenantId:
-    value: uuid.UUID
-    @classmethod
-    def new(cls) -> "TenantId": ...
-    # misma validación
-
-@dataclass(frozen=True)
-class BusinessId: ...      # idéntica estructura
-@dataclass(frozen=True)
-class LocationId: ...      # idéntica estructura
-@dataclass(frozen=True)
-class CustomerId: ...      # idéntica estructura
-```
-
-**Invariantes:**
-- `value` es siempre un `uuid.UUID` (nunca str, nunca None).
-- `TenantId` ≠ `BusinessId` — no son asignables intercambiablemente (my lo detecta + runtime check si fuera necesario).
-
-### F.2 Money (`domain/shared/value_objects/money.py`)
+= plan v1 pero explícitamente **wrapper dataclass** (no NewType), porque aporta seguridad runtime.
 
 ```python
 # Pseudocódigo
-from __future__ import annotations
-from dataclasses import dataclass
-from decimal import Decimal
-import typing
+@dataclass(frozen=True)
+class EntityId(Generic[T]):
+    value: uuid.UUID
+    @classmethod
+    def new(cls) -> EntityId[T]: ...
+    def __post_init__(self) -> None:
+        if not isinstance(self.value, uuid.UUID):
+            raise InvariantViolation("EntityId.value debe ser UUID")
 
-ISO4217 = typing.Literal["DOP", "USD", "EUR"]   # ampliar según necesidades
+# Idéntica estructura por tipo:
+@dataclass(frozen=True)
+class TenantId:       value: uuid.UUID ...
+@dataclass(frozen=True)
+class BusinessId:     value: uuid.UUID ...
+@dataclass(frozen=True)
+class LocationId:     value: uuid.UUID ...
+@dataclass(frozen=True)
+class CustomerId:     value: uuid.UUID ...
+```
+
+### F.2 Money (`domain/shared/value_objects/money.py`) — CORREGIDO (Corrección 5)
+**Decision final, políticamente explícita:**
+
+```python
+# Pseudocódigo
+from decimal import Decimal, ROUND_HALF_EVEN, getcontext
+from dataclasses import dataclass
+
+# ---------- POLÍTICA (decidida aquí, NO configurable por instancia) ----------
+MONEY_PRECISION: Final[int] = 10          # precision interna Decimal
+MONEY_SCALE: Final[int] = 4               # 4 decimales → cubre impuestos hasta 0.01%
+MONEY_ROUNDING: Final[str] = ROUND_HALF_EVEN   # "Banker's rounding"
+MONEY_ALLOWED_CURRENCIES: Final[set[str]] = {"DOP","USD","EUR"}  # ampliar según necesidades
+# -----------------------------------------------------------------------------
+
+getcontext().prec = max(MONEY_PRECISION, getcontext().prec)
+
+CurrencyStr = Annotated[str, "ISO-4217 3-letter uppercase"]
+
+def _to_decimal(value: int | Decimal | str) -> Decimal:
+    """Coerción SEGURA: int, Decimal o str (NO float)."""
+    if isinstance(value, float):
+        raise MoneyCurrencyMismatchError("Money NO acepta float. Usa Decimal(str(x)) o int.")
+    if isinstance(value, int):
+        return Decimal(value)
+    if isinstance(value, Decimal):
+        return value
+    if isinstance(value, str):
+        try:
+            d = Decimal(value)
+        except Exception as e:
+            raise MoneyRoundingError(f"Money.amount str no es decimal: {value!r}") from e
+        return d
+    raise TypeError(f"Money.amount tipo no soportado: {type(value).__name__}")
+
+def _validate_currency(cur: str) -> str:
+    if not isinstance(cur, str) or len(cur) != 3 or not cur.isalpha():
+        raise MoneyCurrencyMismatchError(f"Moneda inválida: {cur!r}")
+    cur = cur.upper()
+    if MONEY_ALLOWED_CURRENCIES and cur not in MONEY_ALLOWED_CURRENCIES:
+        raise MoneyCurrencyMismatchError(f"Moneda no permitida: {cur!r} (activarla en MONEY_ALLOWED_CURRENCIES)")
+    return cur
 
 @dataclass(frozen=True)
 class Money:
     amount: Decimal
-    currency: ISO4217
+    currency: CurrencyStr
 
-    def __post_init__(self) -> None:
-        # DEFENSA EN PROFUNDIDAD:
-        # (a) float capturado por mypy strict
-        # (b) runtime también lo rechaza (puede haber errores de cast dinámico)
-        if isinstance(self.amount, float):
-            raise TypeError("Money.amount NO acepta float; usa Decimal(str(monto))")
-        if not isinstance(self.amount, Decimal):
-            raise TypeError("Money.amount debe ser Decimal")
-        if self.amount.is_nan() or self.amount.is_infinite():
-            raise ValueError("Money.amount no puede ser NaN ni infinito")
-        if len(self.currency) != 3 or not self.currency.isalpha():
-            raise ValueError(f"Moneda inválida: {self.currency!r}")
+    # ---------- Constructor con validación estricta ----------
+    def __init__(self, amount: int | Decimal | str, currency: str) -> None:
+        amount_dec = _to_decimal(amount)
+        cur_ok = _validate_currency(currency)
+        # Cuantización según escala (invariante: mismo número de decimales)
+        quantized = amount_dec.quantize(Decimal(f"1E-{MONEY_SCALE}"), rounding=MONEY_ROUNDING)
+        object.__setattr__(self, "amount", quantized)
+        object.__setattr__(self, "currency", cur_ok)
 
-    def add(self, other: "Money") -> "Money": ...
-    def subtract(self, other: "Money") -> "Money": ...
-    def multiply_int(self, factor: int) -> "Money": ...   # solo entero
+    # ---------- Operaciones: solo int + Decimal ----------
+    def _same_currency_or_fail(self, other: "Money") -> None:
+        if self.currency != other.currency:
+            raise MoneyCurrencyMismatchError(
+                f"Mezcla de monedas: {self.currency} + {other.currency}"
+            )
+
+    def add(self, other: "Money") -> "Money":
+        self._same_currency_or_fail(other)
+        return Money(self.amount + other.amount, self.currency)
+
+    def subtract(self, other: "Money") -> "Money":
+        self._same_currency_or_fail(other)
+        return Money(self.amount - other.amount, self.currency)
+
+    def multiply(self, factor: int | Decimal | str) -> "Money":
+        """Precio × cantidad, impuestos %, descuentos %, tarifas, factores proporcionales."""
+        factor_dec = _to_decimal(factor)  # NO float
+        return Money(self.amount * factor_dec, self.currency)  # __init__ re-cuantiza
+
+    def divide(self, divisor: int | Decimal | str) -> "Money":
+        """División proporcional (p. ej. repartir gastos)."""
+        d = _to_decimal(divisor)
+        if d == Decimal("0"):
+            raise MoneyRoundingError("Money.divide por cero")
+        return Money(self.amount / d, self.currency)
+
+    # ---------- Helpers ----------
     @classmethod
-    def zero(cls, currency: ISO4217) -> "Money": ...
+    def zero(cls, currency: str) -> "Money": ...
+    @property
+    def is_positive(self) -> bool: ...
+    @property
+    def is_negative(self) -> bool: ...
+    # Comparaciones: ==, <, <=, >, >= (mismo currency o falla)
 ```
 
-**Test clave que DEBE pasar:**
-- `Money(1.5, "USD")` → TypeError (por float runtime check)
-- `Money(Decimal("1.10"), "USD").add(Money(Decimal("0.20"), "EUR"))` → `MoneyCurrencyMismatchError`
-- `Decimal("0.1") + Decimal("0.2") == Decimal("0.30")` → exacto
+**Política de mezcla de monedas:**
+- Operaciones binarias `add/subtract` entre distinta moneda → `MoneyCurrencyMismatchError` SIEMPRE.
+- No hay "auto-conversión" en el dominio (no sabemos el tipo de cambio). Si alguien necesita convertir, debe hacerlo fuera con un servicio (`CurrencyConverter`) → será un `application service` con un puerto `ICurrencyRateProvider`.
+
+**Redondeo y precisión:**
+- Internamente `Decimal` con `prec=10`.
+- Todos los `Money` se **cuantizan a 4 decimales** (escala 4) con `ROUND_HALF_EVEN`. Esto permite impuestos/porcentajes y al finalizar el pedido se redondea a 2 decimales para el total mostrado (aplicación, no dominio).
+- Errores: `MoneyRoundingError` (redondeo inseguro si p.ej. `amount=Decimal("1.12345")` sin indicar comportamiento → con `__init__` cuantizando automáticamente NO hay error, solo redondeo determinista).
 
 ### F.3 Temporal (`domain/shared/value_objects/temporal.py`)
+= v1 pero con `require_aware` más estricto (lanza `TemporalRangeError`, no `ValueError` genérico):
 
 ```python
-# Pseudocódigo
-from __future__ import annotations
-from dataclasses import dataclass
-import datetime as dt
-
-def require_aware(dt_in: dt.datetime) -> dt.datetime:
-    """Lanza ValueError si dt_in no tiene zona horaria."""
-    if dt_in.tzinfo is None or dt_in.tzinfo.utcoffset(dt_in) is None:
-        raise ValueError("El datetime DEBE ser timezone-aware")
-    return dt_in
-
-@dataclass(frozen=True)
-class DateRange:
-    start: dt.date
-    end: dt.date
-    def __post_init__(self) -> None:
-        if self.start > self.end:
-            raise TemporalRangeError("DateRange: start > end")
-
-@dataclass(frozen=True)
-class TimeRange:
-    start: dt.datetime
-    end: dt.datetime
-    def __post_init__(self) -> None:
-        require_aware(self.start)
-        require_aware(self.end)
-        if self.start.tzinfo != self.end.tzinfo:
-            raise TemporalRangeError("TimeRange: ambos extremos deben tener la misma zona horaria")
-        if self.start > self.end:
-            raise TemporalRangeError("TimeRange: start > end")
-
-def overlap(a: TimeRange, b: TimeRange) -> bool: ...
-def as_utc(dt_in: dt.datetime) -> dt.datetime: ...
+def require_aware(dt: dt.datetime) -> dt.datetime:
+    """Valida que dt sea timezone-aware. Lanza TemporalRangeError si no.
+    NINGÚN datetime tz=None cruza al dominio sin esta validación (Corrección 11)."""
+    if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
+        raise TemporalRangeError(
+            f"datetime debe ser timezone-aware (tzinfo no None). Valor recibido: {dt!r}"
+        )
+    return dt
 ```
 
-### F.4 Status / Lifecycle (`domain/shared/value_objects/status.py`)
+### F.4 Status y transiciones — CORREGIDO (Corrección 2)
+> **NO `LifecycleStatus` universal.** Cada módulo define SU propio `XxxStatus(str, Enum)`.
+> **Sí** hay utilidades compartidas de validación.
 
 ```python
-# Pseudocódigo
+# domain/shared/value_objects/status.py
+"""Utilidades COMPARTIDAS para máquinas de estado finitas.
+NO contiene enumeraciones de estados concretos (Corrección 2)."""
+from __future__ import annotations
+from dataclasses import dataclass
 from enum import Enum
+from typing import Generic, TypeVar
+from universal_business.domain.shared.errors import StatusTransitionError
 
-class LifecycleStatus(str, Enum):
+S = TypeVar("S", bound=Enum)
+
+StatusTransitions[S] = dict[S, set[S]]
+
+@dataclass(frozen=True)
+class StatusTransition(Generic[S]):
+    """Helper inmutable: matriz de transiciones permitidas por agregado."""
+    valid_transitions: StatusTransitions[S]
+
+    def can(self, from_: S, to: S) -> bool:
+        return to in self.valid_transitions.get(from_, set())
+
+    def ensure(self, from_: S, to: S) -> None:
+        """Lanza StatusTransitionError con detalle si la transición no está permitida."""
+        if not self.can(from_, to):
+            allowed = ", ".join(sorted(x.value for x in self.valid_transitions.get(from_, set()))) or "<ninguna>"
+            raise StatusTransitionError(
+                f"Transición de estado inválida: {from_.value} → {to.value}. "
+                f"Valores permitidos desde {from_.value}: {allowed}."
+            )
+
+def transition_guard(current: S, target: S, matrix: StatusTransitions[S]) -> None:
+    """Alias funcional rápido."""
+    StatusTransition(matrix).ensure(current, target)
+```
+
+**Ejemplos de estados POR MÓDULO (cada uno en su value_objects.py propio):**
+
+```python
+# domain/customers/value_objects.py
+class CustomerStatus(str, Enum):
     DRAFT = "draft"
     ACTIVE = "active"
     SUSPENDED = "suspended"
-    CANCELLED = "cancelled"
-    COMPLETED = "completed"
+    ANONYMIZED = "anonymized"
     ARCHIVED = "archived"
 
-_LIFECYCLE_TRANSITIONS: dict[LifecycleStatus, set[LifecycleStatus]] = {
-    LifecycleStatus.DRAFT: {LifecycleStatus.ACTIVE, LifecycleStatus.CANCELLED},
-    LifecycleStatus.ACTIVE: {LifecycleStatus.SUSPENDED, LifecycleStatus.COMPLETED,
-                              LifecycleStatus.CANCELLED, LifecycleStatus.ARCHIVED},
-    LifecycleStatus.SUSPENDED: {LifecycleStatus.ACTIVE, LifecycleStatus.ARCHIVED},
-    LifecycleStatus.CANCELLED: {LifecycleStatus.ARCHIVED},
-    LifecycleStatus.COMPLETED: {LifecycleStatus.ARCHIVED},
-    LifecycleStatus.ARCHIVED: set(),
-}
+# domain/business/value_objects.py (TenantStatus, BusinessStatus, LocationStatus)
+class TenantStatus(str, Enum):
+    PENDING_ONBOARDING = "pending_onboarding"
+    ACTIVE = "active"
+    SUSPENDED = "suspended"
+    BILLED_ONLY = "billed_only"
+    TERMINATED = "terminated"
 
-class StatusTransition:
-    @staticmethod
-    def can_transition(from_: LifecycleStatus, to: LifecycleStatus) -> bool: ...
-    @staticmethod
-    def ensure(from_: LifecycleStatus, to: LifecycleStatus) -> None:
-        # Lanza StatusTransitionError si inválido
+class BusinessStatus(str, Enum):
+    DRAFT = "draft"
+    OPERATIONAL = "operational"
+    TEMPORARILY_CLOSED = "temporarily_closed"
+    PERMANENTLY_CLOSED = "permanently_closed"
+
+class LocationStatus(str, Enum):
+    DRAFT = "draft"
+    OPEN = "open"
+    TEMPORARILY_CLOSED = "temporarily_closed"
+    CLOSED = "closed"
+
+# domain/reservations/value_objects.py
+class ReservationStatus(str, Enum):
+    DRAFT = "draft"
+    CONFIRMED = "confirmed"
+    CHECKED_IN = "checked_in"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+    NO_SHOW = "no_show"
+
+# domain/orders/value_objects.py
+class OrderStatus(str, Enum):
+    DRAFT = "draft"
+    VALIDATED = "validated"
+    CONFIRMED = "confirmed"
+    PREPARING = "preparing"
+    READY = "ready"
+    DELIVERING = "delivering"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+    REFUNDED = "refunded"
+
+# domain/fulfillment/value_objects.py
+class FulfillmentStatus(str, Enum):
+    PENDING = "pending"
+    ASSIGNED = "assigned"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
 ```
+
+**Cada módulo define además su propia matriz de transiciones `StatusTransition[*Status]` (no compartida).**
 
 ---
 
-## G. Diseño de Entidades (core)
+## G. Diseño de Entidades (core, revisado)
 
-### G.1 Jerarquía y clases base
-
+### G.1 Jerarquía y clases base (sin cambios, justificación en D.7)
 ```
 BaseEntity[T]
-├── id: EntityId[T]  (o ID específico: TenantId, etc.)
+├── id: EntityId[T]  (o ID específico: TenantId...)
 ├── created_at: datetime  (UTC aware)
-├── updated_at: datetime  (UTC aware)
-└── __eq__ / __hash__ por id
+├── updated_at: datetime  (UTC aware, ≥ created_at)
+└── __eq__/__hash__ por id
 
 AggregateRoot[T] (extends BaseEntity)
 ├── _events: list[DomainEvent]
-├── record_event(event: DomainEvent) -> None
+├── record_event(event)
 ├── events() -> list[DomainEvent]   # copia defensiva
-└── clear_events() -> None
+└── clear_events()
 ```
 
-### G.2 Tenant — Agregado raíz de tenancy
+### G.2 Tenant — Redefinido CORREGIDO (Corrección 4: NO necesariamente entidad legal)
+
+| Campo | Tipo | Obligatorio? | Invariantes / Notas |
+|---|---|---|---|
+| `id` | `TenantId` | ✅ | PK UUID v4. |
+| `display_name` | `str` | ✅ | 2–100 chars (nombre visible en UI / facturas / tenants list). |
+| `legal_entity_name` | `str \| None` | ⚠️ OPCIONAL | Nombre legal de la persona jurídica. Si `None` → Tenant NO es una entidad legal (p. ej.: una cuenta SaaS individual, una organización informal). **Corrección 4.** |
+| `legal_tax_id` | `str \| None` | ⚠️ OPCIONAL | NIF/RNC/CUIT/... Solo si `legal_entity_name` existe. |
+| `status` | `TenantStatus` (enum PROPIO, NO LifecycleStatus) | ✅ | PENDING_ONBOARDING → ACTIVE → SUSPENDED → {BILLED_ONLY / TERMINATED}. |
+| `created_at` / `updated_at` | UTC aware | ✅ | heredado de BaseEntity. |
+
+**Definición canónica:**
+> *Tenant es el límite superior de aislamiento, propiedad y separación de datos dentro de la plataforma SaaS.*
+
+Puede representar indistintamente: empresa, grupo empresarial, franquicia, cuenta de cliente SaaS, organización con varias unidades operativas. NO es sinónimo de "persona jurídica".
+
+### G.3 Business — Subordinado a Tenant (sin cambios de campos pero sí de semántica)
 
 | Campo | Tipo | Invariantes |
 |---|---|---|
-| `id` | `TenantId` | UUID v4, no nulo |
-| `legal_name` | `str` | 2 ≤ longitud ≤ 200 |
-| `display_name` | `str` | 2 ≤ longitud ≤ 100 |
-| `status` | `LifecycleStatus` | DRAFT → ACTIVE → {SUSPENDED / CANCELLED / COMPLETED} → ARCHIVED |
-| `created_at` | `datetime` (UTC aware) | No nulo |
-| `updated_at` | `datetime` (UTC aware) | No nulo, ≥ created_at |
-
-### G.3 Business — Entidad secundaria bajo Tenant
-
-| Campo | Tipo | Invariantes |
-|---|---|---|
-| `id` | `BusinessId` | UUID v4 |
-| `tenant_id` | `TenantId` | **OBLIGATORIO** (multi-tenant) |
-| `name` | `str` | 2–100 chars |
-| `description` | `str \| None` | ≤ 1000 chars |
-| `legal_info` | `BusinessLegalInfo` (VO) | tax_id (opcional por jurisdicción), legal_name |
-| `contact_info` | `ContactInfo` (VO) | email o phone al menos uno presente |
-| `settings` | `BusinessSettings` (VO) | default_currency: ISO4217, feature_flags: dict[str, bool] |
-| `status` | `LifecycleStatus` | igual máquina que Tenant |
-| `created_at` / `updated_at` | `datetime` UTC aware | — |
+| `id` | `BusinessId` | PK. |
+| `tenant_id` | `TenantId` | ✅ OBLIGATORIO (multi-tenant). |
+| `name` | `str` | 2–100 chars. |
+| `description` | `str \| None` | ≤ 1000 chars. |
+| `contact_info` | `ContactInfo` | Email o teléfono al menos uno presente. |
+| `settings` | `BusinessSettings` | `default_currency: CurrencyStr`, `feature_flags: dict[str, bool]` (flags mínimos, sin nombres verticales). |
+| `status` | `BusinessStatus` (propio enum) | |
+| `created_at` / `updated_at` | UTC aware | |
 
 ### G.4 Location — Tercer nivel bajo Business
 
-| Campo | Tipo | Invariantes |
-|---|---|---|
-| `id` | `LocationId` | UUID v4 |
-| `tenant_id` | `TenantId` | **OBLIGATORIO** (redundante pero esencial para isolation sin JOIN) |
-| `business_id` | `BusinessId` | **OBLIGATORIO** |
-| `name` | `str` | 2–100 chars |
-| `address` | `Address` (VO) | país ISO-3166-1 α-2 OBLIGATORIO |
-| `timezone` | `str` (IANA, ej. `"America/Santo_Domingo"`) | **OBLIGATORIO.** Todas las reglas de disponibilidad evalúan en esta tz. Usar `zoneinfo.ZoneInfo` para validar + dependencia condicional `tzdata` en Windows. |
-| `operating_hours` | `OperatingHours` (VO) | 7 días; cada día puede tener 0 o más TimeRange (cerrado si ninguno) |
-| `contact_info` | `ContactInfo \| None` | Si None → hereda el de Business |
-| `status` | `LifecycleStatus` | — |
-| `created_at` / `updated_at` | `datetime` UTC aware | — |
-| **Invariante inter-entidad:** | `location.tenant_id == location.business.tenant_id` | Factory constructor valida esto. |
+| Campo | Tipo | Obligatorio | Invariantes |
+|---|---|---|---|
+| `id` | `LocationId` | ✅ | PK. |
+| `tenant_id` | `TenantId` | ✅ | Redundante intencional (isolation sin JOIN). **Invariante:** `location.tenant_id == location.business.tenant_id` (Factory valida). |
+| `business_id` | `BusinessId` | ✅ | |
+| `name` | `str` | ✅ | 2–100 chars. |
+| `address` | `Address` | ✅ | `country` ISO-3166 α-2 obligatorio. |
+| `timezone` | `str` (IANA) | ✅ | Ej. `"America/Santo_Domingo"`. TODAS las reglas de disponibilidad se evalúan en esta zona. |
+| `operating_hours` | `OperatingHours` | ✅ | 7 días. Cada día = 0..N `TimeRange` (0 = cerrado). |
+| `contact_info` | `ContactInfo \| None` | ⚠️ | Si None → property hereda `Business.contact_info`. |
+| `status` | `LocationStatus` (propio) | ✅ | |
+| `created_at` / `updated_at` | UTC aware | ✅ | |
 
-### G.5 Customer — Cliente del negocio
+### G.5 Customer — CORREGIDO (Corrección 3: location_id NO obligatorio, NO identidad)
 
-| Campo | Tipo | Invariantes |
-|---|---|---|
-| `id` | `CustomerId` | UUID v4 |
-| `tenant_id` | `TenantId` | **OBLIGATORIO** |
-| `business_id` | `BusinessId \| None` | None = customer del tenant completo (no asociado a un business concreto) |
-| `location_id` | `LocationId \| None` | None = no asociado a una location concreta |
-| `external_ref` | `str \| None` | ID del sistema de origen (WhatsApp ID, CRM ID, etc.). Búsqueda optimizada. |
-| `given_name` | `str` | 1 ≤ longitud ≤ 100 |
-| `family_name` | `str \| None` | 1 ≤ longitud ≤ 100 |
-| `full_name` | `property str` | `(given_name + " " + family_name).strip()` |
-| `contact_points` | `list[ContactPoint]` | **len ≥ 1 para pasar a estado ACTIVE** |
-| `addresses` | `list[Address]` | 0..N; un "default" puede marcarse en Address. |
-| `consents` | `list[Consent]` | GDPR/LOPD-ready. Ningún envío de marketing sin ConsentType.MARKETING=ACTIVE |
-| `preferences` | `CustomerPreferences` (VO) | idioma (ISO 639-1), canal preferido, retención |
-| `status` | `LifecycleStatus` | DRAFT hasta que contact_points ≥1 → luego ACTIVE |
-| `created_at` / `updated_at` | `datetime` UTC aware | — |
+| Campo | Tipo | Obligatorio | Invariantes / Notas |
+|---|---|---|---|
+| `id` | `CustomerId` | ✅ | PK. |
+| `tenant_id` | `TenantId` | ✅ **OBLIGATORIO** | Corrección 10. Cliente pertenece a un tenant. |
+| `business_id` | `BusinessId` | ✅ **OBLIGATORIO** | Corrección 3: customer existe dentro de un business. |
+| `location_id` | `LocationId \| None` | ⚠️ **OPCIONAL** | **NO forma parte de la identidad del customer.** Puede ser `None` (el customer es del business entero, visitará locations distintas, se relaciona con varias por medio de Orders/Reservations). Operations como Order/Reservation SÍ traerán `location_id` concreta. |
+| `external_ref` | `str \| None` | ⚠️ | ID sistema origen (WhatsApp JID, CRM ID, ...). Único por `(tenant_id, business_id, external_ref)` cuando no es None. |
+| `given_name` | `str` | ✅ | 1–100 chars. |
+| `family_name` | `str \| None` | ⚠️ | 1–100 chars. |
+| `full_name` | `property str` | — | `(given_name + " " + family_name).strip()`. |
+| `contact_points` | `list[ContactPoint]` | ✅ | Para `ACTIVE` debe haber len ≥ 1. DRAFT permite 0. |
+| `addresses` | `list[Address]` | ✅ | 0..N. |
+| `consents` | `list[Consent]` | ✅ | |
+| `preferences` | `CustomerPreferences` | ✅ | |
+| `status` | `CustomerStatus` (propio) | ✅ | DRAFT → ACTIVE → {SUSPENDED / ANONYMIZED / ARCHIVED}. |
+| `created_at` / `updated_at` | UTC aware | ✅ | |
 
-### G.6 Entidades esqueleto (CatalogItem, Resource, Reservation, Order, Fulfillment)
-
-**Ejemplo placeholder para `CatalogItem` (el resto son iguales):**
-```python
-# domain/catalog/entities.py
-"""
-Módulo domain.catalog
-TODO: Implementación detallada en FASE 1 del roadmap.
-      En esta entrega solo se establece el placeholder con tenancy mínima.
-"""
-from __future__ import annotations
-from dataclasses import dataclass
-from datetime import datetime
-import uuid
-from universal_business.domain.shared.value_objects.ids import BusinessId, EntityId, TenantId
-
-CatalogItemId = EntityId["CatalogItem"]
-
-@dataclass
-class CatalogItem:   # PLACEHOLDER — no representa la estructura final
-    id: CatalogItemId
-    tenant_id: TenantId
-    business_id: BusinessId
-    created_at: datetime
-    updated_at: datetime
+**Tenancy resumida Customer (Corrección 10):**
+```
+Customer.tenant_id  : OBLIGATORIO  (aislamiento SaaS)
+Customer.business_id: OBLIGATORIO  (unidad operativa)
+Customer.location_id: OPCIONAL     (NO parte de identidad; puede ser None)
 ```
 
 ---
 
-## H. Diseño de Puertos / Interfaces de Repositorio
+## H. Diseño de Puertos / Interfaces de Repositorio — CORREGIDO (Corrección 7)
 
 ### H.1 Principios generales
-- **`typing.Protocol`** (no `abc.ABC`): duck-typing estático, fakes en tests sin herencia. `mypy` valida el contrato.
-- **Ningún import** de SQLAlchemy, FastAPI, bases de datos.
-- **Toda consulta lleva contexto de tenancy.** (No existe método `list()` sin filtro de tenant/business en repos de entidades operacionales.)
-- **Retornos:** entidades de dominio puras. Sin dicts, sin tuplas.
-- **Semántica > CRUD genérico:** nombres como `list_by_tenant()`, `get_by_external_ref()`, no `find_all()`.
+1. **Puertos CERCA de su dominio:** `domain/<modulo>/ports.py`. Correcto: `domain/customers/ports.py` define `ICustomerRepository`.
+2. **NO punto central agregador:** Eliminar `application/ports/repositories.py` (acoplador).
+3. **`typing.Protocol`** (no `abc.ABC`) — duck-typing estático + fakes en tests sin herencia.
+4. **Todas las consultas tienen contexto de tenancy.** Ejemplo: NO existe `list()`, sí `list_by_tenant(tenant_id)` o `list_by_business(business_id)`.
+5. **Retornan entidades de dominio** (no dicts, no rows).
+6. **Ningún import de SQLAlchemy/FastAPI.** Architecture Test A-4/A-5 garantiza esto.
 
-### H.2 Interfaces por módulo
-
+### H.2 Interfaces por módulo (ejemplos mínimos)
 ```python
-# ============================================================
 # domain/business/ports.py
-# ============================================================
-from typing import Protocol
-from universal_business.domain.shared.value_objects.status import LifecycleStatus
-from universal_business.domain.business.entities import (
-    Tenant, Business, Location, TenantId, BusinessId, LocationId,
-)
-
 class ITenantRepository(Protocol):
     def get(self, tenant_id: TenantId) -> Tenant | None: ...
-    def list(self, *, status: LifecycleStatus | None = None) -> list[Tenant]: ...
+    def list(self, *, status: TenantStatus | None = None) -> list[Tenant]: ...
 
 class IBusinessRepository(Protocol):
     def get(self, business_id: BusinessId) -> Business | None: ...
-    def list_by_tenant(self, tenant_id: TenantId) -> list[Business]: ...
+    def list_by_tenant(self, tenant_id: TenantId,
+                       *, status: BusinessStatus | None = None) -> list[Business]: ...
 
 class ILocationRepository(Protocol):
     def get(self, location_id: LocationId) -> Location | None: ...
-    def list_by_business(self, business_id: BusinessId) -> list[Location]: ...
-
-# ============================================================
-# domain/customers/ports.py
-# ============================================================
-class ICustomerRepository(Protocol):
-    def get(self, customer_id: CustomerId) -> Customer | None: ...
-    def get_by_external_ref(self, *, tenant_id: TenantId,
-                            external_ref: str) -> Customer | None: ...
-    def search(self, *, tenant_id: TenantId, query: str) -> list[Customer]: ...
-
-# ============================================================
-# Otros 6 módulos esqueleto:
-#   ICatalogRepository, IResourceRepository, IAvailabilityRepository,
-#   IReservationRepository, IOrderRepository, IFulfillmentRepository
-# Cada uno con get() y list_by_business().
-# ============================================================
+    def list_by_business(self, business_id: BusinessId,
+                         *, status: LocationStatus | None = None) -> list[Location]: ...
 ```
 
-### H.3 Agregado en Application
 ```python
-# application/ports/repositories.py
-from universal_business.domain.business.ports import (
-    ITenantRepository, IBusinessRepository, ILocationRepository,
-)
-from universal_business.domain.customers.ports import ICustomerRepository
-from universal_business.domain.catalog.ports import ICatalogRepository
-from universal_business.domain.resources.ports import IResourceRepository
-from universal_business.domain.availability.ports import IAvailabilityRepository
-from universal_business.domain.reservations.ports import IReservationRepository
-from universal_business.domain.orders.ports import IOrderRepository
-from universal_business.domain.fulfillment.ports import IFulfillmentRepository
+# domain/customers/ports.py
+class ICustomerRepository(Protocol):
+    def get(self, customer_id: CustomerId) -> Customer | None: ...
+    def get_by_external_ref(
+        self,
+        *,
+        tenant_id: TenantId,
+        business_id: BusinessId,
+        external_ref: str,
+    ) -> Customer | None: ...
+    def search(
+        self,
+        *,
+        tenant_id: TenantId,
+        business_id: BusinessId,
+        location_id: LocationId | None = None,  # None = all locations del business
+        query: str,
+    ) -> list[Customer]: ...
+```
 
-__all__ = [
-    "ITenantRepository", "IBusinessRepository", "ILocationRepository",
-    "ICustomerRepository", "ICatalogRepository", "IResourceRepository",
-    "IAvailabilityRepository", "IReservationRepository",
-    "IOrderRepository", "IFulfillmentRepository",
-]
+```python
+# 6 módulos restantes — contratos MÍNIMOS (FASE 1 ampliará métodos):
+# domain/catalog/ports.py        → ICatalogRepository.get(item_id, tenant_id, business_id)
+# domain/resources/ports.py      → IResourceRepository.get(resource_id, tenant_id, location_id)
+# domain/availability/ports.py   → IAvailabilityRepository.list_for(resource_id, date_range)
+# domain/reservations/ports.py   → IReservationRepository.get(reservation_id, tenant_id)
+# domain/orders/ports.py         → IOrderRepository.get(order_id, tenant_id)
+# domain/fulfillment/ports.py    → IFulfillmentRepository.get(fulfillment_id, tenant_id)
 ```
 
 ---
 
-## I. Diseño de Eventos de Dominio base
+## I. Diseño de DomainEvent base — CORREGIDO (Corrección 13)
+
+> **Mínimo útil. Sin dispatcher ni tabla outbox físico (FASE 3).**
 
 ```python
 # domain/shared/events.py
+"""DomainEvent base mínimo útil (Corrección 13).
+Sirve para auditoría, notificaciones, integraciones y patrón outbox (futuro)."""
+
 from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Optional
 import uuid
 
 def _utc_now() -> datetime:
@@ -697,225 +815,159 @@ def _utc_now() -> datetime:
 
 @dataclass(frozen=True)
 class DomainEvent:
-    """Base inmutable para todos los eventos de dominio."""
-
+    # ===== OBLIGATORIOS (Corrección 13: siempre presentes) =====
     event_id: uuid.UUID = field(default_factory=uuid.uuid4)
     occurred_at: datetime = field(default_factory=_utc_now)
-    aggregate_id: str                               # str(aggregate.id.value) serializable
-    aggregate_type: str                             # "Tenant", "Customer", "Order"...
-    tenant_id: str | None = None
-    business_id: str | None = None
-    location_id: str | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
+    aggregate_id: str        # str(uuid) — serializable, siempre
+    aggregate_type: str      # "Tenant", "Customer", "Order", "Reservation", ...
 
-    event_type: ClassVar[str] = "domain.event"     # overrride en subclases
+    # ===== OPCIONALES, solo cuando el agregado correspondiente los tiene =====
+    tenant_id: Optional[str] = None
+    business_id: Optional[str] = None
+    location_id: Optional[str] = None
+    metadata: dict[str, Any] = field(default_factory=dict)  # correlation_id, causation_id, actor, source...
+
+    # ===== Sobre-escribir en subclases =====
+    event_type: ClassVar[str] = "domain.event"
 
     def __post_init__(self) -> None:
-        # occurred_at siempre UTC-aware
+        # Invariante 1: occurred_at es siempre UTC-aware
         if self.occurred_at.tzinfo is None or self.occurred_at.tzinfo.utcoffset(self.occurred_at) is None:
-            raise ValueError("DomainEvent.occurred_at DEBE ser timezone-aware (UTC recomendado)")
-        # metadata es un dict copiado defensivamente en subclass init si hace falta
+            raise InvariantViolation("DomainEvent.occurred_at debe ser timezone-aware (UTC recomendado)")
+        # Invariante 2: aggregate_id y aggregate_type nunca vacíos
+        if not self.aggregate_id:
+            raise InvariantViolation("DomainEvent.aggregate_id es obligatorio")
+        if not self.aggregate_type:
+            raise InvariantViolation("DomainEvent.aggregate_type es obligatorio")
 ```
 
-### Mecanismo en AggregateRoot
-```python
-# domain/shared/entities.py
-class AggregateRoot(BaseEntity[T]):
-    _events: list[DomainEvent] = field(default_factory=list, init=False)
-
-    def record_event(self, event: DomainEvent) -> None:
-        self._events.append(event)
-
-    def events(self) -> list[DomainEvent]:
-        return list(self._events)   # copia defensiva: el caller no puede mutar la lista real
-
-    def clear_events(self) -> None:
-        self._events.clear()
-```
-
-### Eventos previstos (subclases se implementan en FASE 1, no en 0.1)
+**Subclases a implementar en FASE 1/2 (no en 0.1):**
 - `TenantCreated / TenantStatusChanged`
-- `BusinessCreated / BusinessStatusChanged / BusinessSettingsUpdated`
-- `LocationCreated / LocationOperatingHoursUpdated`
+- `BusinessCreated / BusinessSettingsUpdated`
+- `LocationOperatingHoursUpdated`
 - `CustomerCreated / CustomerContactPointVerified / CustomerConsentUpdated`
-
-**En 0.1 solo se implementa la base genérica (`DomainEvent` + mecanismo en `AggregateRoot`).**
+- `OrderCreated / OrderStatusChanged / OrderPaymentApplied`
+- `ReservationCreated / ReservationStatusChanged`
+- etc.
 
 ---
 
-## J. Estrategia de Tests
+## J. Estrategia de Tests — CORREGIDA según Corrección 14
 
-### J.1 Distribución (pirámide para 0.1)
+### J.1 Estructura de carpetas actualizada
 ```
-┌──────────────────────────────────────────────┐
-│ 2 tests de arquitectura (import boundaries)  │  ← 0.1
-├──────────────────────────────────────────────┤
-│ ~35 tests unitarios de dominio               │  ← 0.1
-│   (shared ~22 + business ~8 + customers ~5)  │
-├──────────────────────────────────────────────┤
-│ 0 application / integration tests            │  (FASE 1/2)
-└──────────────────────────────────────────────┘
+tests/
+├── architecture/                # ← B. Tests arquitectónicos
+│   └── test_architecture_boundaries.py
+├── imports/                     # ← C. Tests de importación
+│   └── test_import_without_externals.py
+└── unit/domain/                 # ← A. Tests unitarios
+    ├── shared/
+    │   ├── test_ids.py
+    │   ├── test_money.py
+    │   ├── test_temporal.py
+    │   ├── test_status_transition.py   # NO LifecycleStatus
+    │   ├── test_domain_events.py
+    │   └── test_base_entities.py       # BaseEntity/AggregateRoot valor real
+    ├── business/
+    │   ├── test_tenant.py       # Tenant NO necesariamente entidad legal
+    │   ├── test_business.py
+    │   └── test_location.py
+    └── customers/
+        └── test_customer.py     # location_id NO obligatorio
 ```
 
-### J.2 Tests de Arquitectura (`tests/architecture/test_architecture_boundaries.py`)
-**Implementación:** inspección `importlib` + `sys.modules` (sin librerías adicionales en 0.1; evaluar `import-linter` para FASE 1).
+---
 
-| # | Prueba | Cómo |
+### J.2 A. Tests unitarios (Corrección 14.A)
+
+| Archivo | Qué prueba | Nº tests aprox |
 |---|---|---|
-| AT-1 | `domain` NO importa de `infrastructure`, `api`, `verticals`. | Importar cada submódulo de `domain`; inspeccionar `sys.modules` por nombres prohibidos. |
-| AT-2 | `domain.shared` NO importa de módulos específicos (business, customers, catalog…). | AST parse de cada archivo en `domain/shared/`. |
-| AT-3 | `application` NO importa de `infrastructure`, `api`, `verticals`. | Análogo a AT-1. |
-| AT-4 | `domain` NO contiene paquetes excluidos en sys.modules: `fastapi`, `sqlalchemy`, `psycopg`, `whatsapp`, `firebase`, `react`. | `import domain`, comprobar `k for k in sys.modules if <pattern>`. |
-| AT-5 | **Ningún nombre de pica-pollo filtrado** aparece en names/symbols/comentarios de `domain/` y `application/`: `restaurant`, `piccapollo`, `pica.*pollo`, `pollo`, `yuca`, `platano`, `mesarestaurante`, `repartidorrestaurante`, `salon`, `clinic`. | `grep` con flag case-insensitive sobre los `.py` (con `re.IGNORECASE`). |
-| AT-6 | Los 6 módulos esqueleto **importan sin levantar DB ni dependencias externas.** | Importar cada uno en aislamiento; capturar ImportError / ModuleNotFound. |
+| `test_ids.py` | Generación UUID v4 válida; invalid inputs → error; igualdad por valor; `TenantId` ≠ `BusinessId` con mismo UUID interno; `__repr__` util. | 7 |
+| `test_money.py` | Constructor RECHAZA `float` (runtime TypeError); int, Decimal, str aceptados; moneda minúscula → normalizada upper; moneda no permitida → error; `add()` misma moneda OK; `add()` distinta moneda → `MoneyCurrencyMismatchError`; `subtract()` resultado negativo permitido (ej: descuentos); `multiply(int=3)` OK; `multiply(Decimal("0.18"))` OK (impuesto 18%); `multiply(Decimal("0.85"))` OK (15% dto); `multiply(float)` → TypeError; `divide(int)` OK; `divide(Decimal("0"))` → `MoneyRoundingError`; comparaciones `< > <= >= ==`; moneda distinta en comparación → falla; cuantización a 4 decimales (p. ej. `Decimal("1.12345")` → `"1.1235"` con ROUND_HALF_EVEN). | 22 |
+| `test_temporal.py` | `require_aware(datetime_naive)` → `TemporalRangeError`; `require_aware(utc)` OK; `DateRange` end<start → error; `TimeRange` distinta tz → error; `TimeRange` ingenuo → error; `overlap(a,b)` 4 casos: anterior, posterior, intersección estricta, touching (contigüidad no overlap); `as_utc` convierte correctamente DST. | 11 |
+| `test_status_transition.py` | `StatusTransition[CustomerStatus]` DRAFT→ACTIVE pasa; ACTIVE→DRAFT falla con mensaje que lista permitidos; `transition_guard` alias; 2 matrices distintas (Customer vs Order) comparten StatusTransition sin interferir; terminal status (ARCHIVED) no transiciona a nada. | 6 |
+| `test_domain_events.py` | Evento sin tz → `InvariantViolation`; aggregate_id/type vacíos → error; `record_event()/events()` retorna copia (mutar la copia NO afecta al agregado); `clear_events()` limpia; eventos con/sin tenancy context. | 5 |
+| `test_base_entities.py` | `BaseEntity` igualdad por id (datos distintos = mismo id → `__eq__` True); created_at/updated_at UTC-aware al nacer; updated_at ≥ created_at tras mutación (actualizar `name` → `touch()` actualiza updated_at); `AggregateRoot.events()` copia defensiva (párrafo anterior). | 5 |
+| `test_tenant.py` | Constructor happy path; `legal_entity_name = None` (caso tenant sin personalidad jurídica) funciona; status PENDING_ONBOARDING→ACTIVE pasa; ACTIVE→PENDING_ONBOARDING falla. | 4 |
+| `test_business.py` | Constructor happy path; contact_info sin email ni phone → error; settings.default_currency "PE" → error. | 3 |
+| `test_location.py` | Constructor happy path; timezone IANA `"America/Santo_Domingo"` pasa; timezone `"Foo/Bar"` → error; address.country `"DO"` pasa, `"D"` (longitud ≠2) → error; Factory con `tenant_id` que no coincide con business.tenant_id → `TenantBoundaryViolationError`. | 5 |
+| `test_customer.py` | Constructor happy path con `location_id=None` pasa (caso principal Corrección 3); Constructor con location_id válido también pasa (no es excluyente); Transición DRAFT→ACTIVE con contact_points=[] → `StatusTransitionError`. | 4 |
 
-### J.3 Tests unitarios de Value Objects
-
-**`test_ids.py` (≈6 tests):**
-1. `TenantId.new()` genera UUID v4 válido.
-2. `TenantId(uuid_v4_string_inválido)` → ValueError.
-3. `TenantId == CustomerId` con mismo UUID interno → False (distinto tipo).
-4. Igualdad y hash: `TenantId(X) == TenantId(X)` y hash igual.
-5. Representación str/repr útil.
-6. `EntityId[T]` new/validación genérica.
-
-**`test_money.py` (≈12 tests):**
-1-2. `Money(float, "USD")` → TypeError; `Money(int, "USD")` → TypeError o coerce explícito? (Decisión: error para int también, usar `Decimal(int)` si hace falta).
-3. `Decimal("0.1") + Decimal("0.2") == Decimal("0.30")` exacto.
-4. `add()` misma moneda OK; operación conmutativa.
-5. `add()` moneda distinta → `MoneyCurrencyMismatchError`.
-6. `subtract()` igual moneda OK; resultado negativo permitido (indica deuda/descuento).
-7. `multiply_int(3)` OK; `multiply_int(1.5)` → TypeError.
-8. `zero("DOP")` es `Money(Decimal("0.00"), "DOP")`.
-9. Comparaciones `==`, `<`, `>`, `<=`, `>=` (solo misma moneda, si no → error).
-10. `amount` NaN/infinito → ValueError.
-11. Moneda inválida `"PE"` (longitud ≠3) → ValueError.
-12. Moneda `"dop"` minúscula → aceptada/normalizada? (Decisión: str.upper en `__post_init__`.)
-
-**`test_temporal.py` (≈10 tests):**
-1. `require_aware(datetime_ingenuo)` → ValueError.
-2. `require_aware(datetime_utc)` devuelve ok.
-3. `DateRange(ayer, hoy)` OK; `DateRange(hoy, ayer)` → `TemporalRangeError`.
-4. `TimeRange` con ambos extremos misma tz OK.
-5. `TimeRange` con extremos en distintas tz → error.
-6. `TimeRange` start > end → error.
-7. `overlap(r1, r2)`: r1 anterior, r2 posterior → False.
-8. `overlap(r1, r2)`: intersección estricta → True.
-9. `overlap(r1, r2)`: touching (r1.end == r2.start) → False (contigüidad no es solapamiento).
-10. `as_utc(dt_con_tz_distinta)` devuelve UTC equivalente.
-
-**`test_status.py` (≈5 tests):**
-1. DRAFT → ACTIVE permitido; `ensure()` no lanza.
-2. ACTIVE → DRAFT prohibido; `ensure()` lanza `StatusTransitionError`.
-3. ARCHIVED → nada permitido (estado terminal).
-4. `can_transition()` retorna bool correcto para todos los casos de la tabla.
-5. Subclase (ej. `OrderStatus` si hubiera) puede extender máquina sin romper base.
-
-**`test_domain_events.py` (≈4 tests):**
-1. `DomainEvent` sin tz → ValueError en post_init.
-2. `DomainEvent` con UTC → `occurred_at.tzinfo` presente.
-3. `aggregate.record_event(e)` → `aggregate.events()` retorna lista con `e`.
-4. Modificar la lista retornada por `events()` NO afecta la interna del aggregate (copia defensiva).
-5. `clear_events()` → `events()` retorna lista vacía.
-
-### J.4 Tests unitarios de Entidades
-
-**`test_tenant.py` (≈4):**
-1. Constructor happy path crea instancia válida.
-2. Falta `legal_name` / `display_name` → ValueError.
-3. Status DRAFT → ACTIVE permitido; ACTIVE → DRAFT error.
-4. Igualdad por ID: 2 tenants mismo ID, datos distintos → iguales.
-
-**`test_business.py` (≈4):**
-1. Constructor happy path con settings.
-2. `contact_info` sin email ni phone → `InvariantViolation`.
-3. `settings.default_currency` inválido → error en VO `BusinessSettings`.
-4. Status transitions.
-
-**`test_location.py` (≈5):**
-1. Constructor happy path con timezone IANA válida.
-2. Timezone `"Foo/Bar"` inválido → ValueError (usa `zoneinfo` validation).
-3. `address.country` no ISO-2 → error en `Address`.
-4. Invariante `tenant_id == business.tenant_id`: factory valida, falla si no coincide.
-5. `contact_info is None` → property calculada retorna `business.contact_info`.
-
-**`test_customer.py` (≈5):**
-1. Constructor happy path con 1 contact_point.
-2. Transición DRAFT → ACTIVE con contact_points vacíos → error.
-3. `full_name` con solo given_name → sin espacios sobrantes.
-4. `search_consent(type=MARKETING)` retorna solo esos (si existe método en Customer).
-5. Igualdad por CustomerId.
-
-### J.5 Fixtures (`tests/conftest.py`)
-```python
-"""Fixtures base reutilizables por TODOS los tests."""
-import pytest
-from datetime import timezone
-from universal_business.domain.shared.value_objects.ids import (
-    TenantId, BusinessId, LocationId, CustomerId,
-)
-
-TENANT_ID = TenantId(uuid.UUID("11111111-1111-4111-8111-111111111111"))
-BUSINESS_ID = BusinessId(uuid.UUID("22222222-2222-4222-8222-222222222222"))
-LOCATION_ID = LocationId(uuid.UUID("33333333-3333-4333-8333-333333333333"))
-CUSTOMER_ID = CustomerId(uuid.UUID("44444444-4444-4444-8444-444444444444"))
-
-TZ_SANTO_DOMINGO = "America/Santo_Domingo"
-DEFAULT_CURRENCY = "DOP"
-
-@pytest.fixture
-def utc_now():
-    return datetime.now(tz=timezone.utc)
-# + fixtures: sample_tenant() / sample_business() / sample_location() / sample_customer()
-```
-
-### J.6 Coverage target (mínimo 0.1)
-| Módulo | Mínimo |
-|---|---|
-| `domain/shared/` | ≥ 90% |
-| `domain/business/` | ≥ 80% |
-| `domain/customers/` | ≥ 70% |
-| **Global** | ≥ 60% (por los esqueletos vacíos) |
+**Total tests unitarios 0.1:** ≈ **72 tests**.
 
 ---
 
-## K. Estrategia de Tipado Estático / Linting
+### J.3 B. Tests arquitectónicos (Corrección 14.B) — archivo único
 
-### K.1 Stack de herramientas (en `pyproject.toml`)
+**`tests/architecture/test_architecture_boundaries.py` — casos:**
 
-| Categoría | Herramienta | Versión mín | Justificación |
+| ID | Regla (Corrección 9) | Cómo se verifica |
+|---|---|---|
+| AT-1 | **domain NO importa infrastructure** | Inspección de `importlib` / `sys.modules`: importar todos los submódulos de `domain`; comprobar que `universal_business.infrastructure` NO aparece en los `module.__file__` de `sys.modules` ni en AST de imports. |
+| AT-2 | **domain NO importa api** | Análogo AT-1 para `universal_business.api`. |
+| AT-3 | **domain NO importa verticals** | Análogo AT-1 para `universal_business.verticals`. |
+| AT-4 | **domain NO depende de FastAPI** | Después de importar domain, NINGUNA key de `sys.modules` empieza por `fastapi` / `starlette`. |
+| AT-5 | **domain NO depende de SQLAlchemy** | Análogo AT-4: `sqlalchemy`, `psycopg`, `asyncpg`, `alembic`, `sqlite3` NO en `sys.modules`. |
+| AT-6 | **Core no contiene nombres específicos de pica pollo** | Grep case-insensitive sobre todos los `.py` de `src/universal_business/` (menos `verticals/`, pero en 0.1 `verticals/` está vacío). Patrones prohibidos: `pica.?pollo`, `piccapollo`, `pollo`, `restaurant.*mesa`, `mesarestaurante`, `repartidorrestaurante`, `yuca`, `platano`, `salon(?![a-z])`, `clinic`. Si alguno aparece → test FAIL. |
+| AT-7 | **verticals NO se filtran dentro del core** (carga circular) | `domain` y `application` NO tienen imports que incluyan la cadena `verticals`. AST walk. |
+| AT-8 | **Dependencia correcta direction check** | `infrastructure.__init__` importar de domain OK; `api.__init__` importar de application OK; domain no importar de application. `importlib` en orden. |
+
+---
+
+### J.4 C. Tests de importación (Corrección 14.C)
+
+**`tests/imports/test_import_without_externals.py` — caso único pero exhaustivo:**
+
+```python
+# Pseudocódigo del test:
+# 1. sys.modules = {} (reset simulado con subprocess aislado PREFERIBLEMENTE,
+#    o usando importlib para importar en orden y comprobar).
+# 2. pip list / pkgutil: antes de importar universal_business, marcar los
+#    módulos ya cargados.
+# 3. import universal_business.domain
+# 4. Assert: fastapi, sqlalchemy, psycopg, alembic, pywhatkit, twilio,
+#           firebase_admin, openai, stripe, googlemaps NO aparecen.
+# 5. Assert: TODOS los módulos .business, .customers, .catalog, .resources,
+#           .availability, .reservations, .orders, .fulfillment se importan
+#           OK sin levantar infraestructura.
+# 6. Assert: import universal_business (top level) también pasa.
+```
+
+**Implementación recomendada:** Usar `subprocess.run([sys.executable, "-c", ...], capture_output=True)` para aislar completamente el entorno de importación (módulo `multiprocessing` también sirve, pero subprocess es más simple).
+
+---
+
+## K. Estrategia de Tipado Estático / Linting — CORREGIDO (Corrección 15: mínima y coherente)
+
+### K.1 Stack (SOLO pytest + ruff + mypy. SIN bandit SIN import-linter SIN extras)
+
+| Categoría | Herramienta | Versión mín. | Justificación |
 |---|---|---|---|
-| Linting + isort + format | **ruff** | ≥ 0.6 | Todo en uno; veloz; reemplaza flake8+isort+black |
-| Type checking | **mypy** | ≥ 1.10 | Estándar de facto; strict mode |
-| Test runner | **pytest** | ≥ 8.0 | Standard |
-| Coverage | **pytest-cov** | ≥ 5.0 | Coverage integrado |
-| Seguridad (AST) | **bandit** | ≥ 1.7 | Detección de antipatrones de seguridad |
+| Tests | `pytest` | ≥8.0 | Standard. |
+| Coverage | `pytest-cov` | ≥5.0 | Integrado. |
+| Lint + isort + format | `ruff` | ≥0.6 | Todo en uno. Veloz. |
+| Type checking | `mypy` | ≥1.10 | Estándar strict mode. |
 
-### K.2 Dependencias de proyecto (opcional-dependencies)
+### K.2 `pyproject.toml` (dependencias)
 ```toml
-# En pyproject.toml:
 [project]
 name = "universal-business-core"
 version = "0.1.0"
-description = "Universal Business Core — dominio agnóstico multi-tenant"
+description = "Universal Business Core (Entrega 0.1) — dominio agnóstico multi-tenant"
+readme = "README.md"          # NOTA: si no hay README, omitir o crear mínimo.
 requires-python = ">=3.11"
 dependencies = [
-    "tzdata; sys_platform == 'win32'",   # Windows no lleva tzdata en stdlib
+    "tzdata; sys_platform == 'win32'",   # Windows no lleva tzdata en stdlib Py ≤3.11
 ]
 
 [project.optional-dependencies]
-dev = [
-    "pytest>=8.0",
-    "pytest-cov>=5.0",
-    "ruff>=0.6",
-    "mypy>=1.10",
-    "bandit>=1.7",
-]
 test = ["pytest>=8.0", "pytest-cov>=5.0"]
-lint = ["ruff>=0.6", "mypy>=1.10", "bandit>=1.7"]
+lint = ["ruff>=0.6", "mypy>=1.10"]
+dev  = ["pytest>=8.0", "pytest-cov>=5.0", "ruff>=0.6", "mypy>=1.10"]
 ```
 
-### K.3 Configuración Mypy (progresiva)
+### K.3 Configuración mypy
 ```toml
 [tool.mypy]
 python_version = "3.11"
@@ -925,17 +977,16 @@ warn_unused_configs = true
 explicit_package_bases = true
 ignore_missing_imports = false
 show_error_codes = true
-my_path = "src:tests"
+mypy_path = "src:tests"
+no_implicit_optional = true
+disallow_subclassing_any = true
 
-# Relajación TEMPORAL para los 6 módulos esqueleto:
+# Relajación TEMPORAL para módulos que en 0.1 solo tienen contratos:
 [[tool.mypy.overrides]]
 module = [
   "universal_business.domain.catalog.*",
   "universal_business.domain.resources.*",
   "universal_business.domain.availability.*",
-  "universal_business.domain.reservations.*",
-  "universal_business.domain.orders.*",
-  "universal_business.domain.fulfillment.*",
 ]
 strict = false
 ```
@@ -949,178 +1000,118 @@ src = ["src", "tests"]
 exclude = [".venv", "build", "dist", "docs"]
 
 [tool.ruff.lint]
-# Ruleset recomendado: E (pycodestyle) + F (pyflakes) + I (isort) + N (pep8-naming) + UP (pyupgrade) + B (flake8-bugbear)
 select = ["E", "F", "I", "N", "UP", "B"]
-ignore = ["B008"]   # ignorar "do not perform function calls in argument defaults" (dataclass lo requiere)
+ignore = ["B008"]   # función en args default (dataclass field default_factory no aplica)
 
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
 ```
 
-### K.5 Pre-commit (`.pre-commit-config.yaml`)
-```yaml
-repos:
-- repo: https://github.com/astral-sh/ruff-pre-commit
-  rev: v0.6.0
-  hooks:
-    - id: ruff
-      args: [--fix]
-    - id: ruff-format
-- repo: https://github.com/PyCQA/bandit
-  rev: 1.7.9
-  hooks:
-    - id: bandit
-      args: ["-r", "src", "--severity-level", "medium"]
-```
-
-### K.6 Comandos locales
-```bash
-# Lint + format
-ruff check .
-ruff format .
-
-# Type check
-mypy src tests
-
-# Tests + coverage
-pytest -q --cov=src/universal_business --cov-report=term --cov-fail-under=60
-
-# Seguridad
-bandit -r src
-```
+### K.5 `.pre-commit-config.yaml`
+**Mantenido como opcional (Corrección 15).** Se documenta que es opcional; CI ejecuta las comprobaciones de todas formas.
 
 ---
 
-## L. Estrategia CI (`.github/workflows/ci.yml`)
+## L. Estrategia CI (`.github/workflows/ci.yml`) — CORREGIDO 3 pasos MÍNIMOS (Corrección 15)
+
+> Pipeline MÍNIMO. SOLO: ruff check → mypy → pytest. Sin extras.
 
 ```yaml
-name: CI — Architectural Baseline (0.1)
+name: CI — Entrega 0.1 Architectural Baseline
 
 on:
   push:
-    branches: [ feat/architectural-baseline, master ]
+    branches: [ feat/architectural-baseline ]
   pull_request:
-    branches: [ '**' ]
+    branches: [ feat/**, master ]
 
 jobs:
   quality:
     runs-on: ubuntu-latest
+
     strategy:
-      fail-fast: false
       matrix:
-        python-version: ["3.11"]
+        python-version: [ "3.11" ]
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ matrix.python-version }}
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -e ".[dev,test,lint]"
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,test,lint]"
 
-    - name: Ruff lint
-      run: ruff check . --exit-zero    # temporal; luego --exit-non-zero-on-fix
+      - name: 1) Ruff lint + format check
+        run: |
+          ruff check .
+          ruff format --check .
 
-    - name: Ruff format check
-      run: ruff format --check .
+      - name: 2) Mypy strict (shared + business + customers)
+        run: |
+          mypy --strict \
+            src/universal_business/domain/shared \
+            src/universal_business/domain/business \
+            src/universal_business/domain/customers \
+            tests
 
-    - name: Bandit security
-      run: bandit -r src/ -ll || true   # non-blocking en 0.1; estricto FASE 2
-
-    - name: Mypy strict (shared + business + customers)
-      run: |
-        mypy --strict \
-          src/universal_business/domain/shared \
-          src/universal_business/domain/business \
-          src/universal_business/domain/customers \
-          tests
-
-    - name: Pytest + coverage
-      run: |
-        pytest -q \
-          --cov=src/universal_business \
-          --cov-report=term \
-          --cov-report=xml \
-          --cov-report=html \
+      - name: 3) Pytest + coverage ≥ 60%
+        run: >
+          pytest -q
+          --cov=src/universal_business
+          --cov-report=term
+          --cov-report=xml
           --cov-fail-under=60
-
-    - name: Upload coverage artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: coverage-report
-        path: htmlcov/
 ```
 
 ---
 
-## M. Criterios de Aceptación — GATE 0.1
+## M. GATE 0.1 — Criterios de aceptación VERIFICABLES (CORREGIDO según Corrección 16, 14 puntos)
 
-> "La entrega se acepta solo si el core puede importarse y probarse sin levantar FastAPI, una base de datos o servicios externos, y si no contiene nombres o reglas específicas del pica pollo."
+> La entrega se considera válida ÚNICAMENTE si TODOS los 14 criterios se cumplen.
+> Ningún criterio "parcialmente válido".
 
-### GATE 0.1 — Checklist (15 criterios cuantificables)
-
-| ID | Criterio | Método de verificación |
+| # | Criterio | Cómo se VERIFICA |
 |---|---|---|
-| **G1** | `import universal_business.domain` NO requiere paquetes excluidos (FastAPI, SQLAlchemy, psycopg, Firebase, WhatsApp, React). | `tests/architecture/test_architecture_boundaries.py` → AT-4 |
-| **G2** | **100% tests pasan** (≈50–60 tests estimados). | `pytest -q` → exit code 0 |
-| **G3** | Coverage global **≥ 60%**. | `--cov-fail-under=60` |
-| **G4** | `ruff check .` → 0 errores, 0 warnings no excluidos explícitamente. | CI step Ruff lint |
-| **G5** | `ruff format --check .` → pasa. | CI step Ruff format |
-| **G6** | `mypy --strict` pasa sobre `shared/`, `business/`, `customers/`. | CI step Mypy |
-| **G7** | **Ninguna entidad, variable, función, módulo ni docstring** en `domain/` + `application/` menciona términos de pica-pollo (ver AT-5). | AT-5 (grep con patrones + case-insensitive) |
-| **G8** | `Money` no acepta `float` en su API pública (runtime error + mypy strict error). | `test_money.py` — Test 1-2 |
-| **G9** | Ningún constructor de entidad acepta `datetime` sin zona horaria. | `test_temporal.py` + tests de entidad (contact_info con datetime naïve) |
-| **G10** | `Tenant`, `Business`, `Location`, `Customer` se **instancian, comparan y transicionan** sin repositorio ni dependencia externa. | Tests de unidad de cada módulo |
-| **G11** | Interfaces de repositorio son `Protocol` o `ABC`; NO dependen de SQLAlchemy. | Grep for `from sqlalchemy` en domain/ + AT-1 |
-| **G12** | 5 ADRs completos en formato estándar. | Revisión humana (checklist PR) |
-| **G13** | `ARCHITECTURE.md` explica las 4 capas, modelo de tenancy, y estrategia de extensiones verticales. | Revisión humana |
-| **G14** | Pipeline CI pasa en `ubuntu-latest` + Python 3.11. | GitHub Actions ✅ green |
-| **G15** | Los **15 items del scope** de la tarea están todos implementados (ver lista SCOPE a continuación). | Revisión humana del PR |
-
-#### SCOPE checklist integrado (15 items)
-1. ✅ Skeleton Python del proyecto
-2. ✅ `pyproject.toml`
-3. ✅ `ARCHITECTURE.md`
-4. ✅ ADR-001 a ADR-005
-5. ✅ Value objects básicos (IDs, Money, DateRange/TimeRange, status)
-6. ✅ Tenant, Business, Location, Customer
-7. ✅ Repository interfaces / ports
-8. ✅ Skeleton: Catalog, Resource, Availability, Reservation, Order, Fulfillment
-9. ✅ Domain events base
-10. ✅ Architecture tests
-11. ✅ Unit-test structure
-12. ✅ pytest
-13. ✅ Linting (ruff)
-14. ✅ Static type checking (mypy strict)
-15. ✅ Minimal CI configuration
+| **G1** | El paquete `universal_business` puede **importarse correctamente**. | `python -c "import universal_business"` exit code 0; `tests/imports/test_import_without_externals.py` PASSA. |
+| **G2** | **TODOS los tests pasan** (unit + arquitectura + importación; ≈72+8+1 ≈ 81 tests). | `pytest -q` exit code 0. |
+| **G3** | **Ruff** no detecta errores. | `ruff check .` exit 0; `ruff format --check .` exit 0. |
+| **G4** | **Mypy** pasa según la configuración definida. | `mypy --strict src/universal_business/domain/shared src/universal_business/domain/business src/universal_business/domain/customers tests` exit 0. Los módulos esqueleto (catalog/resources/availability) pasan con strict=false en overrides. |
+| **G5** | El **dominio NO depende de FastAPI** (incluyendo starlette). | Architecture Test AT-4 PASSA; `grep -r "fastapi\|starlette" src/universal_business/domain` 0 coincidencias. |
+| **G6** | El **dominio NO depende de SQLAlchemy** (incl. psycopg, alembic, asyncpg, sqlite native driver imports). | Architecture Test AT-5 PASSA; `grep -rE "sqlalchemy|psycopg|alembic|asyncpg" src/universal_business/domain` 0 coincidencias. |
+| **G7** | El dominio **NO depende de una base de datos** (no levanta conexiones, no requiere drivers). | Architecture Test AT-5 PASSA; Test de importación J.4 PASSA. |
+| **G8** | **No existen nombres ni reglas específicas del vertical pica-pollo** dentro del core (`src/universal_business/`, excluyendo `verticals/` que está vacío en 0.1). | Architecture Test AT-6 PASSA (grep automático con patrones). |
+| **G9** | **Tenant, Business, Location y Customer** existen como conceptos de dominio reales (no placeholders). Tienen campos, invariantes y tests. | Archivos `domain/business/entities.py` y `domain/customers/entities.py` existen y contienen las 4 entidades; `test_tenant`, `test_business`, `test_location`, `test_customer` existen y PASSAN. |
+| **G10** | **Value objects básicos** implementados y probados: IDs fuertes, Money, Currency, DateRange, TimeRange, tz-aware datetime guards. | Tests unitarios `test_ids.py`, `test_money.py`, `test_temporal.py` PASSAN (coverage ≥90% en shared VO). |
+| **G11** | **Repositorios definidos ÚNICAMENTE como contratos/ports** (`Protocol` o `ABC`) CERCA de su dominio; NO dependencias de ORM; NO punto central de reexports. | Los 9 `ports.py` existen y son Protocol; Architecture Test AT-5 comprueba no SQLAlchemy imports; `application/ports/` no existe (Corrección 7). |
+| **G12** | **Infrastructure, API y verticals NO contienen implementaciones prematuras.** Solo `__init__.py` vacíos. | `find src/universal_business/infrastructure src/universal_business/api src/universal_business/verticals -type f -name "*.py" | xargs wc -l` ≤ 1 línea cada uno (solo comentarios o vacío); `grep -rE "class |def |import sqlalchemy|from fastapi" ...` sin resultados. |
+| **G13** | Existen **tests arquitectónicos que protegen los límites** (8 reglas AT-1…AT-8). | Archivo `tests/architecture/test_architecture_boundaries.py` existe; 8 tests PASSA. |
+| **G14** | El **core puede probarse completamente sin levantar servicios externos.** Todo suite pytest corre offline (no hay marcadores `skipif` condicionados a servicios externos). | Ejecutar pytest sin internet, sin variables de entorno de servicios; exit 0. Coverage report se genera sin levantar nada. |
 
 ---
 
-## N. Riesgos y Ambigüedades detectadas
+## N. Riesgos, ambigüedades y decisiones PENDIENTES (CORREGIDO, solo las que requieren decisión humana)
 
-| ID | Riesgo / Ambigüedad | Descripción | Impacto | Mitigación propuesta |
+| ID | Ambigüedad / Riesgo | Detalle | Decisión requiere HUMANA? | Sugerencia de mitigación / default |
 |---|---|---|---|---|
-| **R1** | NewType vs Wrapper-class para IDs | NewType no aporta seguridad runtime. | Medio | **Decisión:** Wrapper dataclass (`@dataclass(frozen=True)` con validación `__post_init__`). Queda documentado en ADR-002. |
-| **R2** | `Currency`: Enum cerrado vs String literal | 180 monedas ISO; Enum = mantenimiento; Str sin validar = runtime bugs. | Bajo | `typing.Literal["DOP","USD","EUR"]` en 0.1. Expandir la lista en FASE 1. Post_init valida long-3 + alpha. |
-| **R3** | ABC vs Protocol para repos | ABC fuerza herencia; Protocol = duck typing estático. | Bajo | **Protocol** (mejor para fakes en tests sin importar). |
-| **R4** | Location `tenant_id` redundante | PDF no especifica si debe repetirse. | Bajo | **SÍ se repite.** Justificación: aislamiento sin JOIN, auditoría simple. Validado por factory (invariante). ADR-002. |
-| **R5** | Alcance VOs BusinessSettings / Consent | "lifecycle/status primitives where appropriate" — ambiguo. | Bajo | Minimalismo: solo `LifecycleStatus` shared + `ConsentType` enum. OrderStatus/ReservationStatus son placeholders en esqueletos. |
-| **R6** | `import-linter` vs tests arquitectónicos caseros | Librería adicional vs. fragilidad de parse AST/importlib. | Bajo | **Caseros en 0.1** (inspección sys.modules + grep). Evaluar `import-linter` FASE 1 si hay falsos positivos. |
-| **R7** | Money strict + float defence | mypy strict detecta float en API. ¿Y si alguien hace `Money(Decimal(str(my_float)))`? | Bajo | **Defensa en profundidad:** (a) mypy strict; (b) `__post_init__` runtime TypeError si `isinstance(self.amount, float)`; (c) comentario en docstring del constructor. |
-| **R8** | tzdata en Windows | `zoneinfo.ZoneInfo("America/Santo_Domingo")` falla en Windows sin `tzdata`. | Bajo | Dependencia condicional en pyproject: `"tzdata; sys_platform == 'win32'"`. |
-| **R9** | Scope creep 6 módulos esqueleto | Tentación de implementar Order/Reservation ya. | Medio | **Regla estricta de esqueleto:** máximo `id`, `tenant_id`, `business_id`, `created_at`, `updated_at` + TODO docstring. Sin métodos sin invariantes. Aplicar Architecture test que verifique que esas entidades no tengan >5 atributos. |
-| **R10** | Feature flags en BusinessSettings | ¿Qué flags incluir en 0.1? ¿Nombres demasiado verticales? | Bajo | Solo dos flags genéricos: `"has_reservations": bool`, `"has_delivery": bool`. Nada de `"has_pica_pollo_combo"`. |
-| **R11** | `LifecycleStatus` demasiado rígido | Order y Reservation tienen ciclos muy distintos al Tenant. | Bajo | `LifecycleStatus` es un enum shared genérico de "estados de vida". Cada módulo define SU PROPIO enum (`OrderStatus(str, Enum)`) con su propia matriz de transiciones. Comparten el helper `StatusTransition`. |
-| **R12** | Windows path + test grep | Test AT-5 usa `pathlib.Path.glob`, los paths pueden ser `\\` en Windows. | Bajo | Usar siempre `pathlib.Path` (funciona cross-platform) y leer archivos con `encoding="utf-8"`. CI corre en Ubuntu (paths POSIX). |
+| **A1** | `business_id` en Customer → ¿OBLIGATORIO o opcional? | Corrección 3: `location_id` opcional está decidido; sobre `business_id` el plan v2 lo marca **obligatorio**. ¿Qué pasa si un Tenant quiere customers a nivel tenant sin business? | **SÍ requiere decisión** si existe ese caso. | **Default actual: OBLIGATORIO** (la operación real siempre sucede dentro de un business). Si hay caso de uso "global customer account" → cambiar a opcional en FASE 1. |
+| **A2** | Política `MONEY_ALLOWED_CURRENCIES`: whitelist vs. cualquier ISO 4217. | Plan actual: whitelist `{"DOP","USD","EUR"}`. ¿Agregar todas las 180? | **Sí/No.** | **Default: whitelist** y documentar cómo ampliarla (1 línea en money.py). |
+| **A3** | Money: 4 decimales internos → ¿moneda `DOP` acepta 4 decimales? | Pesos RD usan 2 decimales; impuestos y factores se calculan con más. | **No requiere humana si contabilidad acepta.** | Default actual: 4 decimales internos + 2 para display (decisión application). |
+| **A4** | Entity IDs: wrapper dataclass frozen vs. NewType. | Wrapper aporta runtime safety pero es más verboso. NewType más ligero pero sin seguridad en runtime. | **No requiere** si aceptamos el default plan. | Default: wrapper (más seguro). Si el equipo prefiere NewType, cambiar y añadir test `isinstance(TenantId(x), str)`. |
+| **A5** | BaseEntity / AggregateRoot: ¿`__post_init__` valida automáticamente que `created_at` y `updated_at` son timezone-aware? | Plan actual: SÍ. ¿Si se olvida pasar tz debe fallar en construcción? | No, solo decisión de implementación. | Default: sí valida. |
+| **A6** | ¿Nombre de `Tenant.legal_entity_name`/`legal_tax_id` ó `legal_name`/`tax_id`? | Corrección 4 dice Tenant NO es necesariamente entidad legal. Campo debe reflejar optatividad. | **Pregunta de naming (estética).** | Default: `legal_entity_name: str | None`, `legal_tax_id: str | None`. |
+| **A7** | ¿Generar `.pre-commit-config.yaml` aunque sea opcional? Corrección 15 → "opcional si no añade complejidad". | Añadirlo o no. | **Decisión de equipo.** | Default: NO generarlo (no aporta valor si CI ya lo ejecuta). Si se desea, usar ruff + ruff-format solo. |
+| **A8** | ADR-007 idempotencia: ¿implementar `domain/shared/value_objects/idempotency.py` en 0.1 o dejarlo solo en ADR? | Plan actual: solo ADR (0.1 no implementa la entidad). | **Decisión de scope 0.1.** | Default: **solo ADR** (mantener 0.1 mínima). Entity + VO = FASE 1. |
+| **A9** | ¿Documentos ADR existen en 0.1 solo como TÍTULOS o con contenido COMPLETO? | El scope dice ADR-001 a ADR-005 (ahora 001–007). ¿Todos los ADRs se escriben completos ahora? | **Decisión importante.** | Default: **SÍ completar los 7 ADRs en la 0.1** (secciones Contexto/Alternativas/Decisión/Consecuencias). Son decisiones que afectan FASE 1. |
+| **A10** | `application/__init__.py` vs. carpetas `commands/queries/services/ports` marcadores vacíos. | Corrección 6 dice no inflar. | Decisión estética. | Default: **SOLO `application/__init__.py`**. Nada más en 0.1. |
 
 ---
 
-**FIN DEL DOCUMENTO — Plan Entrega 0.1 Architectural Baseline v1.0**
+**FIN DOCUMENTO v2.0 — Plan Entrega 0.1 Architectural Baseline (revisado con 18 correcciones arquitectónicas aplicadas).**
 
-Espera la aprobación del usuario antes de proceder a la implementación.
+Espera aprobación explícita antes de proceder a implementar código.
