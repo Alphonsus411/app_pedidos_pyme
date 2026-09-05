@@ -20,9 +20,15 @@ infraestructura.
 ## Decisión
 **Opción B** con una implementación **faseada**:
 
-### Fase actual (Entrega 0.1)
+### Fase actual (Entrega 0.1 / RC1 Hardening)
 - ✅ `DomainEvent` base mínimo (ver `domain/shared/events.py`).
 - ✅ `AggregateRootMixin` (recolección en memoria, sin envío).
+- ✅ **(RC1) Inmutabilidad semántica de metadata:** `DomainEvent` es frozen
+  dataclass, y su `metadata` se convierte mediante copia defensiva a
+  `types.MappingProxyType`. Nada del código posterior al `__init__` puede
+  mutar los metadatos (`event.metadata["x"]=v`, `update`, `del` fallan), y
+  un dict original pasado al constructor que se mute después **NO** afecta
+  al evento.
 - ❌ **Sin tabla outbox, sin dispatcher, sin bus.**
 
 ### Fase 2 / 3 (fuera de 0.1)

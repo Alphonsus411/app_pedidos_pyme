@@ -110,3 +110,53 @@ def test_aggregate_root_mixin_rejects_non_event() -> None:
     d = Dummy()
     with pytest.raises(InvariantViolationError):
         d.add_domain_event("not an event")  # type: ignore[arg-type]
+
+
+# ---------------------------------------------------------------------------
+# DomainEvent.metadata: INMUTABILIDAD SEMÁNTICA (Hardening Gate 0.1-RC1)
+# ---------------------------------------------------------------------------
+
+
+def test_domain_event_metadata_built_from_dict_is_readable() -> None:
+    tid = TenantId.generate()
+    md = {"source": "web", "version": 2}
+    ev = DomainEvent(aggregate_id=tid, aggregate_type="Tenant", metadata=md)
+    assert ev.metadata["source"] == "web"
+    assert ev.metadata["version"] == 2
+    assert "source" in ev.metadata
+    assert list(ev.metadata.keys()) == ["source", "version"]
+
+
+def test_domain_event_metadata_default_is_empty_immutable() -> None:
+    tid = TenantId.generate()
+    ev = DomainEvent(aggregate_id=tid, aggregate_type="Tenant")
+    assert len(ev.metadata) == 0
+    # Asignación por clave debe fallar (MappingProxyType).
+    with pytest.raises(TypeError):
+        ev.metadata["x"] = 1  # type: ignore[index]
+
+
+def test_domain_event_metadata_cannot_be_mutated_after_construction() -> None:
+    tid = TenantId.generate()
+    ev = DomainEvent(
+        aggregate_id=tid,
+        aggregate_type="Tenant",
+        metadata={"a": 1, "b": ["x"]},
+    )
+    with pytest.raises(TypeError):
+        ev.metadata["c"] = 3  # type: ignore[index]
+    with pytest.raises(TypeError):
+        del ev.metadata["a"]  # type: ignore[attr-defined]
+    with pytest.raises((TypeError, AttributeError)):
+        ev.metadata.update({"c": 3})  # type: ignore[union-attr]
+
+
+def test_domain_event_metadata_original_dict_mutation_does_not_affect_event() -> None:
+    """Copia defensiva: el dict original pasado a metadata no modifica el evento."""
+    tid = TenantId.generate()
+    original: dict[str, object] = {"k": "initial"}
+    ev = DomainEvent(aggregate_id=tid, aggregate_type="Tenant", metadata=original)
+    original["k"] = "MUTATED"
+    original["extra"] = 42
+    assert ev.metadata["k"] == "initial"
+    assert "extra" not in ev.metadata

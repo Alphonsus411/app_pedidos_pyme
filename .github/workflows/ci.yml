@@ -2,8 +2,13 @@ name: CI (Universal Business Core — Architectural Baseline)
 
 on:
   push:
-    branches: [feat/architectural-baseline]
+    branches:
+      - master
+      - feat/architectural-baseline
   pull_request:
+    branches:
+      - master
+      - feat/architectural-baseline
 
 permissions:
   contents: read

@@ -45,7 +45,7 @@ reglas propias de un único sector. Está diseñado como un
 - `domain` **no menciona nombres sectoriales** (pica pollo, restaurante, etc.)
 
 Estas reglas son verificadas por tests arquitectónicos en
-`tests/architecture/test_architecture_boundaries.py` (AT-1…AT-8).
+`tests/architecture/test_architecture_boundaries.py` (AT-1…AT-9).
 
 ## Multi-tenancy (ADR-002)
 
@@ -57,7 +57,18 @@ Jerarquía conceptual: **Tenant → Business → Location**.
 
 **Aislamiento:** todas las entidades operacionales llevan `tenant_id` (redundancia
 intencional para filtros de aislamiento sin JOINs). Las queries de repositorio
-siempre reciben `tenant_id` como primer parámetro.
+siempre reciben `tenant_id` como parámetro explícito (keyword-only cuando
+aplique).
+
+**Repository Ports — tenancy explícita (AT-9):** ninguna operación de lectura,
+listado, búsqueda, modificación o borrado sobre entidades *tenant-scoped*
+puede invocarse sin `tenant_id` en la firma del Protocol.
+
+- Excepción documentada: `ITenantRepository` (todos sus métodos) no es
+  tenant-scoped; gestiona el propio límite superior SaaS.
+- Entidades subordinadas a Business / Location (`Location`, `Customer`,
+  `Resource`, …) añaden además `business_id` y/o `location_id` cuando el
+  contexto es necesario para garantizar el boundary.
 
 Matriz de tenancy (resumen):
 
@@ -72,9 +83,14 @@ Matriz de tenancy (resumen):
 
 ## Value objects clave
 - **IDs fuertes**: wrappers dataclass inmutables sobre UUID (`TenantId`, `OrderId`,…).
-- **Money**: `Decimal` + moneda ISO-4217. Escala 4 decimales; rounding
-  `ROUND_HALF_EVEN`. NO float; operaciones `int | Decimal | str`. Monedas
-  permitidas en whitelist.
+- **Currency** (ISO-4217-like, sin whitelist): frozen dataclass con código 3
+  letras alfabéticas, normalización a uppercase, inmutable y hashable. El
+  Universal Business Core acepta cualquier código 3 letras (USD, EUR, DOP,
+  JPY, MXN, GBP, CHF, COP, ARS, …) sin lista cerrada; el host podrá validar
+  contra el catálogo ISO-4217 completo como extensión futura.
+- **Money**: `Decimal` + `Currency` (VO). Precisión 10 / escala 4; rounding
+  `ROUND_HALF_EVEN` determinista. NO float; solo acepta `int | Decimal | str`
+  decimal seguro. Operaciones permitidas únicamente entre la misma moneda.
 - **Temporal**: `DateRange` / `TimeRange`. Guardia `require_aware()` que
   bloquea cualquier `datetime` naive (`tzinfo=None`) en la frontera del dominio.
 - **Estados**: cada módulo define sus propios `XxxStatus(Enum)`; la utilidad
@@ -83,6 +99,10 @@ Matriz de tenancy (resumen):
 ## Domain Events (ADR-004)
 - `DomainEvent` base: `event_id`, `occurred_at` (aware), `aggregate_id`, `aggregate_type`.
 - Campos opcionales cuando proceden: `tenant_id`, `business_id`, `location_id`, `metadata`.
+- **Inmutabilidad semántica de metadata:** `DomainEvent` es frozen dataclass, y
+  su `metadata` se construye mediante copia defensiva convertida a
+  `types.MappingProxyType`, de modo que `event.metadata["x"] = v` falla y el
+  dict original pasado al constructor, si se modifica después, NO afecta al evento.
 - Los agregados recolectan eventos (`AggregateRootMixin`) pero **NO los envían**.
 - Dispatcher + tabla Outbox físico → FASE 2/3 (fuera de la Entrega 0.1).
 
@@ -102,17 +122,42 @@ Matriz de tenancy (resumen):
   nombres o las reglas de un vertical.
 - Violación detectada por el test arquitectónico AT-6 (grep de nombres prohibidos).
 
-## Alcance — Entrega 0.1 Architectural Baseline
+## Tipado estricto
+- `mypy` configurado en modo `strict=true` GLOBAL para todo `src/` (47 módulos fuente).
+- **No hay overrides laxos** por módulo (`strict = false` desactivado en todos los
+  esqueletos).
+- Se prohíbe `# type: ignore` injustificado y `Any` indiscriminado; se prefiere
+  tipado explícito.
+- Matriz herramientas: `pytest` → `ruff check` → `ruff format --check` → `mypy src`.
 
-| Capa | Qué se entrega | Qué NO se entrega |
+## CI / Protección de rama permanente (GitHub Actions)
+El workflow `.github/workflows/ci.yml` se ejecuta obligatoriamente en:
+
+- `push` a `master` (protección permanente) y a `feat/architectural-baseline`.
+- `pull_request` dirigido contra `master`.
+
+Matriz: Python 3.11 y 3.12 (sin servicios de DB / Docker / publicación; solo
+calidad de código).
+
+## Alcance — Entrega 0.1 Architectural Baseline (scope REAL)
+
+| Capa | Qué se entrega (RC1) | Qué NO se entrega (FASE 1…FASE 3) |
 |---|---|---|
-| **domain** | VOs compartidos; Tenant / Business / Location / Customer; módulos esqueleto con entidades + status + ports Protocol | Pricing / stock / motor disponibilidad / reglas pedidos/reservas |
+| **domain.shared** | `Money` + `Currency` sin whitelist; IDs fuertes; `DateRange`/`TimeRange` UTC-aware; `StatusTransition`; `AggregateRootMixin`; `DomainEvent.metadata` inmutable; errores fuertemente tipados | Catálogo ISO-4217 completo (extensión futura) |
+| **domain.business** | `Tenant`/`Business`/`Location` + `BusinessSettings`; repos `ITenantRepository`, `IBusinessRepository`, `ILocationRepository` con tenancy explícita | Jerarquías multinivel avanzadas; jerarquía organizativa extendida |
+| **domain.customers** | `Customer` con external_ref opcional; `ICustomerRepository.get(tenant_id,business_id,customer_id)` | CRM; scoring; segmentación; programas de fidelidad |
+| **domain.catalog** | Entidad mínima `CatalogItem` (identidad, tenancy, status, nombre, precio Money placeholder, activo). Contratos `ICatalogRepository` con tenancy explícita | Pricing avanzado; SKU; variantes; atributos multivalor; stock real |
+| **domain.resources** | Entidad mínima `Resource` (identidad, tenancy, name, status, tipo, capacidad). `IResourceRepository` con location_id | Agendas; pools; dependencias; capacity planners |
+| **domain.availability** | Entidades mínimas `AvailabilityRule`/`AvailabilityBlock`; ports con `list_rules_for_resource(tenant_id,location_id)`. Invariantes de construcción triviales | Motor de disponibilidad; solapamientos; reglas complejas; scheduling |
+| **domain.reservations** | Entidad mínima `Reservation` (identidad, tenancy, customer_id, timespan, status). Ports tenancy explícita | Cancelaciones; rebooking; prioridad; waitlist; políticas de no-show |
+| **domain.orders** | Entidad mínima `Order` (identidad, tenancy, customer_id, totals Money placeholder, status). Ports tenancy explícita | Líneas de pedido; impuestos; descuentos; ciclo de vida completo |
+| **domain.fulfillment** | Entidad mínima `Fulfillment` (identidad, tenancy, order_id/reservation_id opcionales, tipo, status). Ports | Asignación; routing; tracking; SLA; fulfillment operacional |
 | **application** | Solo estructura de paquete (`__init__.py`) | Use cases completos, CQRS, UnitOfWork |
-| **infrastructure** | Solo estructura. Nada de implementación | ORM / repositorios / DB / brokers |
+| **infrastructure** | Solo estructura. Nada de implementación | ORM / repositorios / DB / brokers / Outbox físico |
 | **api** | Solo estructura | FastAPI / endpoints / Pydantic |
 | **verticals** | Solo estructura (vacío) | Cualquier vertical, incluyendo pica-pollo |
-| **tests** | unitarios VOs + entidades; arquitectura AT-1..AT-8; importación subprocess | tests de integración / E2E |
-| **tooling** | pyproject.toml: pytest, ruff, mypy. CI GitHub Actions | Bandit, pre-commit (opcional) |
+| **tests** | Unitarios VOs + entidades; arquitectura AT-1..AT-9 (nuevo AT-9: ports tenancy signatures); importación subprocess sin externos; tests específicos Currency y metadata inmutable | Tests de integración / E2E |
+| **tooling** | `pyproject.toml`: pytest, ruff, mypy strict. CI en `master` y `feat/*`. `[docs]` extra opcional para `fpdf2` (NUNCA runtime dep) | Bandit, pre-commit (opcional), Docker, Postgres service, releases, PyPI publication
 
 ## Enlaces
 - `docs/adr/ADR-001.md` … `docs/adr/ADR-007.md` — decisiones vinculantes.

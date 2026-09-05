@@ -7,6 +7,8 @@ Sólo estructura + colección (para futuro patrón outbox).
 from __future__ import annotations
 
 import datetime as dt
+import types
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, TypeVar
 
@@ -21,9 +23,12 @@ if TYPE_CHECKING:  # pragma: no cover - evita import circular
     pass
 
 
+_EMPTY_METADATA: types.MappingProxyType[str, Any] = types.MappingProxyType({})
+
+
 @dataclass(frozen=True, kw_only=True)
 class DomainEvent:
-    """Evento de dominio base mínimo (Corrección 13).
+    """Evento de dominio base mínimo (Hardening Gate 0.1-RC1).
 
     Campos OBLIGATORIOS:
       - event_id:     id único del evento.
@@ -33,7 +38,9 @@ class DomainEvent:
 
     Campos OPCIONALES (cuando aplique):
       - tenant_id / business_id / location_id: contexto de aislamiento.
-      - metadata: dict[str, Any] arbitrario serializable.
+      - metadata: Mapping[str, Any] arbitrario serializable.
+                  INMUTABLE semánticamente (convertido a MappingProxyType en
+                  __post_init__ con copia defensiva del dict original).
     """
 
     event_id: DomainEventId = field(default_factory=DomainEventId.generate)
@@ -44,7 +51,7 @@ class DomainEvent:
     tenant_id: BaseStrongId | None = None
     business_id: BaseStrongId | None = None
     location_id: BaseStrongId | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
+    metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         require_aware(self.occurred_at, field_name="DomainEvent.occurred_at")
@@ -60,8 +67,18 @@ class DomainEvent:
             raise InvariantViolationError(
                 f"DomainEvent.aggregate_type inválido: {self.aggregate_type!r}"
             )
-        if not isinstance(self.metadata, dict):
-            raise InvariantViolationError(f"DomainEvent.metadata debe ser dict: {self.metadata!r}")
+        if not isinstance(self.metadata, Mapping):
+            raise InvariantViolationError(
+                f"DomainEvent.metadata debe ser Mapping: {self.metadata!r}"
+            )
+        # Copia defensiva + promoción a MappingProxyType para INMUTABILIDAD semántica.
+        frozen_md: Mapping[str, Any]
+        if isinstance(self.metadata, types.MappingProxyType):
+            frozen_md = self.metadata
+        else:
+            frozen_md = types.MappingProxyType(dict(self.metadata))
+        if frozen_md is not self.metadata:
+            object.__setattr__(self, "metadata", frozen_md)
 
     @property
     def occurred_at_utc(self) -> dt.datetime:

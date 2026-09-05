@@ -1,4 +1,7 @@
-"""Puertos repositorio para Catalog."""
+"""Puertos repositorio para Catalog (Hardening Gate 0.1-RC1).
+
+CatalogItem pertenece a Tenant + Business; location_id es opcional (item de nivel business).
+"""
 
 from __future__ import annotations
 
@@ -15,7 +18,13 @@ from universal_business.domain.shared.value_objects.ids import (
 
 
 class ICatalogRepository(Protocol):
-    def get(self, item_id: CatalogItemId) -> CatalogItem | None: ...
+    def get(
+        self,
+        *,
+        tenant_id: TenantId,
+        business_id: BusinessId,
+        item_id: CatalogItemId,
+    ) -> CatalogItem | None: ...
     def save(self, item: CatalogItem) -> None: ...
     def list_by_business(
         self,

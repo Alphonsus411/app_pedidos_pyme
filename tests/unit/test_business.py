@@ -98,8 +98,9 @@ def test_contact_info_email_format() -> None:
 # BusinessSettings
 # ---------------------------------------------------------------------------
 def test_business_settings_invalid_currency() -> None:
+    # Currency 3 letras alfabéticas; "USDD" es longitud 4 → inválido.
     with pytest.raises(MoneyCurrencyMismatchError):
-        BusinessSettings(default_currency="BTC")
+        BusinessSettings(default_currency="USDD")
 
 
 # ---------------------------------------------------------------------------

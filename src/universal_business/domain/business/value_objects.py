@@ -13,10 +13,7 @@ from enum import StrEnum
 from typing import Literal, cast
 
 from universal_business.domain.shared.errors import InvariantViolationError
-from universal_business.domain.shared.value_objects.money import (
-    CurrencyStr,
-    _validate_currency,  # noqa: PLC2701 - module-level private helper
-)
+from universal_business.domain.shared.value_objects.money import Currency
 from universal_business.domain.shared.value_objects.temporal import TimeRange, require_aware
 
 _ISO_ALPHA2_RE = re.compile(r"^[A-Z]{2}$")
@@ -111,13 +108,15 @@ class ContactInfo:
 class BusinessSettings:
     """Configuración por empresa. NO flags verticales específicos."""
 
-    default_currency: CurrencyStr
+    default_currency: str
     feature_flags: dict[str, bool] = field(default_factory=dict)
     locale: str = "en-US"
     date_format: str = "YYYY-MM-DD"
 
     def __post_init__(self) -> None:
-        cur = _validate_currency(self.default_currency)
+        # Valida que default_currency sea ISO-4217-like (3 letras alpha) y normaliza
+        # a uppercase. Usa Currency VO real (sin whitelist cerrada).
+        cur = Currency(self.default_currency).code
         object.__setattr__(self, "default_currency", cur)
         if not isinstance(self.feature_flags, dict):
             raise InvariantViolationError("BusinessSettings.feature_flags debe ser dict[str, bool]")

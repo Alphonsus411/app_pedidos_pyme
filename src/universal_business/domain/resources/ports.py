@@ -1,4 +1,7 @@
-"""Puertos repositorio para Resources."""
+"""Puertos repositorio para Resources (Hardening Gate 0.1-RC1).
+
+Resource pertenece a Location → Business → Tenant. Tiene location_id obligatorio.
+"""
 
 from __future__ import annotations
 
@@ -14,7 +17,13 @@ from universal_business.domain.shared.value_objects.ids import (
 
 
 class IResourceRepository(Protocol):
-    def get(self, resource_id: ResourceId) -> Resource | None: ...
+    def get(
+        self,
+        *,
+        tenant_id: TenantId,
+        location_id: LocationId,
+        resource_id: ResourceId,
+    ) -> Resource | None: ...
     def save(self, resource: Resource) -> None: ...
     def list_by_location(
         self,

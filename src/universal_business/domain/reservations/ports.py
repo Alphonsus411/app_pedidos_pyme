@@ -1,4 +1,8 @@
-"""Puertos repositorio para Reservations."""
+"""Puertos repositorio para Reservations (Hardening Gate 0.1-RC1).
+
+Reservation está ligada a Location + Tenant. resource_id es opcional según ADR-007.
+customer_id obligatorio.
+"""
 
 from __future__ import annotations
 
@@ -17,7 +21,12 @@ from universal_business.domain.shared.value_objects.temporal import TimeRange
 
 
 class IReservationRepository(Protocol):
-    def get(self, reservation_id: ReservationId) -> Reservation | None: ...
+    def get(
+        self,
+        *,
+        tenant_id: TenantId,
+        reservation_id: ReservationId,
+    ) -> Reservation | None: ...
     def save(self, reservation: Reservation) -> None: ...
 
     def list_for_resource_in_range(

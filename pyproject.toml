@@ -27,6 +27,11 @@ dev = [
     "ruff>=0.4",
     "mypy>=1.10",
 ]
+docs = [
+    # Generación del PDF del plan. NO es dependencia runtime del core.
+    # Instalación: pip install -e ".[docs]" ; python docs/_gen_plan_pdf.py
+    "fpdf2>=2.7",
+]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -87,14 +92,6 @@ disallow_incomplete_defs = true
 check_untyped_defs = true
 no_implicit_optional = true
 
-[[tool.mypy.overrides]]
-module = [
-    "universal_business.domain.catalog.*",
-    "universal_business.domain.resources.*",
-    "universal_business.domain.availability.*",
-    "universal_business.domain.reservations.*",
-    "universal_business.domain.orders.*",
-    "universal_business.domain.fulfillment.*",
-]
-strict = false
-disallow_untyped_defs = false
+# Gate 0.1-RC1: strict global activo para TODOS los módulos del core.
+# Catalog/resources/availability/reservations/orders/fulfillment pasan strict.
+# NO hay overrides laxos injustificados.

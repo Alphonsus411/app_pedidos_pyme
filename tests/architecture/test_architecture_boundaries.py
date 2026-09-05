@@ -1,12 +1,13 @@
 """Tests arquitectónicos. Protegen los límites de las capas.
 
 Implementados con AST + pathlib (stdlib), sin dependencias externas.
-AT-1…AT-8 según el plan.
+AT-1…AT-9 según plan Gate 0.1-RC1.
 """
 
 from __future__ import annotations
 
 import ast
+import inspect
 from pathlib import Path
 
 import pytest
@@ -68,6 +69,29 @@ FORBIDDEN_VERTICAL_NAMES = [
     "barbero",
     "barberia",
 ]
+
+
+# Métodos de repositorio que deben requerir tenant_id explícito (keyword-only o parámetro)
+# cuando la entidad es tenant-scoped.
+# Excepción: ITenantRepository (todos sus métodos) no es tenant-scoped; el repo
+# de Tenant es el límite superior SaaS y opera sobre tenants directamente.
+TENANT_READ_METHODS = {
+    "get",
+    "list",
+    "list_by_tenant",
+    "list_by_business",
+    "list_by_location",
+    "list_by_customer",
+    "list_by_order",
+    "list_for_resource_in_range",
+    "list_for_customer",
+    "list_rules_for_resource",
+    "list_blocks",
+    "search",
+    "get_by_external_ref",
+}
+# Repositorios que NO son tenant-scoped y se excluyen del check AT-9 global.
+PORTS_EXCLUDE_FROM_TENANCY: set[str] = {"ITenantRepository"}
 
 
 def iter_python_files(*roots: Path) -> list[Path]:
@@ -207,8 +231,7 @@ def test_at7_application_does_not_import_infrastructure(pyfile: Path) -> None:
 
 
 # ============================================================================
-# AT-8: Infrastructure no contiene implementaciones prematuras ( > 50 líneas )
-#        Aplica a infra / api / verticals.
+# AT-8: Infrastructure / api / verticals sin implementación prematura
 # ============================================================================
 
 
@@ -225,3 +248,81 @@ def test_at8_layers_are_skeleton_only(layer: Path) -> None:
             f"AT-8 FAIL: implementación prematura en {pyfile.relative_to(ROOT)} "
             f"con {len(content)} líneas no vacías. Entrega 0.1 solo acepta esqueletos."
         )
+
+
+# ============================================================================
+# AT-9: Repository ports tenant-scoped NO permiten acceso sin tenant explícito.
+# ============================================================================
+
+
+def collect_repository_protocols(domain_dir: Path):
+    """Inspecciona dinámicamente cada Protocol definido en domain/**/ports.py y
+    devuelve (protocol_name, method_name, signature, port_path) para cada método
+    de lectura/listado/search.
+    """
+    import sys
+
+    if str(SRC.parent) not in sys.path:
+        sys.path.insert(0, str(SRC.parent))
+
+    results = []
+    for port_py in sorted(domain_dir.rglob("ports.py")):
+        rel = port_py.relative_to(ROOT)
+        rel.with_suffix("").as_posix().replace("/", ".")
+        # import module from src universal_business
+        module_name = "universal_business." + ".".join(
+            list(port_py.relative_to(SRC).with_suffix("").parts)
+        )
+        __import__(module_name)
+        module = sys.modules[module_name]
+        for name in dir(module):
+            obj = getattr(module, name)
+            if not name.startswith("I"):
+                continue
+            if not inspect.isclass(obj):
+                continue
+            # Es Protocol? Los protocols tienen __init_subclass__ con protocol hook.
+            if not hasattr(obj, "__protocol_attrs__") and not any(
+                b.__name__ == "Protocol" for b in obj.__mro__
+            ):
+                continue
+            for method_name in dir(obj):
+                if method_name.startswith("_"):
+                    continue
+                fn = getattr(obj, method_name, None)
+                if fn is None or not callable(fn):
+                    continue
+                if method_name not in TENANT_READ_METHODS:
+                    continue
+                try:
+                    sig = inspect.signature(fn)
+                except (TypeError, ValueError):
+                    continue
+                results.append((name, method_name, sig, str(rel)))
+    return results
+
+
+REPO_PROTOCOL_METHODS = collect_repository_protocols(DOMAIN_DIR)
+
+
+@pytest.mark.parametrize(
+    "proto_method",
+    REPO_PROTOCOL_METHODS,
+    ids=lambda pm: f"{pm[0]}.{pm[1]} ({pm[3]})",
+)
+def test_at9_repository_port_method_has_tenant_id_param_explicit(
+    proto_method: tuple[str, str, inspect.Signature, str],
+) -> None:
+    """AT-9: firmas de repositorios tenant-scoped deben contener `tenant_id`.
+
+    Regla de excepción: repositorios enumerados en PORTS_EXCLUDE_FROM_TENANCY
+    (actualmente solo ITenantRepository) no son tenant-scoped: operan sobre
+    el límite superior SaaS y sus métodos no requieren parámetro tenant_id.
+    """
+    proto_name, method_name, sig, _path = proto_method
+    if proto_name in PORTS_EXCLUDE_FROM_TENANCY:
+        return
+    params = sig.parameters
+    assert "tenant_id" in params, (
+        f"AT-9 FAIL {proto_name}.{method_name}: falta parámetro tenant_id explícito. Params: {list(params)}"
+    )

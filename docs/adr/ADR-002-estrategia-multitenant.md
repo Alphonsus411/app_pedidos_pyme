@@ -33,7 +33,19 @@ Jerarquía obligatoria: **Tenant → Business → Location**.
    ningún filtro de aislamiento requiere JOIN.
 3. **Filtros obligatorios en repositorios**: no existe `list()` sin contexto.
    La mínima firma es `list_by_tenant(tenant_id, ...)` o equivalente.
-4. **Matriz de tenancy** por entidad (regla de codificación):
+4. **Tenancy explícita en Repository Ports (RC1 — Hardening):** ninguna
+   operación de lectura/listado/búsqueda/modificación/borrado sobre entidades
+   *tenant-scoped* puede invocarse sin `tenant_id` explícito en la firma
+   del Protocol. Entidades subordinadas (`Location`, `Resource`, `Customer`)
+   incluyen además `business_id` y/o `location_id` cuando el contexto lo
+   requiere para garantizar el boundary.
+   - Excepción documentada: `ITenantRepository` no es tenant-scoped y queda
+     excluido de este requerimiento (gestiona el propio límite SaaS).
+5. **Verificación arquitectónica AT-9:** `tests/architecture/test_architecture_boundaries.py`
+   inspecciona dinámicamente la firma de cada `Protocol` vía `inspect.signature`
+   y falla si `tenant_id` falta en un método de acceso de repositorio
+   tenant-scoped.
+6. **Matriz de tenancy** por entidad (regla de codificación):
 
 | Entidad | tenant_id | business_id | location_id |
 |---|---|---|---|
@@ -49,7 +61,14 @@ Jerarquía obligatoria: **Tenant → Business → Location**.
 ## Consecuencias
 - ✅ Operacionalmente simple: una sola base de datos.
 - ✅ Fácil razonar sobre aislamiento (siempre hay un `tenant_id` presente).
-- ⚠️ Un bug en un repositorio puede omitir el filtro → mitigado:
-  tests arquitectónicos que auditan firmas de Protocol (no hay `list()` sin contexto) y tests unitarios de repositorios falsos.
+- ✅ (RC1) Las firmas de los Repository Ports protegen explícitamente el
+  aislamiento: no existe `get()`, `list()` o `search()` en repositorios
+  tenant-scoped sin `tenant_id` en la firma.
+- ✅ (RC1) El test arquitectónico AT-9 detecta automáticamente firmas de
+  repositorio peligrosas que omiten contexto de tenancy (inspección dinámica
+  via `inspect.signature` sobre cada Protocol de `domain/**/ports.py`).
+- ⚠️ Un bug de implementación (no de firma) en un repositorio concreto aún
+  podría omitir el filtro → mitigado: tests unitarios de repositorios falsos
+  y tests de integración en FASE 1.
 - ⚠️ Si en el futuro un tenant requiere compliance GDPR/SOC2 con aislamiento
   físico, se añade la opción C como ruta de migración (fuera de 0.1).

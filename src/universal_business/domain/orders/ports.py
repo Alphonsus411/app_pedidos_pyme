@@ -1,4 +1,7 @@
-"""Puertos repositorio para Orders."""
+"""Puertos repositorio para Orders (Hardening Gate 0.1-RC1).
+
+Order está ligada a Location → Business → Tenant.
+"""
 
 from __future__ import annotations
 
@@ -15,7 +18,12 @@ from universal_business.domain.shared.value_objects.ids import (
 
 
 class IOrderRepository(Protocol):
-    def get(self, order_id: OrderId) -> Order | None: ...
+    def get(
+        self,
+        *,
+        tenant_id: TenantId,
+        order_id: OrderId,
+    ) -> Order | None: ...
     def save(self, order: Order) -> None: ...
 
     def list_by_location(

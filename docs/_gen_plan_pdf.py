@@ -1,6 +1,12 @@
 """
-Generador de PDF compatible con fpdf2 v1.7.x (API clásica).
-Plan Entrega 0.1: Architectural Baseline
+Generador PDF para `docs/plan_entrega_0.1_architectural_baseline.md` → .pdf.
+
+Requiere extra opcional (NO dependencia runtime del Universal Business Core):
+    pip install -e ".[docs]"      # incluye fpdf2
+    python docs/_gen_plan_pdf.py
+
+Plan Entrega 0.1: Architectural Baseline — v2.0.
+Usa API fpdf2 v2.x (Unicode nativo si aplica; se mantienen sustituciones por seguridad).
 """
 from __future__ import annotations
 

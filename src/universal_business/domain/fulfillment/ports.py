@@ -1,4 +1,7 @@
-"""Puertos repositorio para Fulfillment."""
+"""Puertos repositorio para Fulfillment (Hardening Gate 0.1-RC1).
+
+Fulfillment ligado a Order → Location → Tenant.
+"""
 
 from __future__ import annotations
 
@@ -15,7 +18,12 @@ from universal_business.domain.shared.value_objects.ids import (
 
 
 class IFulfillmentRepository(Protocol):
-    def get(self, fulfillment_id: FulfillmentId) -> Fulfillment | None: ...
+    def get(
+        self,
+        *,
+        tenant_id: TenantId,
+        fulfillment_id: FulfillmentId,
+    ) -> Fulfillment | None: ...
     def save(self, fulfillment: Fulfillment) -> None: ...
 
     def list_by_order(

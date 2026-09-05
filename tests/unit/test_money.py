@@ -1,4 +1,4 @@
-"""Tests unitarios exhaustivos para Money / Currency (Decimal-only)."""
+"""Tests unitarios exhaustivos para Money / Currency (Decimal-only, sin whitelist)."""
 
 from __future__ import annotations
 
@@ -8,21 +8,85 @@ import pytest
 
 from universal_business.domain.shared.errors import MoneyCurrencyMismatchError, MoneyRoundingError
 from universal_business.domain.shared.value_objects.money import (
-    MONEY_ALLOWED_CURRENCIES,
     MONEY_PRECISION,
     MONEY_ROUNDING,
     MONEY_SCALE,
+    Currency,
     Money,
     is_supported_currency,
     list_supported_currencies,
 )
 
 
+# ---------- (10.B) Currency universal tests ----------
+def test_currency_eur_valid() -> None:
+    assert Currency("EUR").code == "EUR"
+
+
+def test_currency_dop_valid() -> None:
+    assert Currency("DOP").code == "DOP"
+
+
+def test_currency_jpy_valid() -> None:
+    assert Currency("JPY").code == "JPY"
+
+
+def test_currency_mxn_valid() -> None:
+    assert Currency("MXN").code == "MXN"
+
+
+def test_currency_gbp_valid() -> None:
+    assert Currency("GBP").code == "GBP"
+
+
+def test_currency_chf_cop_also_valid_no_whitelist() -> None:
+    # Aseguramos que NO exista whitelist: CHF, COP, ARS, BOB, CLP, PEN pasan.
+    assert Currency("CHF").code == "CHF"
+    assert Currency("COP").code == "COP"
+    assert Currency("ARS").code == "ARS"
+
+
+def test_currency_lowercase_normalizes_to_uppercase() -> None:
+    assert Currency("eur").code == "EUR"
+    assert Currency("Usd").code == "USD"
+    assert Currency("  jpy  ").code == "JPY"
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "",
+        "AB",  # len < 3
+        "ABCD",  # len > 3
+        "123",  # dígitos
+        "U D",  # espacios intermedios
+        "US$",  # símbolos
+        "pesos",  # palabra larga
+        123,  # tipo erróneo
+    ],
+)
+def test_currency_invalid_code_raises(bad: object) -> None:
+    with pytest.raises(MoneyCurrencyMismatchError):
+        Currency(bad)  # type: ignore[arg-type]
+
+
+def test_currency_is_hashable_and_comparable() -> None:
+    a = Currency("USD")
+    b = Currency("usd")
+    assert hash(a) == hash(b)
+    assert a == b
+    # Contra str (comparación flexible)
+    assert a == "USD"
+    assert "USD" == a  # type: ignore[comparison-overlap]
+    s = {a, b, Currency("EUR")}
+    assert len(s) == 2
+
+
+# ---------- Money ----------
 def test_money_policy_constants_sane() -> None:
     assert MONEY_PRECISION >= 10
     assert MONEY_SCALE == 4
     assert MONEY_ROUNDING == "ROUND_HALF_EVEN"
-    assert {"DOP", "USD", "EUR"}.issubset(MONEY_ALLOWED_CURRENCIES)
 
 
 def test_money_rejects_float_in_ctor() -> None:
@@ -33,14 +97,17 @@ def test_money_rejects_float_in_ctor() -> None:
 def test_money_rejects_invalid_currency() -> None:
     with pytest.raises(MoneyCurrencyMismatchError):
         Money(1, "pesos")
+    # "XXX" es 3 letras → PASSAHORA (sin whitelist). Usar inválidos:
     with pytest.raises(MoneyCurrencyMismatchError):
-        Money(1, "XXX")
+        Money(1, "USDD")
+    with pytest.raises(MoneyCurrencyMismatchError):
+        Money(1, "U")
 
 
 def test_money_int_constructor() -> None:
     m = Money(5, "USD")
     assert m.amount == Decimal("5.0000")
-    assert m.currency == "USD"
+    assert m.currency == Currency("USD")
 
 
 def test_money_decimal_constructor_quantizes() -> None:
@@ -51,7 +118,7 @@ def test_money_decimal_constructor_quantizes() -> None:
 def test_money_constructor_from_str() -> None:
     m = Money("19.99", "DOP")
     assert m.amount == Decimal("19.9900")
-    assert m.currency == "DOP"
+    assert m.currency == Currency("DOP")
 
 
 def test_money_invalid_str_amount() -> None:
@@ -66,7 +133,7 @@ def test_money_add_same_currency() -> None:
     b = Money("20.50", "USD")
     c = a + b
     assert c.amount == Decimal("30.5000")
-    assert c.currency == "USD"
+    assert c.currency == Currency("USD")
 
 
 def test_money_subtract_same_currency() -> None:
@@ -138,7 +205,7 @@ def test_money_predicates() -> None:
 def test_money_zero_helper() -> None:
     z = Money.zero("EUR")
     assert z.amount == Decimal("0.0000")
-    assert z.currency == "EUR"
+    assert z.currency == Currency("EUR")
 
 
 def test_money_sum_works() -> None:
@@ -153,6 +220,28 @@ def test_money_hash_and_set() -> None:
 
 
 def test_is_supported_currency_and_list() -> None:
+    # Cualquier código 3 letras alfabéticas es soportado (sin whitelist).
     assert is_supported_currency("USD")
-    assert not is_supported_currency("BTC")
-    assert "USD" in list_supported_currencies()
+    assert is_supported_currency("MXN")
+    assert is_supported_currency("JPY")
+    # BTC es 3 letras alpha: soportado (host puede restringir en FASE 2+).
+    assert is_supported_currency("BTC")
+    # No 3 letras: no soportado.
+    assert not is_supported_currency("US")
+    assert not is_supported_currency("USDD")
+    # list_supported_currencies retorna [] porque no hay whitelist cerrada;
+    # es hook para hosts que decidan activar restricción.
+    assert isinstance(list_supported_currencies(), list)
+
+
+def test_money_accepts_currency_vo_in_ctor() -> None:
+    c = Currency("MXN")
+    m = Money(99, c)
+    assert m.currency is c or m.currency == c
+    assert m.amount == Decimal("99.0000")
+
+
+def test_money_float_rejected_via_multiply_too() -> None:
+    m = Money("10", "USD")
+    with pytest.raises(MoneyCurrencyMismatchError):
+        m * 1.5  # type: ignore[operator]
