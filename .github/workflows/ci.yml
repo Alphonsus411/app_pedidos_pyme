@@ -32,10 +32,10 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install baseline (with dev extras)
+      - name: Install baseline (with dev + docs extras)
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          pip install -e ".[dev,docs]"
 
       - name: Ruff (lint + format check)
         run: |
