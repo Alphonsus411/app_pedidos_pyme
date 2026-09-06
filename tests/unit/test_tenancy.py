@@ -25,7 +25,7 @@ from universal_business.domain.orders.value_objects import OrderChannel, OrderSt
 from universal_business.domain.reservations.entities import Reservation
 from universal_business.domain.reservations.value_objects import ReservationStatus
 from universal_business.domain.resources.entities import Resource
-from universal_business.domain.resources.value_objects import ResourceStatus, ResourceType
+from universal_business.domain.resources.value_objects import ResourceStatus
 from universal_business.domain.shared.errors import (
     TenantBoundaryViolationError,
 )
@@ -37,6 +37,7 @@ from universal_business.domain.shared.value_objects.ids import (
     OrderId,
     ReservationId,
     ResourceId,
+    ResourceTypeId,
     TenantId,
 )
 from universal_business.domain.shared.value_objects.money import Money
@@ -98,23 +99,20 @@ def test_cross_tenant_location_mismatch_detected() -> None:
         loc_tainted.assert_tenancy_consistency(b2)
 
 
-def test_resource_location_id_mandatory() -> None:
+def test_resource_location_id_provided_ok_uses_new_resource_type_entity() -> None:
     t, b, loc = build_stack()
-    # Location None debe fallar en test? En Resource location_id es obligatorio
-    # en el type hint. No podemos probar a nivel de dataclass sin mypy. Pero
-    # el invariant de __post_init__ solo chequea tipos. Si se pasa None,
-    # isinstance(None, LocationId) → False en otros cheques.
-    # Nos limitamos a probar construcción OK.
+    rtid = ResourceTypeId.generate()
     r = Resource(
         id=ResourceId.generate(),
         tenant_id=t.id,
         business_id=b.id,
         location_id=loc.id,
         name="Mesa 1",
-        type=ResourceType.TABLE,
+        resource_type_id=rtid,
         status=ResourceStatus.ACTIVE,
     )
     assert r.location_id == loc.id
+    assert r.resource_type_id == rtid
 
 
 def test_order_location_id_and_tenancy() -> None:
@@ -169,13 +167,14 @@ def test_catalog_item_location_optional_allows_business_level() -> None:
 
 def test_reservation_requires_location_and_tenancy() -> None:
     t, b, loc = build_stack()
+    rtid = ResourceTypeId.generate()
     r = Resource(
         id=ResourceId.generate(),
         tenant_id=t.id,
         business_id=b.id,
         location_id=loc.id,
         name="Table 5",
-        type=ResourceType.TABLE,
+        resource_type_id=rtid,
     )
     cid = CustomerId.generate()
     now = dt.datetime.now(UTC)

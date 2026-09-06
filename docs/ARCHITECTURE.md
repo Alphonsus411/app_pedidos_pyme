@@ -166,6 +166,174 @@ dominio ni acoplarse a infraestructura. Definida en `src/universal_business/appl
 - **AT-13**: Application ⊬ 34 frameworks/SDK prohibidos (web, ORM, DB, brokers, AI, pagos, push, frontend, DI).
 - **AT-17**: UnitOfWork, IdempotencyStore, EventPublisher son Protocol/ABC; sin implementaciones concretas dentro de `application/**`.
 
+---
+
+## Catalog Domain Model (Gate 0.3 / ADR-010)
+
+Paquete: `src/universal_business/domain/catalog/`. El módulo **mantiene** `CatalogItem`
+legacy intacto (sin romper), y añade un **nuevo agregado `Offering`** (abstracción
+universal) en paralelo. Futuros gates (Orders/Reservations) referenciarán `Offering`,
+no `CatalogItem`. Véase ADR-010 para el detalle de decisión.
+
+### Offering (agregado / AggregateRoot)
+Abstracción universal de lo que un negocio ofrece. Puede representar: producto físico,
+servicio, prestación, paquete, turno, alquiler, suscripción, etc. NO tiene discriminador
+`type` cerrado (Enum); su semántica viene dada por sus relaciones (categories,
+resource requirements) y atributos.
+
+| Atributo | Tipo | Opcional | Descripción |
+|---|---|---|---|
+| `offering_id` | `OfferingId` (UUID fuerte) | No | PK |
+| `tenant_id` | `TenantId` | No | Aislamiento SaaS |
+| `business_id` | `BusinessId` | No | Unidad operativa |
+| `name` | `str` | No | Non-empty, immutable-after-create lógico |
+| `description` | `str \| None` | Sí | Texto extendido opcional |
+| `status` | `OfferingStatus` (Enum) | No | Lifecycle: `DRAFT → ACTIVE → INACTIVE → ARCHIVED`. Matriz de transición validada por `StatusTransition`. |
+| `base_price` | `Money \| None` | Sí | Precio base opcional. `None` = precio variable/no aplica (ej. servicio ad-hoc). |
+| `location_ids` | `frozenset[LocationId]` | No | Scope de disponibilidad. Vacío `frozenset()` = **business-wide** (todas las locations del business). NO permite location_id de otro business. |
+| `category_ids` | `frozenset[CatalogCategoryId]` | No | Categorías asociadas (agrupación visual/navegacional). |
+| `created_at` / `updated_at` | `datetime` (aware) | No | Timestamps |
+
+Métodos destacados: `activate()`, `deactivate()`, `archive()`,
+`assign_to_locations(...)`, `set_base_price(...)`,
+`add_category(...)` / `remove_category(...)`.
+Emite `OfferingCreated`, `OfferingUpdated`, `OfferingStatusChanged`, `OfferingArchived`.
+
+### CatalogCategory (agrupación simple / Entity)
+Agrupación navegacional/visual de Offerings. Jerarquía simple.
+
+| Atributo | Tipo | Opcional | Descripción |
+|---|---|---|---|
+| `category_id` | `CatalogCategoryId` | No | PK |
+| `tenant_id` / `business_id` | ids fuertes | No | Tenancy |
+| `name` | `str` | No | Non-empty |
+| `slug` | `str \| None` | Sí | URL-friendly opcional (único por business si se usa) |
+| `parent_category_id` | `CatalogCategoryId \| None` | Sí | Categoría padre. **Invariante de self-parent:** `parent_category_id != category_id`. |
+| `status` | `CatalogCategoryStatus` | No | `ACTIVE / ARCHIVED` |
+
+Métodos: `reparent_to(new_parent_id)` (valida self-parent inválido).
+Emite `CatalogCategoryCreated`, `CatalogCategoryUpdated`.
+
+### OfferingResourceRequirement (Entity / relación de agregación)
+Relación **m:N** entre `Offering` y `ResourceType`, expresando que cada unidad de
+ese Offering requiere `quantity_required` unidades de recursos de un tipo específico.
+Ejemplo: 1 "Turno corte de pelo" requiere 1 unidad de ResourceType="Silla barbero".
+
+| Atributo | Tipo | Opcional | Descripción |
+|---|---|---|---|
+| `requirement_id` | `OfferingResourceRequirementId` | No | PK |
+| `tenant_id` / `business_id` | ids fuertes | No | Tenancy |
+| `offering_id` | `OfferingId` | No | FK a Offering |
+| `resource_type_id` | `ResourceTypeId` | No | FK a `ResourceType` (módulo `resources`) |
+| `quantity_required` | `int` | No | **Invariante:** `quantity_required >= 1`. |
+
+Emite `OfferingResourceRequirementAdded`.
+Restricción: `offering_id` y `resource_type_id` deben pertenecer al mismo
+`tenant_id` / `business_id`.
+
+### Events del módulo catalog (6)
+`OfferingCreated`, `OfferingActivated`, `OfferingDeactivated`, `OfferingArchived`,
+`OfferingPriceChanged`, `CatalogCategoryCreated`.
+
+### Application Layer — Catalog (Gate 0.3)
+Paquete: `src/universal_business/application/catalog/`.
+
+**Commands frozen (7):**
+- `CreateOfferingCommand`, `UpdateOfferingCommand`, `ChangeOfferingStatusCommand`,
+  `ArchiveOfferingCommand`
+- `CreateCatalogCategoryCommand`, `UpdateCatalogCategoryCommand`
+- `AddOfferingResourceRequirementCommand`
+
+**Queries frozen (5):**
+- `GetOfferingByIdQuery`, `ListOfferingsQuery`,
+  `GetCatalogCategoryByIdQuery`, `ListCatalogCategoriesQuery`,
+  `ListOfferingResourceRequirementsQuery`
+
+**Handlers (12 total, 7 cmd + 5 qry):**
+- El UnitOfWork pertenece al orquestador `execute_use_case` de la capa
+  `application/execution`; los handlers de catalog/resources NO entran ni
+  salen del context-manager de UnitOfWork y NUNCA invocan `uow.commit()`.
+  El commit es exclusivo de `execute_use_case`.
+- Los create handlers usan **IdempotencyStore** con hooks opcionales
+  `post_commit_success` (para `IdempotencyStore.complete()`) y `post_rollback`
+  (para `IdempotencyStore.release()`), invocados por `execute_use_case`.
+- Todos usan el patrón `execute_use_case` (UoW enter → handler.handle →
+  uow.commit → exit UoW → dispatcher.dispatch_many → publisher.publish_many).
+
+---
+
+## Resources Domain Model (Gate 0.3 / ADR-006)
+
+Paquete: `src/universal_business/domain/resources/`. Implementación real reemplazando
+el skeleton mínimo de Gate 0.1.
+
+### ResourceType (ENTITY configurable — NO enum)
+Decisión clave (ADR-010 / ADR-006): **ResourceType NO es un `Enum` cerrado**.
+Es una **entidad persistible** (con `ResourceTypeId` propio) para que cada tenant
+defina sus propios recursos: "Silla barbero", "Mesa 4 personas", "Doctor",
+"Furgoneta reparto", "Habitación", etc. sin tocar código del core.
+
+| Atributo | Tipo | Opcional | Descripción |
+|---|---|---|---|
+| `resource_type_id` | `ResourceTypeId` | No | PK |
+| `tenant_id` / `business_id` | ids fuertes | No | Tenancy |
+| `code` | `str` | No | Código único por business (ej. "SILLA_BARBERO_01") |
+| `name` | `str` | No | Nombre visible |
+| `description` | `str \| None` | Sí | |
+| `status` | `ResourceTypeStatus` | No | Lifecycle: `ACTIVE / INACTIVE / ARCHIVED`. |
+| `is_perishable` | `bool` | No | Marca para recursos de un solo uso (ej. "entrada evento") vs reutilizables (ej. "silla"). |
+| `capacity_per_unit` | `int` | No | Capacidad por unidad. Default = 1. Silla barbero = 1; Mesa 4 = 4. |
+
+Métodos: `activate()`, `deactivate()`, `archive()`.
+Emite `ResourceTypeCreated`, `ResourceTypeUpdated`, `ResourceTypeStatusChanged`.
+
+### Resource (instancia concreta / Entity)
+Instancia individual de un `ResourceType`. Puede ser ubicable en una Location o
+ser business-wide (sin location fija).
+
+| Atributo | Tipo | Opcional | Descripción |
+|---|---|---|---|
+| `resource_id` | `ResourceId` | No | PK |
+| `tenant_id` / `business_id` | ids fuertes | No | Tenancy |
+| `resource_type_id` | `ResourceTypeId` | No | **OBLIGATORIO.** FK a ResourceType. |
+| `location_id` | `LocationId \| None` | Sí | **OPCIONAL.** `None` = resource business-wide / itinerante / sin asignar. |
+| `name` / `external_ref` | `str` / `str\|None` | No/Sí | Identificador humano / referencia externa. |
+| `status` | `ResourceStatus` (Enum) | No | 5 estados: `ACTIVE`, `INACTIVE`, `MAINTENANCE`, `RETIRED`, `ARCHIVED`. |
+
+Métodos destacados:
+- `assign_to_location(location_id)`: valida que location pertenezca al mismo
+  (tenant_id, business_id); emite evento interno de cambio.
+- `mark_in_maintenance()`, `activate()`, `deactivate()`, `retire()`, `archive()`.
+
+Emite `ResourceCreated`, `ResourceUpdated`, `ResourceStatusChanged`.
+
+### Events del módulo resources (6)
+`ResourceTypeCreated`, `ResourceCreated`, `ResourceActivated`,
+`ResourceDeactivated`, `ResourceArchived`, `ResourceAssignedToLocation`.
+
+### Application Layer — Resources (Gate 0.3)
+Paquete: `src/universal_business/application/resources/`.
+
+**Commands frozen (5):**
+- `CreateResourceTypeCommand`, `UpdateResourceTypeCommand`
+- `CreateResourceCommand`, `UpdateResourceCommand`, `ChangeResourceStatusCommand`
+
+**Queries frozen (5):**
+- `GetResourceTypeByIdQuery`, `ListResourceTypesQuery`,
+  `GetResourceByIdQuery`, `ListResourcesQuery`, `ListResourcesByTypeQuery`
+
+**Handlers (10 total, 5 cmd + 5 qry):**
+- El UnitOfWork pertenece al orquestador `execute_use_case` de la capa
+  `application/execution`; los handlers de catalog/resources NO entran ni
+  salen del context-manager de UnitOfWork y NUNCA invocan `uow.commit()`.
+  El commit es exclusivo de `execute_use_case`.
+- Create handlers usan **IdempotencyStore** con hooks `post_commit_success`/
+  `post_rollback` gestionados por `execute_use_case`.
+- Resto usa `execute_use_case` con UoW gestionado por el orquestador (sin
+  idempotency obligatorio para updates/queries).
+
+---
+
 ## Ports & Adapters
 - Los contratos de repositorio son `typing.Protocol` y viven **cerca del dominio propietario**:
   - `domain/business/ports.py`
@@ -243,7 +411,30 @@ calidad de código).
 | **tooling** | `pyproject.toml` SIN CAMBIOS. Runtime `dependencies = []` permanece. Versiones cerradas dev tooling intactas: `pytest>=8,<9`, `ruff>=0.15,<0.16`, `mypy>=2.1,<3` | Añadir runtime deps (FastAPI/SQLAlchemy/etc.) |
 | **versión paquete** | `0.2.0` (`universal_business.__version__`) | |
 
+---
+
+## Alcance — Entrega 0.3 Catalog & Resources (scope REAL)
+
+| Capa | Qué se entrega (Gate 0.3) | Qué NO se entrega (FASE ≥0.4) |
+|---|---|---|
+| **domain.catalog (entities)** | ✅ `Offering` agregado universal (4-status lifecycle DRAFT/ACTIVE/INACTIVE/ARCHIVED, base_price Money opcional, scope location_ids frozenset). ✅ `CatalogCategory` parent_category_id opcional + self-parent inválido. ✅ `OfferingResourceRequirement` relación Offering↔ResourceType, quantity_required ≥ 1. ✅ `CatalogItem` legacy MANTENIDO intacto sin borrar. | Pricing SKU avanzado, variantes multi-atributo, bundles, inventario real por Offering. |
+| **domain.catalog (events / VO / ports)** | ✅ 6 events catalog: OfferingCreated, OfferingActivated, OfferingDeactivated, OfferingArchived, OfferingPriceChanged, CatalogCategoryCreated. ✅ `ICatalogRepository` Protocol actualizado con operaciones para Offering, Category, Requirement. ✅ VOs específicos (OfferingStatus, CatalogCategoryId, etc.). | |
+| **domain.resources (entities)** | ✅ `ResourceType` ENTITY configurable (NO enum, no discriminador cerrado). ✅ `Resource` entity: resource_type_id OBLIGATORIO, location_id OPCIONAL (None = business-wide). ✅ Resource lifecycle 5 estados: ACTIVE/INACTIVE/MAINTENANCE/RETIRED/ARCHIVED. ✅ `assign_to_location(location_id)` method. | Capacidad real por calendario; pools de recursos; dependencias complejas ResourceGraph. |
+| **domain.resources (events / VO / ports)** | ✅ 6 events resources: ResourceTypeCreated, ResourceCreated, ResourceActivated, ResourceDeactivated, ResourceArchived, ResourceAssignedToLocation. ✅ `IResourceRepository` Protocol actualizado (ResourceType + Resource operations). ✅ VOs específicos (ResourceTypeId, ResourceId, ResourceStatus, ResourceTypeStatus…). | |
+| **application.catalog** | ✅ 7 Commands frozen dataclass kw_only immutable (CreateOffering, UpdateOffering, ChangeOfferingStatus, ArchiveOffering, CreateCatalogCategory, UpdateCatalogCategory, AddOfferingResourceRequirement). ✅ 5 Queries frozen. ✅ 12 Handlers (7 cmd + 5 qry). El UnitOfWork pertenece al orquestador execute_use_case de la capa application/execution; los handlers de catalog/resources NO entran ni salen del context-manager de UnitOfWork y NUNCA invocan uow.commit(). El commit es exclusivo de execute_use_case. Creates usan IdempotencyStore con hooks post_commit_success/post_rollback. | Búsqueda full-text; filtros complejos por atributos; paginación avanzada cursors. |
+| **application.resources** | ✅ 5 Commands frozen (CreateResourceType, UpdateResourceType, CreateResource, UpdateResource, ChangeResourceStatus). ✅ 5 Queries frozen. ✅ 10 Handlers (5 cmd + 5 qry). El UnitOfWork pertenece al orquestador execute_use_case de la capa application/execution; los handlers NO invocan uow.commit(). Creates usan IdempotencyStore con hooks post_commit_success/post_rollback. | |
+| **dominio restante (business/customers/availability/reservations/orders/fulfillment)** | **INTACTO** (sin cambios respecto a Gate 0.2). Skeleton modules se mantienen. | Implementación real (Gates 0.4+). |
+| **infrastructure** | SOLO `__init__.py` — SIN CAMBIOS. | Cualquier implementación concreta (SQLAlchemy, Redis, etc.). |
+| **api** | SOLO `__init__.py` — SIN CAMBIOS. | FastAPI / endpoints / Pydantic / OpenAPI. |
+| **verticals** | SOLO `__init__.py` — SIN CAMBIOS. | Cualquier vertical concreto (incl. pica-pollo). |
+| **tests (nuevos Gate 0.3)** | ✅ Dominio: Offering (lifecycle, invariants, pricing, scope, categories), CatalogCategory (self-parent, reparent), OfferingResourceRequirement (quantity ≥1, tenancy). ✅ Dominio: ResourceType (configurable entity, no enum), Resource (location opc, assign_to_location, 5-status). ✅ Aplicación: catalog commands/queries/handlers (UoW fake, IdempotencyStore fake, doubles). ✅ Aplicación: resources commands/queries/handlers (idem). ✅ Arquitectura: nuevos AT si aplica para límites catalog/resources. ✅ **~64 tests nuevos**, total acumulado ~572. | Tests integración DB real; tests E2E; performance benchmarks. |
+| **docs** | ✅ `ARCHITECTURE.md`: nuevas secciones Catalog Domain Model + Resources Domain Model. ✅ `DEVELOPMENT_STATUS.md`: Gate 0.3 = DONE, roadmap, tests count 572. ✅ `docs/plan_entrega_0.3_catalog_resources.md` (este plan). ✅ `docs/adr/ADR-010.md` (Offering universal). | PDF automático plan (opcional futuras entregas). |
+| **tooling** | `pyproject.toml` SIN CAMBIOS. Runtime `dependencies = []` permanece. Versiones cerradas dev tooling intactas. | Añadir runtime deps (FastAPI, SQLAlchemy, etc.). |
+| **versión paquete** | `0.3.0` (`universal_business.__version__`) | |
+
 ## Enlaces
-- `docs/adr/ADR-001.md` … `docs/adr/ADR-009.md` — decisiones vinculantes.
+- `docs/adr/ADR-001.md` … `docs/adr/ADR-010.md` — decisiones vinculantes.
 - `docs/plan_entrega_0.1_architectural_baseline.md` — plan detallado + Gate 0.1.
 - `docs/plan_entrega_0.2_foundation.md` — plan detallado + Gate 0.2.
+- `docs/plan_entrega_0.3_catalog_resources.md` — plan detallado + Gate 0.3.
+- `docs/DEVELOPMENT_STATUS.md` — continuidad técnica (estado actual, resume checklist).

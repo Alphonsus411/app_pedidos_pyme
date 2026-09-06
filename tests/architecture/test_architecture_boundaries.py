@@ -534,3 +534,215 @@ def test_at17_core_ports_are_abstractions_without_concrete_implementation() -> N
         "AT-17 FAIL Implementaciones concretas de ports core encontradas en application:\n  "
         + "\n  ".join(concrete_violations)
     )
+
+
+# ============================================================================
+# Gate 0.3 — Fase 2: Catalog + Resources architectural guards
+# AT-18, AT-19, AT-21, AT-22
+# ============================================================================
+
+CATALOG_DOMAIN_DIR = SRC / "domain" / "catalog"
+RESOURCES_DOMAIN_DIR = SRC / "domain" / "resources"
+CATALOG_APPLICATION_DIR = APPLICATION_DIR / "catalog"
+RESOURCES_APPLICATION_DIR = APPLICATION_DIR / "resources"
+CATALOG_PORTS = CATALOG_DOMAIN_DIR / "ports.py"
+RESOURCES_PORTS = RESOURCES_DOMAIN_DIR / "ports.py"
+
+
+def test_at18_catalog_resources_domain_no_application_imports() -> None:
+    """AT-18: Los módulos de dominio catalog/resources NO deben importar nada
+    desde application (la flecha de dependencia va application -> domain,
+    nunca al revés).
+    """
+    target_dirs = [CATALOG_DOMAIN_DIR, RESOURCES_DOMAIN_DIR]
+    violations: list[str] = []
+    app_parts_1 = ("universal_business", "application")
+    app_parts_2 = ("src", "universal_business", "application")
+    for py_file in iter_python_files(*target_dirs):
+        rel = py_file.relative_to(ROOT).as_posix()
+        for lineno, mod in collect_imports(py_file):
+            chain = tuple(mod.split("."))
+            if _imports_in_module_simple(app_parts_1, chain) or _imports_in_module_simple(
+                app_parts_2, chain
+            ):
+                violations.append(f"{rel}:{lineno} -> {mod}")
+    assert not violations, (
+        "AT-18 FAIL Dominio catalog/resources importa application. Violaciones:\n  "
+        + "\n  ".join(violations)
+    )
+
+
+def test_at19_application_catalog_resources_no_infra_api_verticals() -> None:
+    """AT-19: application.catalog y application.resources NO deben importar
+    infrastructure, api ni verticals. La capa de aplicación solo habla con
+    domain + módulos propios de application.
+    """
+    target_dirs = [CATALOG_APPLICATION_DIR, RESOURCES_APPLICATION_DIR]
+    violations: list[str] = []
+    forbidden_roots = [
+        ("universal_business", "infrastructure"),
+        ("universal_business", "api"),
+        ("universal_business", "verticals"),
+    ]
+    for py_file in iter_python_files(*target_dirs):
+        rel = py_file.relative_to(ROOT).as_posix()
+        for lineno, mod in collect_imports(py_file):
+            chain = tuple(mod.split("."))
+            for root in forbidden_roots:
+                if _imports_in_module_simple(root, chain):
+                    violations.append(f"{rel}:{lineno} -> {mod}")
+                    break
+    assert not violations, (
+        "AT-19 FAIL application.catalog/resources importa infra/api/verticals. "
+        "Violaciones:\n  " + "\n  ".join(violations)
+    )
+
+
+def test_at21_catalog_resources_ports_are_protocols_and_no_concrete_repos_in_handlers() -> None:
+    """AT-21: Los nuevos repositorios de catalog/resources siguen el patrón
+    Protocol typing:
+
+    1. Todas las clases I*Repository en domain/*/ports.py deben ser Protocol
+       subclasses (sub-typing estructural, no implementaciones).
+    2. En application/*/handlers.py NO debe haber una definición concreta
+       `class XxxRepository(object)` o similar; los handlers solo usan
+       los Protocol via dependency injection (importados desde dominio).
+    """
+    import sys
+
+    if str(SRC.parent) not in sys.path:
+        sys.path.insert(0, str(SRC.parent))
+
+    violations: list[str] = []
+
+    # ---- Parte 1: ports de dominio son Protocol ----
+    port_files = [CATALOG_PORTS, RESOURCES_PORTS]
+    for port_py in port_files:
+        if not port_py.exists():
+            continue
+        module_name = "universal_business." + ".".join(
+            list(port_py.relative_to(SRC).with_suffix("").parts)
+        )
+        __import__(module_name)
+        module = sys.modules[module_name]
+        for name in dir(module):
+            if not name.startswith("I"):
+                continue
+            obj = getattr(module, name)
+            if not inspect.isclass(obj):
+                continue
+            if not _is_protocol_or_abstract(obj):
+                violations.append(
+                    f"{port_py.relative_to(ROOT).as_posix()}: clase {name} no es Protocol/ABC"
+                )
+
+    # ---- Parte 2: handlers de application no definen repos concretos ----
+    handler_files = [
+        CATALOG_APPLICATION_DIR / "handlers.py",
+        RESOURCES_APPLICATION_DIR / "handlers.py",
+    ]
+    for handler_py in handler_files:
+        if not handler_py.exists():
+            continue
+        rel = handler_py.relative_to(ROOT).as_posix()
+        source = handler_py.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(handler_py))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ClassDef):
+                continue
+            cls_name = node.name
+            if "Repository" not in cls_name:
+                continue
+            # Es una clase concreta? Protocol/ABC se importan, no se definen aquí.
+            # Para conservadurismo: cualquier clase *Repository definida dentro
+            # de handlers.py es una violación.
+            violations.append(
+                f"{rel}:{node.lineno}: definición concreta de repositorio prohibida: {cls_name}"
+            )
+
+    assert not violations, (
+        "AT-21 FAIL ports/repos de catalog/resources violan patrón Protocol. "
+        "Violaciones:\n  " + "\n  ".join(violations)
+    )
+
+
+def _collect_repo_protocol_params_from_ast(ports_py: Path):
+    """Parse AST de un ports.py y devuelve tuplas:
+    (protocol_name, method_name, [param_names], lineno)
+    para cada método (excepto __init__ y dunders) de clases I*Protocol.
+
+    Usamos AST (no inspect) para detectar también parámetros positional-only
+    y keyword-only con exactitud de firma fuente.
+    """
+    results = []
+    if not ports_py.exists():
+        return results
+    source = ports_py.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(ports_py))
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        if not node.name.startswith("I"):
+            continue
+        for item in node.body:
+            if not isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            mname = item.name
+            if mname.startswith("_"):
+                continue
+            # param names: positional-only + regular + keyword-only (sin self/cls)
+            args = item.args
+            param_names: list[str] = []
+            # positional-only
+            for a in args.posonlyargs:
+                param_names.append(a.arg)
+            # regular args
+            for a in args.args:
+                param_names.append(a.arg)
+            # keyword-only
+            for a in args.kwonlyargs:
+                param_names.append(a.arg)
+            # quitar self/cls del principio si aparece
+            if param_names and param_names[0] in {"self", "cls"}:
+                param_names = param_names[1:]
+            results.append((node.name, mname, param_names, ports_py, item.lineno))
+    return results
+
+
+def test_at22_catalog_resources_scoped_methods_require_tenant_and_business() -> None:
+    """AT-22: Métodos de repositorios scoped (todos salvo save()) deben
+    contener ambos parámetros explícitos: tenant_id y business_id.
+
+    Excepción: save() no requiere estos parámetros (recibe la entity que
+    ya contiene ambos).
+    """
+    violations: list[str] = []
+    for ports_py in [CATALOG_PORTS, RESOURCES_PORTS]:
+        if not ports_py.exists():
+            continue
+        rel = ports_py.relative_to(ROOT).as_posix()
+        for (
+            proto_name,
+            method_name,
+            param_names,
+            _path,
+            lineno,
+        ) in _collect_repo_protocol_params_from_ast(ports_py):
+            if method_name == "save":
+                continue
+            has_tenant = "tenant_id" in param_names
+            has_business = "business_id" in param_names
+            if not (has_tenant and has_business):
+                missing = []
+                if not has_tenant:
+                    missing.append("tenant_id")
+                if not has_business:
+                    missing.append("business_id")
+                violations.append(
+                    f"{rel}:{lineno} {proto_name}.{method_name}() "
+                    f"falta parámetro(s): {', '.join(missing)}. Params: {param_names}"
+                )
+    assert not violations, (
+        "AT-22 FAIL métodos scoped de repositorios catalog/resources "
+        "requieren tenant_id + business_id. Violaciones:\n  " + "\n  ".join(violations)
+    )
