@@ -75,6 +75,15 @@ Definiciones Gate 0.2:
    - Contrato para publicadores externos / integración.
    - `publish(event: DomainEvent) -> None`
    - `publish_many(events: Sequence[DomainEvent]) -> None` (default: iterar `publish`).
+   - **Invocación exclusivamente post-commit (ADR-008 paso 5).** NO se usa
+     dentro del UnitOfWork.
+   - **NO garantiza atomicidad DB + message.** Si falla, el dominio ya está
+     committeado y no se deshace.
+   - **NO escribe un Outbox físico dentro del UoW.** Si en Gate 0.5+ se adopta
+     Transactional Outbox, existirá un port **separado** (p. ej.
+     ``TransactionalOutboxWriter``) que se invoque pre-commit dentro del UoW;
+     :class:`EventPublisher` seguirá siendo el componente post-commit que
+     envía/mueve mensajes al bus externo.
    - NO se implementa en 0.2 (solo es el port). Futuros backends:
      Outbox físico, Kafka, RabbitMQ, webhooks, etc. NINGUNO de estos nombres
      aparece en el core.

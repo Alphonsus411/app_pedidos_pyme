@@ -77,6 +77,11 @@ class VerticalRegistry:
 
         Se acepta una sola vez por name; la segunda llamada es no-op para
         evitar dobles registros.
+
+        Atomicidad: si ``extension.register(self)`` lanza una excepción, el
+        registry queda **exactamente** como estaba antes de la llamada (la
+        extensión no queda parcialmente registrada) y el error original se
+        propaga. Un retry posterior puede ejecutarse normalmente.
         """
         if not isinstance(extension, VerticalExtension):  # runtime-check via Protocol
             raise TypeError(
@@ -88,8 +93,16 @@ class VerticalRegistry:
             raise ValueError("VerticalRegistry.register: extension.name debe ser str no vacío")
         if any(registered.name == name for registered in self.extensions):
             return  # no-op idempotente
+        # Snapshot para rollback si el hook falla.
+        _snapshot = list(self.extensions)
         self.extensions.append(extension)
-        extension.register(self)
+        try:
+            extension.register(self)
+        except Exception:
+            # Restaurar estado previo (garantía atomicidad).
+            self.extensions.clear()
+            self.extensions.extend(_snapshot)
+            raise
 
     def names(self) -> tuple[str, ...]:
         """Devuelve los nombres de extensiones registradas, en orden."""

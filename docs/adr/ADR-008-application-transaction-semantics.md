@@ -69,7 +69,19 @@ Para idempotencia (Gate 0.2):
   fuente de verdad en lugar de repetir el flujo en cada caso de uso futuro).
 - ⚠️ Fallos en post-commit NO deshacen el dominio. El diseñador de futuros
   casos de uso debe saber que dispatch/publish pueden fallar
-  independientemente (Outbox físico en Gate 0.5 mitigará esto).
+  independientemente.
+- ⚠️ **`EventPublisher` NO es atómico DB+message.** Publicar post-commit
+  significa que los datos ya están confirmados; si el publisher falla el
+  dominio no se deshace. El patrón Transactional Outbox mitiga esto pero:
+  (1) en Gate 0.2 **no está implementado**; (2) cuando exista (Gate 0.5+) se
+  materializará como un **contrato separado**
+  (p. ej. ``TransactionalOutboxWriter`` invocado pre-commit dentro del UoW),
+  NO compartiendo interfaz con ``EventPublisher`` (que seguirá siendo
+  post-commit).
 - ⚠️ Handlers síncronos post-commit NO deben modificar agregados (fuera de UoW).
   Si un handler necesita modificar estado → debe lanzar un comando nuevo o ser
   un caso de uso separado.
+- ⚠️ **Idempotency: liberar reservas en fallo.** Si ``reserve()`` tuvo éxito
+  pero el handler/UoW falla antes de ``complete()``, es obligatorio llamar a
+  ``release()`` para devolver la key a ``FREE``. Gate 0.2 no asume TTL; sin
+  ``release()`` la key permanece ``RESERVED`` indefinidamente.

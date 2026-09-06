@@ -65,12 +65,26 @@ class FakeIdempotencyStore:
         # Permitimos complete(...) incluso si no hubo reserve explícito (simplifica tests).
         self._data[k] = (self.DONE, result_digest, result_object)
 
+    def release(self, tenant_id: TenantId, key: IdempotencyKey, /) -> None:
+        k = self._k(tenant_id, key)
+        entry = self._data.get(k)
+        # FREE (inexistente) → no-op idempotente.
+        if entry is None:
+            return
+        state, _req, _obj = entry
+        # DONE → no-op seguro (nunca se libera una operación completada).
+        if state == self.DONE:
+            return
+        # RESERVED → volvemos a FREE (borramos entrada para simular estado inicial).
+        if state == self.RESERVED:
+            del self._data[k]
+
 
 # ---------- Protocol ----------
 
 
 def test_store_protocol_members_require_tenant_id_in_signature() -> None:
-    members = ["get", "reserve", "complete"]
+    members = ["get", "reserve", "complete", "release"]
     for m in members:
         assert hasattr(IdempotencyStore, m)
         sig = inspect.signature(getattr(IdempotencyStore, m))
@@ -145,3 +159,73 @@ def test_tenant_isolation_same_key_different_tenants() -> None:
     store.complete(tid_b, key, "res-b", {"b": 9})
     assert store.get(tid_a, key)[1] == {"a": 1}
     assert store.get(tid_b, key)[1] == {"b": 9}
+
+
+# ---------- Recuperación tras fallo: release() ----------
+
+
+def test_reserve_failure_release_allows_reserve_again() -> None:
+    """Caso: reserve OK → handler falla → release → 2º reserva vuelve a ser posible."""
+    store = FakeIdempotencyStore()
+    tid = TenantId.generate()
+    key = IdempotencyKey(value="retry-recovery-42")
+
+    # 1) Primera reserva.
+    assert store.reserve(tid, key, "req-abc") is True
+    # 2) Handler falla → no se llama a complete; la key está RESERVED.
+    assert store.reserve(tid, key, "req-abc") is False, (
+        "segundo reserve mientras RESERVED debe fallar"
+    )
+    # 3) Rollback manual con release → key vuelve a FREE.
+    store.release(tid, key)
+    # 4) Segundo intento de reserva → OK.
+    assert store.reserve(tid, key, "req-abc") is True, "tras release debe poder reservarse de nuevo"
+    store.complete(tid, key, "res-xyz", "resultado-final")
+    assert store.get(tid, key) is not None
+
+
+def test_release_on_nonexistent_key_is_idempotent_no_error() -> None:
+    """release sobre key FREE (inexistente) = no-op, sin excepción."""
+    store = FakeIdempotencyStore()
+    tid = TenantId.generate()
+    key = IdempotencyKey(value="not-exists-99999")
+    # No hace falta try/except: si lanzara, pytest ya marca el test como fallido.
+    store.release(tid, key)
+    store.release(tid, key)  # 2 veces para comprobar idempotencia
+
+
+def test_release_on_completed_key_is_safe_noop() -> None:
+    """release NO debe deshacer una operación DONE (seguridad contractual)."""
+    store = FakeIdempotencyStore()
+    tid = TenantId.generate()
+    key = IdempotencyKey(value="done-safe-release-1")
+    store.reserve(tid, key, "r1")
+    store.complete(tid, key, "done-digest", 123)
+
+    before = store.get(tid, key)
+    assert before is not None
+    # Intentar release varias veces.
+    store.release(tid, key)
+    store.release(tid, key)
+    # El resultado sigue siendo accesible y reserve sigue devolviendo False.
+    after = store.get(tid, key)
+    assert after == before
+    assert store.reserve(tid, key, "r2") is False, (
+        "key DONE no debe volverse a reservar tras release"
+    )
+
+
+def test_release_tenant_isolation_one_tenant_release_not_affect_other() -> None:
+    """release de tenant A no afecta a la misma key en tenant B (aislamiento)."""
+    store = FakeIdempotencyStore()
+    ta = TenantId.generate()
+    tb = TenantId.generate()
+    key = IdempotencyKey(value="cross-tenant-release-55")
+
+    store.reserve(ta, key, "req-ta")
+    store.reserve(tb, key, "req-tb")
+    # Liberar tenant A.
+    store.release(ta, key)
+    # Ta puede volver a reservar; Tb sigue RESERVED (no puede reservar de nuevo).
+    assert store.reserve(ta, key, "req-ta-v2") is True
+    assert store.reserve(tb, key, "req-tb-v2") is False, "tb no fue liberado; debe seguir RESERVED"

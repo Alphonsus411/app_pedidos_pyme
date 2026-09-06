@@ -8,14 +8,14 @@ llevar ``tenant_id`` explícito si filtran por tenant (lo habitual).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 
 @dataclass(frozen=True, kw_only=True)
 class Query:
     """Marcador base frozen (inmutable) para queries.
 
-    Subclasifica para cada consulta concreta::
+    Subclasifica para cada consulta concreta (mantén ``@dataclass(frozen=True,
+    kw_only=True)`` en la subclase por convención)::
 
         @dataclass(frozen=True, kw_only=True)
         class ListCustomersByBusiness(Query):
@@ -24,9 +24,6 @@ class Query:
             limit: int
             offset: int
     """
-
-    def __init_subclass__(cls, **kwargs: Any) -> None:
-        super().__init_subclass__(**kwargs)  # pragma: no cover - trivial hook
 
 
 __all__ = ["Query"]

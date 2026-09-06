@@ -1,18 +1,25 @@
-"""EventPublisher — port externo de integración.
+"""EventPublisher — port externo de integración (**exclusivamente post-commit**).
 
 En Gate 0.2 **no hay implementación real**. Se define la interfaz Protocol que
-los futuros backends (Outbox físico, Kafka, RabbitMQ, webhooks, SQS…) deben
-implementar.
+los futuros backends (Outbox físico *consumer*, Kafka, RabbitMQ, webhooks, SQS…)
+deben implementar.
 
 ## Semántica fundamental
 
 - :meth:`publish` / :meth:`publish_many` deben ser invocados **solo después**
   de :meth:`UnitOfWork.commit`. Jamás antes.
-- Si el port requiere persistencia (Outbox) puede escribirse dentro del UoW;
-  pero "publicar" (mover los mensajes al bus) es post-commit.
-- **No** asumimos ordering, reintentos, persistencia, 2PC ni nada en esta
+- **Este port NO garantiza atomicidad DB + mensaje.** Ser llamado post-commit
+  significa que los datos ya están persistidos; si el publisher falla el dominio
+  no se deshace. Futuros mecanismos de entrega garantizada (reintentos, DLQ,
+  Outbox real) son responsabilidad del adapter de infraestructura.
+- **Este port NO escribe una tabla Outbox dentro del UnitOfWork.** Si en Gate
+  0.5+ se adopta el patrón Transactional Outbox, existirá un contrato
+  **separado** (p. ej. ``TransactionalOutboxWriter``) que se invocará
+  **pre-commit** dentro del UoW; :class:`EventPublisher` seguirá siendo el
+  componente post-commit que lee/mueve mensajes hacia el bus externo. Los dos
+  conceptos no comparten interfaz.
+- **No** asumimos ordering, deduplicación, persistencia, 2PC ni nada en esta
   interfaz. Esas propiedades son responsabilidad de cada adapter concreto.
-- **No** mencionamos tecnologías concretas aquí.
 """
 
 from __future__ import annotations
