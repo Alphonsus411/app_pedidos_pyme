@@ -29,7 +29,8 @@
 ### Commits relevantes (top-down)
 
 ```
-* 3143ef1 (HEAD, origin/feat/architectural-baseline)  docs: update DEVELOPMENT_STATUS HEAD SHA after final audit commit
+* e9ac272 (HEAD, origin/feat/architectural-baseline)  docs: DEVELOPMENT_STATUS refs HEAD 3143ef1 (Gate 0.1 Final Audit)
+* 3143ef1  docs: update DEVELOPMENT_STATUS HEAD SHA after final audit commit
 * 57e7001  docs: finalize Gate 0.1 audit; pin dev tooling ranges for reproducibility
 * ddadd7b  docs: add project README and development status
 *   889fb21  merge: integrate remote baseline history before RC1
@@ -283,10 +284,10 @@ git status
 #          nothing to commit, working tree clean
 
 git branch -vv
-# Esperado: * feat/architectural-baseline  3143ef1  [origin/feat/architectural-baseline]  docs: update DEVELOPMENT_STATUS HEAD SHA after final audit commit
+# Esperado: * feat/architectural-baseline  e9ac272  [origin/feat/architectural-baseline]  docs: DEVELOPMENT_STATUS refs HEAD 3143ef1 (Gate 0.1 Final Audit)
 
 git log --oneline --decorate --graph --all -n 15
-# Esperado: 3143ef1 → 57e7001 → ddadd7b → 889fb21 → (7a705fc, 8ba78e1) → 93d3e95 → ... → master=25fc345
+# Esperado: e9ac272 → 3143ef1 → 57e7001 → ddadd7b → 889fb21 → (7a705fc, 8ba78e1) → 93d3e95 → ... → master=25fc345
 ```
 
 ### 2. Validación técnica
