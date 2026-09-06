@@ -29,7 +29,8 @@
 ### Commits relevantes (top-down)
 
 ```
-* ddadd7b (HEAD, origin/feat/architectural-baseline)  docs: add project README and development status
+* 57e7001 (HEAD, origin/feat/architectural-baseline)  docs: finalize Gate 0.1 audit; pin dev tooling ranges for reproducibility
+* ddadd7b  docs: add project README and development status
 *   889fb21  merge: integrate remote baseline history before RC1
 |\
 | * 8ba78e1  Creamos e incluimos documento de auditoria .txt
@@ -89,7 +90,8 @@ Monolito modular DDD con capas segregadas. Dirección única de dependencias:
 | E8. Hardening RC1 (Currency sin whitelist, ports tenancy explícita, mypy strict global) | ✅ | `7a705fc` |
 | E9. CI permanente protege `master` + rama feature | ✅ | `.github/workflows/ci.yml` |
 | E10. Merge recovery historia (sin rebase) — push normal exitoso | ✅ | `889fb21` |
-| E11. Cierre documental formal (README, Development Status) + rangos tooling reproducibles) | ✅ | `ddadd7b` |
+| E11. Cierre documental formal (README, Development Status) | ✅ | `ddadd7b` |
+| E12. Gate 0.1 Final Audit + rangos cerrados dev tooling reproducibles | ✅ | `57e7001` |
 
 ---
 
@@ -280,10 +282,10 @@ git status
 #          nothing to commit, working tree clean
 
 git branch -vv
-# Esperado: * feat/architectural-baseline  ddadd7b  [origin/feat/architectural-baseline]  docs: add project README and development status
+# Esperado: * feat/architectural-baseline  57e7001  [origin/feat/architectural-baseline]  docs: finalize Gate 0.1 audit; pin dev tooling ranges for reproducibility
 
 git log --oneline --decorate --graph --all -n 15
-# Esperado: ddadd7b → 889fb21 → (7a705fc, 8ba78e1) → 93d3e95 → ... → master=25fc345
+# Esperado: 57e7001 → ddadd7b → 889fb21 → (7a705fc, 8ba78e1) → 93d3e95 → ... → master=25fc345
 ```
 
 ### 2. Validación técnica
