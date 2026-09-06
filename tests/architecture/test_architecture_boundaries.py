@@ -326,3 +326,211 @@ def test_at9_repository_port_method_has_tenant_id_param_explicit(
     assert "tenant_id" in params, (
         f"AT-9 FAIL {proto_name}.{method_name}: falta parámetro tenant_id explícito. Params: {list(params)}"
     )
+
+
+# ============================================================================
+# Gate 0.2 — Application Layer architectural guards
+# Nota: AT-10 (App ⊬ Infrastructure) ya lo cubre AT-7
+#       AT-14 (Infra skeleton-only) cubierto por AT-8
+#       AT-15 (API skeleton-only) cubierto por AT-8
+#       AT-16 (Verticals sin lógica sectorial) cubierto por AT-8
+# ============================================================================
+
+
+API_DIR = SRC / "api"
+VERTICALS_DIR = SRC / "verticals"
+
+FORBIDDEN_APP_IMPORTS_AT11 = {"universal_business.api"}
+FORBIDDEN_APP_IMPORTS_AT12 = {"universal_business.verticals"}
+
+FORBIDDEN_APP_FRAMEWORKS_AT13 = (
+    # Web frameworks
+    "fastapi",
+    "starlette",
+    "flask",
+    "django",
+    "tornado",
+    # ORM / DB drivers
+    "sqlalchemy",
+    "alembic",
+    "psycopg",
+    "psycopg2",
+    "asyncpg",
+    "sqlite3",
+    "mysql",
+    "mariadb",
+    "tortoise",
+    "ormar",
+    # Message brokers / task queues
+    "redis",
+    "celery",
+    "kafka",
+    "pika",
+    "rabbitmq",
+    # AI SDKs
+    "openai",
+    "anthropic",
+    "google.generativeai",
+    "gemini",
+    "openrouter",
+    # Payment gateways
+    "stripe",
+    "paypal",
+    "mercadopago",
+    # Notifications / push
+    "twilio",
+    "firebase",
+    "whatsapp",
+    # Frontend
+    "react",
+    "vue",
+    "angular",
+    "jinja2",
+    # DI frameworks
+    "injector",
+    "dependency_injector",
+    "lagom",
+)
+
+
+def _imports_in_module_simple(
+    root_module_parts: tuple[str, ...], import_chain: tuple[str, ...]
+) -> bool:
+    """True si la cadena de import comienza por el módulo raiz."""
+    if len(import_chain) < len(root_module_parts):
+        return False
+    return import_chain[: len(root_module_parts)] == root_module_parts
+
+
+def _is_protocol_or_abstract(obj: object) -> bool:
+    """Devuelve True si la clase es un Protocol o una ABC con métodos abstractos."""
+    if not inspect.isclass(obj):
+        return False
+    # Protocol detection: tiene __protocol_attrs__ o Protocol en MRO
+    has_protocol_marker = hasattr(obj, "__protocol_attrs__")
+    has_protocol_mro = any(getattr(base, "__name__", None) == "Protocol" for base in obj.__mro__)
+    if has_protocol_marker or has_protocol_mro:
+        return True
+    # ABC detection: tiene __abstractmethods__ no vacío
+    abstract = getattr(obj, "__abstractmethods__", set())
+    if abstract:
+        return True
+    return False
+
+
+def test_at11_application_cannot_import_api() -> None:
+    """AT-11: Application layer NO puede importar módulos de API."""
+    api_parts = ("universal_business", "api")
+    violations: list[str] = []
+    for py_file in iter_python_files(APPLICATION_DIR):
+        rel = py_file.relative_to(ROOT).as_posix()
+        for lineno, mod in collect_imports(py_file):
+            chain = tuple(mod.split("."))
+            if _imports_in_module_simple(api_parts, chain):
+                violations.append(f"{rel}:{lineno} -> {mod}")
+    assert not violations, "AT-11 FAIL Application importa API. Violaciones:\n  " + "\n  ".join(
+        violations
+    )
+
+
+def test_at12_application_cannot_import_verticals() -> None:
+    """AT-12: Application layer NO puede importar verticales concretos."""
+    vert_parts = ("universal_business", "verticals")
+    violations: list[str] = []
+    for py_file in iter_python_files(APPLICATION_DIR):
+        rel = py_file.relative_to(ROOT).as_posix()
+        for lineno, mod in collect_imports(py_file):
+            chain = tuple(mod.split("."))
+            if _imports_in_module_simple(vert_parts, chain):
+                violations.append(f"{rel}:{lineno} -> {mod}")
+    assert not violations, (
+        "AT-12 FAIL Application importa verticales. Violaciones:\n  " + "\n  ".join(violations)
+    )
+
+
+def test_at13_application_cannot_import_external_frameworks_or_sdk() -> None:
+    """AT-13: Application no puede importar frameworks/SDK externos prohibidos.
+
+    Cubre: web frameworks, ORM/DB drivers, brokers/task queues, AI SDKs,
+    pasarelas de pago, notificaciones push y DI frameworks.
+    """
+    violations: list[str] = []
+    for py_file in iter_python_files(APPLICATION_DIR):
+        rel = py_file.relative_to(ROOT).as_posix()
+        for lineno, mod in collect_imports(py_file):
+            head = mod.split(".")[0]
+            if head in FORBIDDEN_APP_FRAMEWORKS_AT13:
+                violations.append(f"{rel}:{lineno} -> {mod}")
+        # También detectamos ocurrencias de identificador por si alguien usa alias raros
+        for _lineno, ident in collect_identifier_occurrences(
+            py_file, FORBIDDEN_APP_FRAMEWORKS_AT13
+        ):
+            # Excluimos comentarios/docstrings comprobando el source no trivial:
+            # Para evitar falsos positivos con nombres en strings o comentarios,
+            # solo aplicamos cuando el import real coincide (loop anterior).
+            # Este loop es defensivo y preparado para checks adicionales en
+            # entregas futuras. (No-op en Gate 0.2.)
+            del ident
+    assert not violations, (
+        "AT-13 FAIL Application importa frameworks/SDK externos. Violaciones:\n  "
+        + "\n  ".join(violations)
+    )
+
+
+def test_at17_core_ports_are_abstractions_without_concrete_implementation() -> None:
+    """AT-17: UnitOfWork, IdempotencyStore y EventPublisher deben ser
+    Protocol / ABC sin implementación concreta en el core (src/application).
+
+    Importamos los 3 símbolos desde application y validamos que sean
+    Protocol o ABC. Validamos también que dentro de application/ no haya
+    una subclase concreta (no-Protocol, no-abstract) que los implemente
+    dentro del propio módulo application.
+    """
+    import sys
+
+    if str(SRC.parent) not in sys.path:
+        sys.path.insert(0, str(SRC.parent))
+
+    from universal_business.application import UnitOfWork
+    from universal_business.application.events.publisher import EventPublisher
+    from universal_business.application.idempotency import IdempotencyStore
+
+    symbols: list[tuple[str, type]] = [
+        ("UnitOfWork", UnitOfWork),
+        ("IdempotencyStore", IdempotencyStore),
+        ("EventPublisher", EventPublisher),
+    ]
+    for name, cls in symbols:
+        assert _is_protocol_or_abstract(cls), (
+            f"AT-17 FAIL {name}: debe ser Protocol o ABC. {type(cls)} attrs={dir(cls)}"
+        )
+
+    # Aseguramos que en application/** no existan implementaciones concretas
+    # que sean subclases de estos ports sin ser Protocol/ABC.
+    app_modules: list[str] = []
+    for py_file in iter_python_files(APPLICATION_DIR):
+        mod = "universal_business." + ".".join(list(py_file.relative_to(SRC).with_suffix("").parts))
+        app_modules.append(mod)
+        __import__(mod)
+
+    concrete_violations: list[str] = []
+    port_classes = [cls for _n, cls in symbols]
+    for mod_name in app_modules:
+        module = sys.modules[mod_name]
+        for attr in dir(module):
+            if attr.startswith("_"):
+                continue
+            obj = getattr(module, attr, None)
+            if not inspect.isclass(obj):
+                continue
+            # Es una subclase concreta (no abstract, no protocol) de algún port?
+            is_sub = any(issubclass(obj, pc) for pc in port_classes if obj is not pc)
+            if not is_sub:
+                continue
+            if _is_protocol_or_abstract(obj):
+                continue
+            concrete_violations.append(f"{mod_name}.{attr}")
+    assert not concrete_violations, (
+        "AT-17 FAIL Implementaciones concretas de ports core encontradas en application:\n  "
+        + "\n  ".join(concrete_violations)
+    )
