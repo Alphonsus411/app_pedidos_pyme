@@ -4,8 +4,10 @@ Cada handler implementa estructuralmente :class:`CommandHandler` /
 :class:`QueryHandler` y :class:`UseCaseHandler`. El método ``handle`` devuelve
 la tupla canónica ``(resultado, eventos)``. Los mutations hacen cross-tenant
 check cuando aplican. Los creates con idempotencia usan
-:class:`IdempotencyStore` (reserve / complete / release) vía hooks
-``post_commit_success`` / ``post_rollback``.
+:class:`IdempotencyStore` (reserve / complete / release) VÍA EL NUEVO PATRÓN
+STATLESS: ``build_hooks`` devuelve un :class:`ExecutionHooks` con closures
+``on_success`` / ``on_failure`` que capturan el estado por-ejecución.
+**NUNCA** se guarda estado mutable en ``self`` de la instancia handler.
 
 **Regla importante**: ningún handler de este archivo llama a
 ``uow.commit()`` — el commit lo hace exclusivamente el helper
@@ -34,6 +36,10 @@ from universal_business.application.catalog.queries import (
     ListOfferingsByLocation,
 )
 from universal_business.application.errors import ApplicationError, IdempotencyConflictError
+from universal_business.application.execution import (
+    ExecutionHooks,
+    UseCaseHandlerWithExecutionHooks,
+)
 from universal_business.application.idempotency import IdempotencyKey, IdempotencyStore
 from universal_business.domain.catalog.entities import CatalogCategory, Offering
 from universal_business.domain.catalog.events import (
@@ -88,7 +94,7 @@ def _assert_same_scope(
 # ---------------------------------------------------------------------------
 
 
-class CreateOfferingHandler:
+class CreateOfferingHandler(UseCaseHandlerWithExecutionHooks[CreateOffering, Offering]):
     def __init__(
         self,
         *,
@@ -97,17 +103,16 @@ class CreateOfferingHandler:
     ) -> None:
         self._offering_repository = offering_repository
         self._idempotency_store = idempotency_store
-        self._idem_pending: (
-            tuple[IdempotencyStore, TenantId, IdempotencyKey, str, Offering] | None
-        ) = None
 
     def handle(
         self,
         command: CreateOffering,
+        /,
     ) -> tuple[Offering, Sequence[DomainEvent]]:
         id_key: IdempotencyKey | None = command.idempotency_key
         tid = command.tenant_id
         store = self._idempotency_store
+        reserved_ok = False
 
         if id_key is not None:
             reserved = store.reserve(
@@ -122,84 +127,91 @@ class CreateOfferingHandler:
                     if isinstance(result_obj, Offering):
                         return (result_obj, [])
                 raise IdempotencyConflictError(f"Idempotency conflict for key {id_key.value}")
-            self._idem_pending = (store, tid, id_key, "", None)  # type: ignore[assignment]
+            reserved_ok = True
 
-        if (command.base_price is None) != (command.currency is None):
-            raise ApplicationError("base_price y currency deben estar ambos presentes o ambos None")
-
-        existing = self._offering_repository.get(
-            tenant_id=tid,
-            business_id=command.business_id,
-            offering_id=command.offering_id,
-        )
-        if existing is not None:
-            if id_key is not None:
-                _assert_same_scope(
-                    entity_tenant_id=existing.tenant_id,
-                    entity_business_id=existing.business_id,
-                    command_tenant_id=tid,
-                    command_business_id=command.business_id,
-                    entity_label="Offering",
+        try:
+            if (command.base_price is None) != (command.currency is None):
+                raise ApplicationError(
+                    "base_price y currency deben estar ambos presentes o ambos None"
                 )
-                self._idem_pending = (
-                    store,
-                    tid,
-                    id_key,
-                    _result_digest(existing),
-                    existing,
+
+            existing = self._offering_repository.get(
+                tenant_id=tid,
+                business_id=command.business_id,
+                offering_id=command.offering_id,
+            )
+            if existing is not None:
+                if id_key is not None:
+                    _assert_same_scope(
+                        entity_tenant_id=existing.tenant_id,
+                        entity_business_id=existing.business_id,
+                        command_tenant_id=tid,
+                        command_business_id=command.business_id,
+                        entity_label="Offering",
+                    )
+                    return (existing, [])
+                raise ApplicationError(f"Offering {command.offering_id} already exists")
+
+            base_price_money: Money | None = None
+            if command.base_price is not None and command.currency is not None:
+                base_price_money = Money(command.base_price, command.currency)
+
+            offering = Offering(
+                id=command.offering_id,
+                tenant_id=tid,
+                business_id=command.business_id,
+                name=command.name,
+                description=command.description,
+                category_id=command.category_id,
+                base_price=base_price_money,
+                location_ids=command.location_ids or frozenset(),
+            )
+            offering.add_domain_event(
+                OfferingCreated(
+                    aggregate_id=offering.id,
+                    tenant_id=offering.tenant_id,
+                    business_id=offering.business_id,
+                    name=offering.name,
+                    category_id=offering.category_id,
                 )
-                return (existing, [])
-            raise ApplicationError(f"Offering {command.offering_id} already exists")
-
-        base_price_money: Money | None = None
-        if command.base_price is not None and command.currency is not None:
-            base_price_money = Money(command.base_price, command.currency)
-
-        offering = Offering(
-            id=command.offering_id,
-            tenant_id=tid,
-            business_id=command.business_id,
-            name=command.name,
-            description=command.description,
-            category_id=command.category_id,
-            base_price=base_price_money,
-            location_ids=command.location_ids or frozenset(),
-        )
-        offering.add_domain_event(
-            OfferingCreated(
-                aggregate_id=offering.id,
-                tenant_id=offering.tenant_id,
-                business_id=offering.business_id,
-                name=offering.name,
-                category_id=offering.category_id,
             )
+            self._offering_repository.save(offering)
+            events = offering.domain_events
+            offering.clear_domain_events()
+            return (offering, list(events))
+        except BaseException:
+            if reserved_ok and id_key is not None:
+                try:
+                    store.release(tid, id_key)
+                except Exception:
+                    pass
+            raise
+
+    def build_hooks(
+        self,
+        input: CreateOffering,
+        result: Offering,
+        /,
+    ) -> ExecutionHooks[Offering] | None:
+        id_key: IdempotencyKey | None = input.idempotency_key
+        if id_key is None:
+            return None
+        store = self._idempotency_store
+        tid = input.tenant_id
+        key = id_key
+        digest = _result_digest(result)
+        result_obj = result
+
+        def _on_success(_res: Offering, /) -> None:
+            store.complete(tid, key, digest, result_obj)
+
+        def _on_failure(_exc: BaseException, /) -> None:
+            store.release(tid, key)
+
+        return ExecutionHooks[Offering](
+            on_success=_on_success,
+            on_failure=_on_failure,
         )
-        self._offering_repository.save(offering)
-        events = offering.domain_events
-        offering.clear_domain_events()
-        if id_key is not None:
-            self._idem_pending = (
-                store,
-                tid,
-                id_key,
-                _result_digest(offering),
-                offering,
-            )
-        return (offering, list(events))
-
-    def post_commit_success(self, result: Offering, /) -> None:
-        if self._idem_pending is None:
-            return
-        (store, tid, key, digest, _res_captured) = self._idem_pending
-        self._idem_pending = None
-        store.complete(tid, key, digest, _res_captured)
-
-    def post_rollback(self, exc: BaseException, /) -> None:
-        if self._idem_pending is None:
-            return
-        (store, tid, key, _digest, _res) = self._idem_pending
-        self._idem_pending = None
-        store.release(tid, key)
 
 
 class ActivateOfferingHandler:
@@ -209,6 +221,7 @@ class ActivateOfferingHandler:
     def handle(
         self,
         command: ActivateOffering,
+        /,
     ) -> tuple[Offering, Sequence[DomainEvent]]:
         offering = self._offering_repository.get(
             tenant_id=command.tenant_id,
@@ -238,6 +251,7 @@ class DeactivateOfferingHandler:
     def handle(
         self,
         command: DeactivateOffering,
+        /,
     ) -> tuple[Offering, Sequence[DomainEvent]]:
         offering = self._offering_repository.get(
             tenant_id=command.tenant_id,
@@ -267,6 +281,7 @@ class ArchiveOfferingHandler:
     def handle(
         self,
         command: ArchiveOffering,
+        /,
     ) -> tuple[Offering, Sequence[DomainEvent]]:
         offering = self._offering_repository.get(
             tenant_id=command.tenant_id,
@@ -296,6 +311,7 @@ class ChangeOfferingPriceHandler:
     def handle(
         self,
         command: ChangeOfferingPrice,
+        /,
     ) -> tuple[Offering, Sequence[DomainEvent]]:
         offering = self._offering_repository.get(
             tenant_id=command.tenant_id,
@@ -324,7 +340,9 @@ class ChangeOfferingPriceHandler:
 # ---------------------------------------------------------------------------
 
 
-class CreateCatalogCategoryHandler:
+class CreateCatalogCategoryHandler(
+    UseCaseHandlerWithExecutionHooks[CreateCatalogCategory, CatalogCategory]
+):
     def __init__(
         self,
         *,
@@ -333,17 +351,16 @@ class CreateCatalogCategoryHandler:
     ) -> None:
         self._category_repository = category_repository
         self._idempotency_store = idempotency_store
-        self._idem_pending: (
-            tuple[IdempotencyStore, TenantId, IdempotencyKey, str, CatalogCategory] | None
-        ) = None
 
     def handle(
         self,
         command: CreateCatalogCategory,
+        /,
     ) -> tuple[CatalogCategory, Sequence[DomainEvent]]:
         id_key: IdempotencyKey | None = command.idempotency_key
         tid = command.tenant_id
         store = self._idempotency_store
+        reserved_ok = False
 
         if id_key is not None:
             reserved = store.reserve(
@@ -358,79 +375,84 @@ class CreateCatalogCategoryHandler:
                     if isinstance(result_obj, CatalogCategory):
                         return (result_obj, [])
                 raise IdempotencyConflictError(f"Idempotency conflict for key {id_key.value}")
-            self._idem_pending = (store, tid, id_key, "", None)  # type: ignore[assignment]
+            reserved_ok = True
 
-        if (
-            command.parent_category_id is not None
-            and command.category_id == command.parent_category_id
-        ):
-            raise ApplicationError("Category no puede ser su propio padre")
+        try:
+            if (
+                command.parent_category_id is not None
+                and command.category_id == command.parent_category_id
+            ):
+                raise ApplicationError("Category no puede ser su propio padre")
 
-        existing = self._category_repository.get(
-            tenant_id=tid,
-            business_id=command.business_id,
-            category_id=command.category_id,
-        )
-        if existing is not None:
-            if id_key is not None:
-                _assert_same_scope(
-                    entity_tenant_id=existing.tenant_id,
-                    entity_business_id=existing.business_id,
-                    command_tenant_id=tid,
-                    command_business_id=command.business_id,
-                    entity_label="CatalogCategory",
-                )
-                self._idem_pending = (
-                    store,
-                    tid,
-                    id_key,
-                    _result_digest(existing),
-                    existing,
-                )
-                return (existing, [])
-            raise ApplicationError(f"CatalogCategory {command.category_id} already exists")
-
-        category = CatalogCategory(
-            id=command.category_id,
-            tenant_id=tid,
-            business_id=command.business_id,
-            name=command.name,
-            description=command.description,
-            parent_category_id=command.parent_category_id,
-        )
-        category.add_domain_event(
-            CatalogCategoryCreated(
-                aggregate_id=category.id,
-                tenant_id=category.tenant_id,
-                business_id=category.business_id,
+            existing = self._category_repository.get(
+                tenant_id=tid,
+                business_id=command.business_id,
+                category_id=command.category_id,
             )
-        )
-        self._category_repository.save(category)
-        events = category.domain_events
-        category.clear_domain_events()
-        if id_key is not None:
-            self._idem_pending = (
-                store,
-                tid,
-                id_key,
-                _result_digest(category),
-                category,
+            if existing is not None:
+                if id_key is not None:
+                    _assert_same_scope(
+                        entity_tenant_id=existing.tenant_id,
+                        entity_business_id=existing.business_id,
+                        command_tenant_id=tid,
+                        command_business_id=command.business_id,
+                        entity_label="CatalogCategory",
+                    )
+                    return (existing, [])
+                raise ApplicationError(f"CatalogCategory {command.category_id} already exists")
+
+            category = CatalogCategory(
+                id=command.category_id,
+                tenant_id=tid,
+                business_id=command.business_id,
+                name=command.name,
+                description=command.description,
+                parent_category_id=command.parent_category_id,
             )
-        return (category, list(events))
+            category.add_domain_event(
+                CatalogCategoryCreated(
+                    aggregate_id=category.id,
+                    tenant_id=category.tenant_id,
+                    business_id=category.business_id,
+                )
+            )
+            self._category_repository.save(category)
+            events = category.domain_events
+            category.clear_domain_events()
+            return (category, list(events))
+        except BaseException:
+            if reserved_ok and id_key is not None:
+                try:
+                    store.release(tid, id_key)
+                except Exception:
+                    pass
+            raise
 
-    def post_commit_success(self, result: CatalogCategory, /) -> None:
-        if self._idem_pending is None:
-            return
-        (store, tid, key, digest, _res_captured) = self._idem_pending
-        self._idem_pending = None
-        store.complete(tid, key, digest, _res_captured)
+    def build_hooks(
+        self,
+        input: CreateCatalogCategory,
+        result: CatalogCategory,
+        /,
+    ) -> ExecutionHooks[CatalogCategory] | None:
+        id_key: IdempotencyKey | None = input.idempotency_key
+        if id_key is None:
+            return None
+        store = self._idempotency_store
+        tid = input.tenant_id
+        key = id_key
+        digest = _result_digest(result)
+        result_obj = result
 
-    def post_rollback(self, exc: BaseException, /) -> None:
-        if self._idem_pending is None:
-            return
-        (store, tid, key, _digest, _res) = self._idem_pending
-        self._idem_pending = None
-        store.release(tid, key)
+        def _on_success(_res: CatalogCategory, /) -> None:
+            store.complete(tid, key, digest, result_obj)
+
+        def _on_failure(_exc: BaseException, /) -> None:
+            store.release(tid, key)
+
+        return ExecutionHooks[CatalogCategory](
+            on_success=_on_success,
+            on_failure=_on_failure,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -445,6 +467,7 @@ class GetOfferingHandler:
     def handle(
         self,
         query: GetOffering,
+        /,
     ) -> Offering | None:
         return self._offering_repository.get(
             tenant_id=query.tenant_id,
@@ -460,6 +483,7 @@ class ListOfferingsByBusinessHandler:
     def handle(
         self,
         query: ListOfferingsByBusiness,
+        /,
     ) -> list[Offering]:
         result = self._offering_repository.list_by_business(
             tenant_id=query.tenant_id,
@@ -477,6 +501,7 @@ class ListOfferingsByLocationHandler:
     def handle(
         self,
         query: ListOfferingsByLocation,
+        /,
     ) -> list[Offering]:
         result = self._offering_repository.list_by_business(
             tenant_id=query.tenant_id,
@@ -493,6 +518,7 @@ class ListActiveOfferingsHandler:
     def handle(
         self,
         query: ListActiveOfferings,
+        /,
     ) -> list[Offering]:
         result = self._offering_repository.list_active(
             tenant_id=query.tenant_id,
@@ -509,6 +535,7 @@ class ListCategoriesByBusinessHandler:
     def handle(
         self,
         query: ListCategoriesByBusiness,
+        /,
     ) -> list[CatalogCategory]:
         result = self._category_repository.list_by_business(
             tenant_id=query.tenant_id,

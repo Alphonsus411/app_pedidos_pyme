@@ -422,7 +422,9 @@ def test_create_resource_type_happy_idempotency_done() -> None:
         idempotency_store=store,
     )
     result, events = h.handle(cmd)
-    h.post_commit_success(result)
+    hooks = h.build_hooks(cmd, result)
+    if hooks is not None and hooks.on_success is not None:
+        hooks.on_success(result)
 
     assert isinstance(result, ResourceTypeEntity)
     assert result.id == rtid
@@ -821,7 +823,9 @@ def test_create_resource_type_duplicate_key_then_noop() -> None:
     )
 
     result1, events1 = h.handle(cmd)
-    h.post_commit_success(result1)
+    hooks1 = h.build_hooks(cmd, result1)
+    if hooks1 is not None and hooks1.on_success is not None:
+        hooks1.on_success(result1)
     assert rtrepo.save_count == 1
     assert len(events1) >= 1
 
@@ -871,12 +875,12 @@ def test_rollback_on_repository_error() -> None:
         h.handle(cmd)
     except RuntimeError as e:
         caught = e
-        h.post_rollback(e)
 
     assert caught is not None
     assert "DB explota" in str(caught)
 
-    # release fue llamado sobre la key vía post_rollback hook
+    # release fue llamado AUTOMÁTICAMENTE dentro de handle() vía
+    # try/except interno STATLESS (no es necesaria llamada manual)
     assert (tenant, key) in store.release_calls
     # La key no está en estado DONE
     assert store.get(tenant, key) is None

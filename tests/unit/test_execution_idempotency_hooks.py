@@ -1,12 +1,18 @@
 """Tests unitarios — Idempotency timeline + commit-fail idempotency + hooks.
 
-Valida que los hooks opcionales post_commit_success / post_rollback de
-execute_use_case produzcan la timeline correcta:
+Valida que los hooks opcionales (legacy PostCommitSuccessHook/PostRollbackHook
+y el NUEVO UseCaseHandlerWithExecutionHooks.build_hooks STATLESS) produzcan
+la timeline correcta:
   - OK:     reserve → commit → complete
   - FAIL:   reserve → release (NO complete)
 
 También valida cross-tenant, cross-business, resource_type not found,
 y handlers sin hooks (non-create) siguen funcionando.
+
+Tests 1-10 usan handlers internos con el patrón LEGACY (post_commit_success /
+post_rollback en self) para ver retro-compatibilidad.
+Tests a-f usan los handlers REALES del código productivo y verifican el
+nuevo patrón STATLESS + complete failure semantics.
 """
 
 from __future__ import annotations
@@ -23,10 +29,17 @@ from universal_business.application.catalog.commands import (
     ActivateOffering,
     CreateOffering,
 )
+from universal_business.application.catalog.handlers import (
+    ActivateOfferingHandler,
+    CreateOfferingHandler,
+)
 from universal_business.application.errors import ApplicationError
 from universal_business.application.events.dispatcher import DomainEventDispatcher
 from universal_business.application.events.publisher import EventPublisher
-from universal_business.application.execution import execute_use_case
+from universal_business.application.execution import (
+    UseCaseHandlerWithExecutionHooks,
+    execute_use_case,
+)
 from universal_business.application.idempotency import (
     IdempotencyKey,
     IdempotencyStore,
@@ -76,7 +89,7 @@ def _result_digest(result: object) -> str:
 
 
 # ============================================================================
-# DOUBLE: FakeIdempotencyStore con timeline
+# DOUBLE: FakeIdempotencyStore con timeline (y optional complete_raises)
 # ============================================================================
 
 
@@ -86,15 +99,22 @@ class FakeIdempotencyStore(IdempotencyStore):  # type: ignore[misc]
     Opcionalmente acepta un ``global_timeline`` compartido para poder
     intercalar operaciones con otros doubles (ej. FakeUnitOfWork) y ver
     orden cronológico real.
+
+    ``complete_raises``: si no es None, ``complete()`` lanza esa excepción
+    justo DESPUÉS de registrar la entrada en timeline (para poder
+    verificar que se llamó pero el estado no quedó en DONE).
     """
 
     def __init__(
         self,
         global_timeline: list[tuple[str, str]] | None = None,
+        *,
+        complete_raises: Exception | None = None,
     ) -> None:
         self.timeline: list[tuple[str, str]] = []
         self.global_timeline: list[tuple[str, str]] | None = global_timeline
         self._state: dict[tuple[TenantId, IdempotencyKey], tuple[str, str, object]] = {}
+        self.complete_raises: Exception | None = complete_raises
 
     def _push(self, op: str, value: str) -> None:
         self.timeline.append((op, value))
@@ -144,6 +164,8 @@ class FakeIdempotencyStore(IdempotencyStore):  # type: ignore[misc]
         /,
     ) -> None:
         self._push("complete", key.value)
+        if self.complete_raises is not None:
+            raise self.complete_raises
         k = (tenant_id, key)
         self._state[k] = ("DONE", result_digest_str, result_object)
 
@@ -488,7 +510,8 @@ class FakeResourceRepository(IResourceRepository):  # type: ignore[misc]
 
 
 # ============================================================================
-# Handlers ADAPTADOS para hooks (nuevo patrón: complete/release en hooks)
+# Handlers ADAPTADOS — PATRÓN LEGACY (compatibilidad PostCommitSuccessHook)
+#   — usados por los tests 1..10
 # ============================================================================
 
 _CROSS_TENANT_MSG = "cross-tenant mutation denied"
@@ -496,12 +519,11 @@ _CROSS_BUSINESS_MSG = "cross-business mutation denied"
 
 
 class HookedCreateOfferingHandler:
-    """CreateOfferingHandler que usa hooks post_commit_success/post_rollback.
+    """CreateOfferingHandler que usa hooks legacy post_commit_success/post_rollback.
 
-    Patrón NUEVO (con hooks):
-      handle()  → solo reserve + crea Offering + save. NO llama complete/release.
-      post_commit_success → idempotency_store.complete()
-      post_rollback → idempotency_store.release()
+    Usa atributos mutables en self (patrón ANTIGUO). Sirve para validar
+    retro-compatibilidad del helper execute_use_case con handlers que
+    implementan PostCommitSuccessHook / PostRollbackHook.
     """
 
     def __init__(
@@ -633,10 +655,9 @@ class StrictActivateOfferingHandler:
 
 
 class StrictCreateResourceHandler:
-    """CreateResourceHandler con hooks Y strict resource_type not found.
+    """CreateResourceHandler con hooks legacy Y strict resource_type not found.
 
-    Patrón NUEVO con hooks. A diferencia del handler real, éste hace
-    validación ESTRICTA: si resource_type no existe → ApplicationError.
+    Patrón ANTIGUO con hooks en self. Sirve para tests de compatibilidad.
     """
 
     def __init__(
@@ -1341,3 +1362,397 @@ def test_no_post_commit_hooks_in_non_create_handlers(
     assert uow.commit_called is True
     assert len(clean_publisher.published) >= 1
     assert len(clean_dispatcher.dispatched) >= 1
+
+
+# ============================================================================
+# TESTS NUEVOS — Patrón STATLESS (UseCaseHandlerWithExecutionHooks)
+# ============================================================================
+
+
+def test_stateless_handler_two_concurrent_executions_independent_keys(
+    tenant_a: TenantId,
+    business_a: BusinessId,
+    clean_offering_repo: FakeOfferingRepository,
+    clean_dispatcher: FakeEventDispatcher,
+    clean_publisher: FakeEventPublisher,
+) -> None:
+    """(a) Handler reutilizado, dos ejecuciones con keys A y B distintas.
+
+    Verifica timeline: reserve_A → commit → complete_A ; reserve_B → commit → complete_B
+    NO hay interferencia: no se llama release ni complete con la key equivocada.
+    """
+    global_timeline: list[tuple[str, str]] = []
+    idem_store = FakeIdempotencyStore(global_timeline=global_timeline)
+
+    handler = CreateOfferingHandler(
+        offering_repository=clean_offering_repo,
+        idempotency_store=idem_store,
+    )
+
+    key_a = IdempotencyKey(value="stateless-A")
+    key_b = IdempotencyKey(value="stateless-B")
+    oid_a = OfferingId.generate()
+    oid_b = OfferingId.generate()
+
+    cmd_a = CreateOffering(
+        tenant_id=tenant_a,
+        business_id=business_a,
+        offering_id=oid_a,
+        name="Oferta A",
+        idempotency_key=key_a,
+    )
+    cmd_b = CreateOffering(
+        tenant_id=tenant_a,
+        business_id=business_a,
+        offering_id=oid_b,
+        name="Oferta B",
+        idempotency_key=key_b,
+    )
+
+    uow_a = FakeUnitOfWork(global_timeline=global_timeline)
+    result_a = execute_use_case(
+        handler=handler,
+        input=cmd_a,
+        unit_of_work=uow_a,
+        event_dispatcher=clean_dispatcher,
+        event_publisher=clean_publisher,
+    )
+
+    disp_b = FakeEventDispatcher()
+    pub_b = FakeEventPublisher()
+    uow_b = FakeUnitOfWork(global_timeline=global_timeline)
+    result_b = execute_use_case(
+        handler=handler,
+        input=cmd_b,
+        unit_of_work=uow_b,
+        event_dispatcher=disp_b,
+        event_publisher=pub_b,
+    )
+
+    assert isinstance(result_a, Offering) and result_a.id == oid_a
+    assert isinstance(result_b, Offering) and result_b.id == oid_b
+
+    ka, kb = key_a.value, key_b.value
+
+    ops_a = [(op, v) for (op, v) in global_timeline if v == ka]
+    ops_b = [(op, v) for (op, v) in global_timeline if v == kb]
+
+    assert [op for op, _ in ops_a] == ["reserve", "complete"], (
+        f"Ops A deben ser reserve+complete, got {ops_a}"
+    )
+    assert [op for op, _ in ops_b] == ["reserve", "complete"], (
+        f"Ops B deben ser reserve+complete, got {ops_b}"
+    )
+    assert "release" not in [op for op, _ in global_timeline]
+
+    for op, v in global_timeline:
+        if op == "complete" and v == ka:
+            break_a_pos = global_timeline.index((op, v))
+    reserve_b_pos = global_timeline.index(("reserve", kb))
+    assert reserve_b_pos > break_a_pos, (
+        "Ejecución A debe completar (al menos commit) ANTES de que empiece B en secuencial"
+    )
+
+
+def test_stateless_handler_rollback_a_no_release_b(
+    tenant_a: TenantId,
+    business_a: BusinessId,
+    clean_offering_repo: FakeOfferingRepository,
+    clean_dispatcher: FakeEventDispatcher,
+    clean_publisher: FakeEventPublisher,
+) -> None:
+    """(b) Rollback de A NO afecta a B. Handler compartido.
+
+    Ejecución A: uow.commit_raises → debe release_A.
+    Ejecución B: success → complete_B OK.
+    Verifica: release de A NO liberó key de B.
+    """
+    idem_store = FakeIdempotencyStore()
+    handler = CreateOfferingHandler(
+        offering_repository=clean_offering_repo,
+        idempotency_store=idem_store,
+    )
+
+    key_a = IdempotencyKey(value="rollback-A")
+    key_b = IdempotencyKey(value="success-B")
+    oid_a = OfferingId.generate()
+    oid_b = OfferingId.generate()
+
+    cmd_a = CreateOffering(
+        tenant_id=tenant_a,
+        business_id=business_a,
+        offering_id=oid_a,
+        name="Fallo A",
+        idempotency_key=key_a,
+    )
+    cmd_b = CreateOffering(
+        tenant_id=tenant_a,
+        business_id=business_a,
+        offering_id=oid_b,
+        name="Exito B",
+        idempotency_key=key_b,
+    )
+
+    uow_a = FakeUnitOfWork()
+    uow_a.commit_raises = RuntimeError("boom-A")
+    with pytest.raises(RuntimeError, match="boom-A"):
+        execute_use_case(
+            handler=handler,
+            input=cmd_a,
+            unit_of_work=uow_a,
+            event_dispatcher=clean_dispatcher,
+            event_publisher=clean_publisher,
+        )
+
+    disp_b = FakeEventDispatcher()
+    pub_b = FakeEventPublisher()
+    result_b = execute_use_case(
+        handler=handler,
+        input=cmd_b,
+        unit_of_work=FakeUnitOfWork(),
+        event_dispatcher=disp_b,
+        event_publisher=pub_b,
+    )
+
+    ka, kb = key_a.value, key_b.value
+    ops_a = [op for (op, v) in idem_store.timeline if v == ka]
+    ops_b = [op for (op, v) in idem_store.timeline if v == kb]
+
+    assert ops_a == ["reserve", "release"], f"esperado reserve+release A, got {ops_a}"
+    assert ops_b == ["reserve", "complete"], f"esperado reserve+complete B, got {ops_b}"
+    assert isinstance(result_b, Offering)
+    assert result_b.id == oid_b
+
+
+def test_stateless_handler_commit_a_no_complete_b(
+    tenant_a: TenantId,
+    business_a: BusinessId,
+    clean_offering_repo: FakeOfferingRepository,
+) -> None:
+    """(c) Dos éxitos secuenciales sobre MISMA instancia handler.
+
+    complete_A y complete_B ambas llamadas correctas con sus keys.
+    Ninguna ejecución pisa el closure de la otra.
+    """
+    idem_store = FakeIdempotencyStore()
+    handler = CreateOfferingHandler(
+        offering_repository=clean_offering_repo,
+        idempotency_store=idem_store,
+    )
+
+    key_a = IdempotencyKey(value="ok-C-A-001")
+    key_b = IdempotencyKey(value="ok-C-B-001")
+    oid_a = OfferingId.generate()
+    oid_b = OfferingId.generate()
+
+    result_a = execute_use_case(
+        handler=handler,
+        input=CreateOffering(
+            tenant_id=tenant_a,
+            business_id=business_a,
+            offering_id=oid_a,
+            name="A",
+            idempotency_key=key_a,
+        ),
+        unit_of_work=FakeUnitOfWork(),
+        event_dispatcher=FakeEventDispatcher(),
+        event_publisher=FakeEventPublisher(),
+    )
+    result_b = execute_use_case(
+        handler=handler,
+        input=CreateOffering(
+            tenant_id=tenant_a,
+            business_id=business_a,
+            offering_id=oid_b,
+            name="B",
+            idempotency_key=key_b,
+        ),
+        unit_of_work=FakeUnitOfWork(),
+        event_dispatcher=FakeEventDispatcher(),
+        event_publisher=FakeEventPublisher(),
+    )
+
+    ka, kb = key_a.value, key_b.value
+    completes = [(op, v) for (op, v) in idem_store.timeline if op == "complete"]
+    assert completes == [("complete", ka), ("complete", kb)], (
+        f"completes deben ser A luego B: {completes}"
+    )
+    assert result_a.id == oid_a
+    assert result_b.id == oid_b
+    assert not any(op == "release" for op, _ in idem_store.timeline)
+
+
+def test_stateless_reuse_handler_no_pending_state(
+    tenant_a: TenantId,
+    business_a: BusinessId,
+    clean_offering_repo: FakeOfferingRepository,
+) -> None:
+    """(d) Handler compartido, 2 comandos diferentes.
+
+    Después de ejecución 1 (success OK) no hay ningún state "pendiente"
+    que afecte a la ejecución 2. Resultados correctos.
+    """
+    idem_store = FakeIdempotencyStore()
+    handler = CreateOfferingHandler(
+        offering_repository=clean_offering_repo,
+        idempotency_store=idem_store,
+    )
+    assert not hasattr(handler, "_idem_pending"), (
+        "El handler REAL NUEVO no debe tener atributo _idem_pending"
+    )
+
+    oid_1 = OfferingId.generate()
+    oid_2 = OfferingId.generate()
+    key_1 = IdempotencyKey(value="reuse-0001")
+    key_2 = IdempotencyKey(value="reuse-0002")
+
+    r1 = execute_use_case(
+        handler=handler,
+        input=CreateOffering(
+            tenant_id=tenant_a,
+            business_id=business_a,
+            offering_id=oid_1,
+            name="Servicio 1",
+            idempotency_key=key_1,
+            base_price=Decimal("25.00"),
+            currency="EUR",
+        ),
+        unit_of_work=FakeUnitOfWork(),
+        event_dispatcher=FakeEventDispatcher(),
+        event_publisher=FakeEventPublisher(),
+    )
+    r2 = execute_use_case(
+        handler=handler,
+        input=CreateOffering(
+            tenant_id=tenant_a,
+            business_id=business_a,
+            offering_id=oid_2,
+            name="Servicio 2 — sin precio",
+            idempotency_key=key_2,
+        ),
+        unit_of_work=FakeUnitOfWork(),
+        event_dispatcher=FakeEventDispatcher(),
+        event_publisher=FakeEventPublisher(),
+    )
+
+    assert isinstance(r1, Offering) and r1.id == oid_1
+    assert isinstance(r2, Offering) and r2.id == oid_2
+    assert r1.base_price is not None
+    assert r2.base_price is None
+
+    completes = [v for (op, v) in idem_store.timeline if op == "complete"]
+    assert set(completes) == {key_1.value, key_2.value}
+    assert len(completes) == 2
+
+
+def test_non_create_handler_no_build_hooks_method(
+    tenant_a: TenantId,
+    business_a: BusinessId,
+    clean_offering_repo: FakeOfferingRepository,
+) -> None:
+    """(e) ActivateOfferingHandler no implementa UseCaseHandlerWithExecutionHooks.
+
+    isinstance devuelve False; el handler sigue funcionando normalmente a
+    través del flujo estándar (sin build_hooks).
+    """
+    pre_store = FakeIdempotencyStore()
+    pre_handler = CreateOfferingHandler(
+        offering_repository=clean_offering_repo,
+        idempotency_store=pre_store,
+    )
+    oid = OfferingId.generate()
+    execute_use_case(
+        handler=pre_handler,
+        input=CreateOffering(
+            tenant_id=tenant_a,
+            business_id=business_a,
+            offering_id=oid,
+            name="Existente",
+            idempotency_key=IdempotencyKey(value="pre-create-e"),
+        ),
+        unit_of_work=FakeUnitOfWork(),
+        event_dispatcher=FakeEventDispatcher(),
+        event_publisher=FakeEventPublisher(),
+    )
+
+    activate_handler = ActivateOfferingHandler(
+        offering_repository=clean_offering_repo,
+    )
+
+    assert isinstance(activate_handler, UseCaseHandlerWithExecutionHooks) is False, (
+        "ActivateOfferingHandler NO debe satisfacer UseCaseHandlerWithExecutionHooks"
+    )
+    assert not hasattr(activate_handler, "build_hooks")
+
+    disp = FakeEventDispatcher()
+    pub = FakeEventPublisher()
+    uow = FakeUnitOfWork()
+    result = execute_use_case(
+        handler=activate_handler,
+        input=ActivateOffering(
+            tenant_id=tenant_a,
+            business_id=business_a,
+            offering_id=oid,
+        ),
+        unit_of_work=uow,
+        event_dispatcher=disp,
+        event_publisher=pub,
+    )
+    assert isinstance(result, Offering)
+    assert result.status == CatalogItemStatus.ACTIVE
+    assert uow.commit_called is True
+    assert len(disp.dispatched) >= 1
+    assert len(pub.published) >= 1
+
+
+def test_complete_failure_after_commit_no_release(
+    tenant_a: TenantId,
+    business_a: BusinessId,
+    clean_offering_repo: FakeOfferingRepository,
+    clean_dispatcher: FakeEventDispatcher,
+    clean_publisher: FakeEventPublisher,
+) -> None:
+    """(f) Complete failure semantics.
+
+    idem_store.complete() lanza DESPUÉS de uow.commit() exitoso.
+    Verifica:
+      - uow.commit_called=True (dominio COMMITTEADO, no rollback).
+      - store.release NUNCA invocado.
+      - Error de complete() se PROPAGA hacia arriba.
+      - events dispatch y publish SÍ se ejecutan (commit OK).
+      - En idem_store la key sigue en estado RESERVED (no pasó a DONE).
+    """
+    complete_exc = RuntimeError("idempotency backend unavailable")
+    idem_store = FakeIdempotencyStore(complete_raises=complete_exc)
+    handler = CreateOfferingHandler(
+        offering_repository=clean_offering_repo,
+        idempotency_store=idem_store,
+    )
+
+    key_fail = IdempotencyKey(value="complete-fail-f")
+    uow = FakeUnitOfWork()
+
+    with pytest.raises(RuntimeError, match="idempotency backend unavailable"):
+        execute_use_case(
+            handler=handler,
+            input=CreateOffering(
+                tenant_id=tenant_a,
+                business_id=business_a,
+                offering_id=OfferingId.generate(),
+                name="Oferta X",
+                idempotency_key=key_fail,
+            ),
+            unit_of_work=uow,
+            event_dispatcher=clean_dispatcher,
+            event_publisher=clean_publisher,
+        )
+
+    assert uow.commit_called is True, "uow.commit se llamó antes del fallo"
+    assert uow.rollback_called is False, "commit OK → no hay rollback (imposible post-commit)"
+    kf = key_fail.value
+    ops = [op for (op, v) in idem_store.timeline if v == kf]
+    assert "reserve" in ops
+    assert "complete" in ops, "complete() se intentó llamar y falló"
+    assert "release" not in ops, "complete() no debe disparar release: la key debe quedar RESERVED"
+    assert len(clean_dispatcher.dispatched) >= 1, "events se despachan aunque complete falle"
+    assert len(clean_publisher.published) >= 1, "events se publican aunque complete falle"
