@@ -159,8 +159,10 @@ class FakeResourceRepository:
 
     def list_by_location(
         self,
+        /,
         *,
         tenant_id: TenantId,
+        business_id: BusinessId,
         location_id: LocationId,
         status: ResourceStatus | None = None,
         resource_type: Any = None,
@@ -169,6 +171,8 @@ class FakeResourceRepository:
         out: list[Resource] = []
         for r in self._store.values():
             if r.tenant_id != tenant_id:
+                continue
+            if r.business_id != business_id:
                 continue
             if r.location_id != location_id:
                 continue
@@ -348,6 +352,25 @@ def _ids():
     )
 
 
+def _seed_resource_type(
+    repo: FakeResourceTypeRepository,
+    *,
+    tenant_id: TenantId,
+    business_id: BusinessId,
+    resource_type_id: ResourceTypeId,
+    name: str = "Default RT",
+) -> ResourceTypeEntity:
+    rt = ResourceTypeEntity(
+        id=resource_type_id,
+        tenant_id=tenant_id,
+        business_id=business_id,
+        name=name,
+    )
+    rt.clear_domain_events()
+    repo.save(rt)
+    return rt
+
+
 def _seed_resource(
     repo: FakeResourceRepository,
     *,
@@ -381,12 +404,10 @@ def _seed_resource(
 
 def test_create_resource_type_happy_idempotency_done() -> None:
     """Crear ResourceType con idempotency: se reserva, completa y el store
-    tiene el resultado cacheado."""
+    tiene el resultado cacheado. Usa post_commit_success hook (a mano)."""
     tenant, biz, rtid, rid, loc = _ids()
-    rrepo = FakeResourceRepository()
     rtrepo = FakeResourceTypeRepository()
     store = FakeIdempotencyStore()
-    uow = FakeUnitOfWork()
 
     cmd = CreateResourceType(
         tenant_id=tenant,
@@ -397,12 +418,11 @@ def test_create_resource_type_happy_idempotency_done() -> None:
         idempotency_key=IdempotencyKey(value="rt-create-00001"),
     )
     h = CreateResourceTypeHandler(
-        resource_repo=rrepo,
         resource_type_repo=rtrepo,
-        uow=uow,
         idempotency_store=store,
     )
     result, events = h.handle(cmd)
+    h.post_commit_success(result)
 
     assert isinstance(result, ResourceTypeEntity)
     assert result.id == rtid
@@ -417,10 +437,18 @@ def test_create_resource_type_happy_idempotency_done() -> None:
 
 
 def test_create_resource_happy_without_location() -> None:
-    """Crear Resource sin location: location_id=None."""
+    """Crear Resource sin location: location_id=None. Requiere RT existente
+    (strong validation)."""
     tenant, biz, rtid, rid, loc = _ids()
     rrepo = FakeResourceRepository()
     rtrepo = FakeResourceTypeRepository()
+    _seed_resource_type(
+        rtrepo,
+        tenant_id=tenant,
+        business_id=biz,
+        resource_type_id=rtid,
+        name="Mesas",
+    )
 
     cmd = CreateResource(
         tenant_id=tenant,
@@ -447,10 +475,17 @@ def test_create_resource_happy_without_location() -> None:
 
 
 def test_create_resource_with_location_ok() -> None:
-    """Crear Resource con location_id asignado."""
+    """Crear Resource con location_id asignado. Requiere RT existente."""
     tenant, biz, rtid, rid, loc = _ids()
     rrepo = FakeResourceRepository()
     rtrepo = FakeResourceTypeRepository()
+    _seed_resource_type(
+        rtrepo,
+        tenant_id=tenant,
+        business_id=biz,
+        resource_type_id=rtid,
+        name="Salones",
+    )
 
     cmd = CreateResource(
         tenant_id=tenant,
@@ -479,7 +514,6 @@ def test_activate_resource_emits_event_only_on_commit() -> None:
     (usar execute_use_case para orquestar el flujo canónico)."""
     tenant, biz, rtid, rid, loc = _ids()
     rrepo = FakeResourceRepository()
-    rtrepo = FakeResourceTypeRepository()
     resource = _seed_resource(
         rrepo,
         tenant_id=tenant,
@@ -514,8 +548,6 @@ def test_activate_resource_emits_event_only_on_commit() -> None:
     )
     handler = ActivateResourceHandler(
         resource_repo=rrepo,
-        resource_type_repo=rtrepo,
-        uow=uow,
     )
 
     # Antes de execute_use_case: NO events
@@ -543,7 +575,6 @@ def test_assign_resource_to_location_ok() -> None:
     """Asignar un recurso a una location (None → new_location_id)."""
     tenant, biz, rtid, rid, loc = _ids()
     rrepo = FakeResourceRepository()
-    rtrepo = FakeResourceTypeRepository()
     resource = _seed_resource(
         rrepo,
         tenant_id=tenant,
@@ -560,7 +591,6 @@ def test_assign_resource_to_location_ok() -> None:
     )
     h = AssignResourceToLocationHandler(
         resource_repo=rrepo,
-        resource_type_repo=rtrepo,
     )
     result, events = h.handle(cmd)
 
@@ -575,7 +605,6 @@ def test_unassign_resource_ok() -> None:
     """Desasignar: location_id concreta → None."""
     tenant, biz, rtid, rid, loc = _ids()
     rrepo = FakeResourceRepository()
-    rtrepo = FakeResourceTypeRepository()
     resource = _seed_resource(
         rrepo,
         tenant_id=tenant,
@@ -592,7 +621,6 @@ def test_unassign_resource_ok() -> None:
     )
     h = AssignResourceToLocationHandler(
         resource_repo=rrepo,
-        resource_type_repo=rtrepo,
     )
     result, events = h.handle(cmd)
 
@@ -609,7 +637,6 @@ def test_archive_resource_then_activate_handler_raises() -> None:
     proveniente del dominio (la invariante se rompe en Resource.activate())."""
     tenant, biz, rtid, rid, loc = _ids()
     rrepo = FakeResourceRepository()
-    rtrepo = FakeResourceTypeRepository()
     resource = _seed_resource(
         rrepo,
         tenant_id=tenant,
@@ -625,7 +652,6 @@ def test_archive_resource_then_activate_handler_raises() -> None:
     )
     h_arch = ArchiveResourceHandler(
         resource_repo=rrepo,
-        resource_type_repo=rtrepo,
     )
     archived_r, _ = h_arch.handle(archive_cmd)
     assert archived_r.status == ResourceStatus.ARCHIVED
@@ -637,7 +663,6 @@ def test_archive_resource_then_activate_handler_raises() -> None:
     )
     h_act = ActivateResourceHandler(
         resource_repo=rrepo,
-        resource_type_repo=rtrepo,
     )
     with pytest.raises(InvariantViolationError, match="ARCHIVED"):
         h_act.handle(activate_cmd)
@@ -650,7 +675,6 @@ def test_list_active_resources_filters_correctly() -> None:
     loc2 = LocationId.generate()
 
     rrepo = FakeResourceRepository()
-    rtrepo = FakeResourceTypeRepository()
 
     # ACTIVE + loc1 + rtid1 → debe aparecer
     r1 = _seed_resource(
@@ -705,7 +729,6 @@ def test_list_active_resources_filters_correctly() -> None:
 
     h = ListActiveResourcesHandler(
         resource_repo=rrepo,
-        resource_type_repo=rtrepo,
     )
 
     # Caso 1: location + resource_type
@@ -732,7 +755,6 @@ def test_get_resource_not_found_returns_none() -> None:
     """GetResource sobre id inexistente devuelve None (no excepción)."""
     tenant, biz, rtid, rid, loc = _ids()
     rrepo = FakeResourceRepository()
-    rtrepo = FakeResourceTypeRepository()
 
     q = GetResource(
         tenant_id=tenant,
@@ -741,7 +763,6 @@ def test_get_resource_not_found_returns_none() -> None:
     )
     h = GetResourceHandler(
         resource_repo=rrepo,
-        resource_type_repo=rtrepo,
     )
     assert h.handle(q) is None
 
@@ -755,7 +776,6 @@ def test_cross_tenant_mutate_denied_on_activate() -> None:
     rtid = ResourceTypeId.generate()
 
     rrepo = FakeResourceRepository()
-    rtrepo = FakeResourceTypeRepository()
 
     # Recurso perteneciente a tenant_a
     resource = _seed_resource(
@@ -774,7 +794,6 @@ def test_cross_tenant_mutate_denied_on_activate() -> None:
     )
     h = ActivateResourceHandler(
         resource_repo=rrepo,
-        resource_type_repo=rtrepo,
     )
     with pytest.raises(ApplicationError, match="Cross-tenant mutation DENIED"):
         h.handle(cmd)
@@ -782,9 +801,9 @@ def test_cross_tenant_mutate_denied_on_activate() -> None:
 
 def test_create_resource_type_duplicate_key_then_noop() -> None:
     """Crear ResourceType con misma idempotency_key dos veces → la 2ª es
-    no-op (devuelve el resultado original sin re-crear ni nuevos events)."""
+    no-op (devuelve el resultado original sin re-crear ni nuevos events).
+    Usa post_commit_success entre llamadas."""
     tenant, biz, rtid, rid, loc = _ids()
-    rrepo = FakeResourceRepository()
     rtrepo = FakeResourceTypeRepository()
     store = FakeIdempotencyStore()
     key = IdempotencyKey(value="rt-dup-key-0042")
@@ -797,12 +816,12 @@ def test_create_resource_type_duplicate_key_then_noop() -> None:
         idempotency_key=key,
     )
     h = CreateResourceTypeHandler(
-        resource_repo=rrepo,
         resource_type_repo=rtrepo,
         idempotency_store=store,
     )
 
     result1, events1 = h.handle(cmd)
+    h.post_commit_success(result1)
     assert rtrepo.save_count == 1
     assert len(events1) >= 1
 
@@ -815,9 +834,16 @@ def test_create_resource_type_duplicate_key_then_noop() -> None:
 
 def test_rollback_on_repository_error() -> None:
     """Si el repositorio lanza error durante save, IdempotencyStore.release
-    es invocado para que la key no quede RESERVED indefinidamente."""
+    es invocado vía hook post_rollback para que la key no quede RESERVED."""
     tenant, biz, rtid, rid, loc = _ids()
     rtrepo = FakeResourceTypeRepository()
+    _seed_resource_type(
+        rtrepo,
+        tenant_id=tenant,
+        business_id=biz,
+        resource_type_id=rtid,
+        name="Mesas",
+    )
 
     class _ExplodingResourceRepo(FakeResourceRepository):
         def save(self, resource: Resource, /) -> None:
@@ -840,10 +866,17 @@ def test_rollback_on_repository_error() -> None:
         idempotency_store=store,
     )
 
-    with pytest.raises(RuntimeError, match="DB explota"):
+    caught: RuntimeError | None = None
+    try:
         h.handle(cmd)
+    except RuntimeError as e:
+        caught = e
+        h.post_rollback(e)
 
-    # release fue llamado sobre la key
+    assert caught is not None
+    assert "DB explota" in str(caught)
+
+    # release fue llamado sobre la key vía post_rollback hook
     assert (tenant, key) in store.release_calls
-    # La key no está en estado DONE (liberada o RESERVED → release borra RESERVED)
+    # La key no está en estado DONE
     assert store.get(tenant, key) is None

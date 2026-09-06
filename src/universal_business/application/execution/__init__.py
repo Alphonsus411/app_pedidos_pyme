@@ -48,7 +48,7 @@ from universal_business.application.unit_of_work import UnitOfWork
 from universal_business.domain.shared.events import DomainEvent
 
 InT = TypeVar("InT", covariant=False, contravariant=True)
-OutT = TypeVar("OutT", covariant=True)
+OutT = TypeVar("OutT")
 
 
 @runtime_checkable
@@ -64,10 +64,28 @@ class UseCaseHandler(Protocol, Generic[InT, OutT]):
 
     El segundo elemento de la tupla es la colección de DomainEvent ya
     recolectados de los aggregates afectados. Vacía si no hubo cambios.
+
+    ## Hooks opcionales de ciclo de vida (Gate 0.3)
+
+    *post_commit_success* y *post_rollback* son callbacks opcionales invocados
+    por :func:`execute_use_case` SÓLO en el escenario indicado. Los handlers
+    idempotentes (CreateOffering, CreateResource, etc.) los usan para:
+
+    - ``post_commit_success`` → ``IdempotencyStore.complete()`` (después de commit).
+    - ``post_rollback`` → ``IdempotencyStore.release()`` (tras excepción en handle o commit).
+
+    Handlers que no necesiten estos hooks simplemente NO los implementan; el
+    protocolo sigue siendo structural.
     """
 
     def handle(self, input: InT, /) -> tuple[OutT, Sequence[DomainEvent]]:
         raise NotImplementedError
+
+    def post_commit_success(self, result: OutT, /) -> None:
+        """Hook opcional: ejecuta **solo si** ``uow.commit()`` retornó sin error."""
+
+    def post_rollback(self, exc: BaseException, /) -> None:
+        """Hook opcional: ejecuta si handle() lanza o commit() lanza (antes raise)."""
 
 
 def execute_use_case(
@@ -93,18 +111,48 @@ def execute_use_case(
         dispatch/publish. Útil en tests y en extensiones de verticales.
         ``None`` (default) = usar la lista tal cual devolvió el handler.
     """
-    with unit_of_work as uow:
-        result, events = handler.handle(input)
-        # Permitir override (por lo general, se usa None; tests lo aprovechan).
-        if _collector_override is not None:
-            events = list(_collector_override(result, events))
-        uow.commit()
+    events_holder: dict[str, Sequence[DomainEvent]] = {}
+    result_holder: dict[str, OutT] = {}
+    exc_holder: dict[str, BaseException] = {}
+    try:
+        with unit_of_work as uow:
+            result, events = handler.handle(input)
+            result_holder["r"] = result
+            # Permitir override (por lo general, se usa None; tests lo aprovechan).
+            if _collector_override is not None:
+                events = list(_collector_override(result, events))
+            events_holder["e"] = events
+            uow.commit()
+    except BaseException as e:  # noqa: BLE001 - rollback semantics
+        exc_holder["x"] = e
+        # Hook de post-rollback (si existe):
+        if hasattr(handler, "post_rollback"):
+            try:
+                handler.post_rollback(e)
+            except Exception:  # noqa: BLE001 - hook failure never masks original
+                pass
+        raise
     # ---- Post-commit: aquí el uow.__exit__ ya corrió y no lanzó error ----
-    events_list = list(events)
+    # Hook de post_commit_success (si existe): IdempotencyStore.complete() etc.
+    if hasattr(handler, "post_commit_success"):
+        try:
+            handler.post_commit_success(result_holder["r"])
+        except Exception as hook_exc:
+            # Commit ya se consolidó; no hay rollback posible pero sí se reporta.
+            # En Gate 0.3 no atrapamos: propagamos para que el flujo lo note,
+            # sin perder events.
+            try:
+                events_list = list(events_holder.get("e", []))
+                if events_list:
+                    event_dispatcher.dispatch_many(events_list)
+                    event_publisher.publish_many(events_list)
+            finally:
+                raise hook_exc
+    events_list = list(events_holder.get("e", []))
     if events_list:
         event_dispatcher.dispatch_many(events_list)
         event_publisher.publish_many(events_list)
-    return result
+    return result_holder["r"]
 
 
 __all__ = [

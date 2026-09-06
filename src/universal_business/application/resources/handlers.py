@@ -6,10 +6,11 @@ Reglas implementadas (no negociables):
 - **Ningún handler llama a ``uow.commit()``**: ese paso le corresponde a
   :func:`execute_use_case` (o al orquestador superior). El handler solo hace
   orquestación + invocación de métodos de dominio + save() en repos.
-- Cross-tenant mutation DENIED: si la entidad cargada pertenece a otro
-  tenant, se levanta :class:`ApplicationError`.
-- Idempotencia: flujo ``reserve → try/complete → except/release`` usando
-  :class:`IdempotencyStore` con sus métodos de parámetros positional-only.
+- Cross-scope mutation DENIED (tenant + business): se levanta
+  :class:`ApplicationError`.
+- Idempotencia: flujo ``reserve`` en handle(), ``complete`` en
+  ``post_commit_success`` y ``release`` en ``post_rollback`` usando
+  :class:`IdempotencyStore`.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from dataclasses import asdict
 
 from universal_business.application.errors import ApplicationError
 from universal_business.application.idempotency import (
+    IdempotencyKey,
     IdempotencyStore,
 )
 from universal_business.application.messaging.handlers import (
@@ -39,7 +41,6 @@ from universal_business.application.resources.queries import (
     ListResourcesByBusiness,
     ListResourcesByLocation,
 )
-from universal_business.application.unit_of_work import UnitOfWork
 from universal_business.domain.resources.entities import (
     Resource,
 )
@@ -52,6 +53,7 @@ from universal_business.domain.resources.ports import (
 )
 from universal_business.domain.shared.events import DomainEvent
 from universal_business.domain.shared.value_objects.ids import (
+    BusinessId,
     TenantId,
 )
 
@@ -70,7 +72,6 @@ def _command_digest(command: object) -> str:
         data = asdict(command)  # type: ignore[call-overload]
     except Exception:  # noqa: BLE001 - fallback por seguridad
         data = {"cmd": type(command).__name__}
-    # Quitamos idempotency_key del digest para que no sea circular.
     data.pop("idempotency_key", None)
     return f"{type(command).__name__}:{sorted(data.items())!r}"
 
@@ -84,17 +85,20 @@ def _result_digest(result: object) -> str:
     return f"{type(result).__name__}:{result!r}"
 
 
-def _assert_same_tenant(
-    entity_tenant_id: TenantId,
-    command_tenant_id: TenantId,
+def _assert_same_scope(
     *,
+    entity_tenant_id: TenantId,
+    entity_business_id: BusinessId,
+    command_tenant_id: TenantId,
+    command_business_id: BusinessId,
     entity_label: str = "entity",
 ) -> None:
-    """Cross-tenant mutation guard (AT-9 / tenancy estricto)."""
-    if entity_tenant_id != command_tenant_id:
+    """Cross-scope mutation guard (tenant + business isolation, AT-9)."""
+    if entity_tenant_id != command_tenant_id or entity_business_id != command_business_id:
         raise ApplicationError(
-            f"Cross-tenant mutation DENIED: {entity_label} pertenece a tenant"
-            f" {entity_tenant_id} pero command usa tenant {command_tenant_id}."
+            f"Cross-tenant mutation DENIED: {entity_label} pertenece a"
+            f" tenant={entity_tenant_id} business={entity_business_id}"
+            f" pero command usa tenant={command_tenant_id} business={command_business_id}."
         )
 
 
@@ -111,149 +115,156 @@ class CreateResourceTypeHandler(
     def __init__(
         self,
         *,
-        resource_repo: IResourceRepository,
         resource_type_repo: IResourceTypeRepository,
-        uow: UnitOfWork | None = None,
         idempotency_store: IdempotencyStore | None = None,
     ) -> None:
-        self.resource_repo = resource_repo
         self.resource_type_repo = resource_type_repo
-        self.uow = uow
         self.idempotency_store = idempotency_store
+        self._idem_pending: (
+            tuple[
+                IdempotencyStore,
+                TenantId,
+                IdempotencyKey,
+                str,
+                ResourceTypeEntity,
+            ]
+            | None
+        ) = None
 
-    def handle(self, command: CreateResourceType) -> tuple[ResourceTypeEntity, list[DomainEvent]]:
+    def handle(
+        self,
+        command: CreateResourceType,
+    ) -> tuple[ResourceTypeEntity, list[DomainEvent]]:
         key = command.idempotency_key
         store = self.idempotency_store
+        tid = command.tenant_id
 
-        # --- Idempotency: reserve ---
         if key is not None and store is not None:
             req_digest = _command_digest(command)
-            if not store.reserve(command.tenant_id, key, req_digest):
-                cached = store.get(command.tenant_id, key)
+            if not store.reserve(tid, key, req_digest):
+                cached = store.get(tid, key)
                 if cached is not None:
                     cached_result = cached[1]
-                    assert isinstance(cached_result, ResourceTypeEntity)
-                    return (cached_result, [])
+                    if isinstance(cached_result, ResourceTypeEntity):
+                        return (cached_result, [])
                 raise ApplicationError(f"Idempotency key {key} ya está RESERVED por otro worker.")
+            self._idem_pending = (store, tid, key, "", None)  # type: ignore[assignment]
 
-        try:
-            rt = ResourceTypeEntity(
-                id=command.resource_type_id,
-                tenant_id=command.tenant_id,
-                business_id=command.business_id,
-                name=command.name,
-                description=command.description,
-            )
-            events = list(rt.domain_events)
-            self.resource_type_repo.save(rt)
+        rt = ResourceTypeEntity(
+            id=command.resource_type_id,
+            tenant_id=tid,
+            business_id=command.business_id,
+            name=command.name,
+            description=command.description,
+        )
+        events = list(rt.domain_events)
+        self.resource_type_repo.save(rt)
 
-            # --- Idempotency: complete ---
-            if key is not None and store is not None:
-                store.complete(
-                    command.tenant_id,
-                    key,
-                    _result_digest(rt),
-                    rt,
-                )
+        if key is not None and store is not None:
+            self._idem_pending = (store, tid, key, _result_digest(rt), rt)
 
-            return (rt, events)
-        except Exception:
-            if key is not None and store is not None:
-                store.release(command.tenant_id, key)
-            raise
+        return (rt, events)
+
+    def post_commit_success(self, result: ResourceTypeEntity, /) -> None:
+        if self._idem_pending is None:
+            return
+        (store, tid, key, digest, _res_captured) = self._idem_pending
+        self._idem_pending = None
+        store.complete(tid, key, digest, _res_captured)
+
+    def post_rollback(self, exc: BaseException, /) -> None:
+        if self._idem_pending is None:
+            return
+        (store, tid, key, _digest, _res) = self._idem_pending
+        self._idem_pending = None
+        store.release(tid, key)
 
 
 class CreateResourceHandler(CommandHandler[CreateResource, tuple[Resource, list[DomainEvent]]]):
-    """Crea un nuevo Resource.
-
-    Validación soft de resource_type:
-    - Si ``resource_type_repo`` está disponible, intenta cargar el tipo.
-    - Si lo encuentra, comprueba cross-tenant.
-    - Si NO lo encuentra (no existe o repositorio no disponible), deja pasar
-      sin error fuerte (semántica "no comprobación fuerte" del enunciado).
-    """
+    """Crea un nuevo Resource con strong validation de resource_type."""
 
     def __init__(
         self,
         *,
         resource_repo: IResourceRepository,
         resource_type_repo: IResourceTypeRepository,
-        uow: UnitOfWork | None = None,
         idempotency_store: IdempotencyStore | None = None,
     ) -> None:
         self.resource_repo = resource_repo
         self.resource_type_repo = resource_type_repo
-        self.uow = uow
         self.idempotency_store = idempotency_store
+        self._idem_pending: (
+            tuple[IdempotencyStore, TenantId, IdempotencyKey, str, Resource] | None
+        ) = None
 
     def handle(self, command: CreateResource) -> tuple[Resource, list[DomainEvent]]:
         key = command.idempotency_key
         store = self.idempotency_store
+        tid = command.tenant_id
 
         if key is not None and store is not None:
             req_digest = _command_digest(command)
-            if not store.reserve(command.tenant_id, key, req_digest):
-                cached = store.get(command.tenant_id, key)
+            if not store.reserve(tid, key, req_digest):
+                cached = store.get(tid, key)
                 if cached is not None:
                     cached_result = cached[1]
-                    assert isinstance(cached_result, Resource)
-                    return (cached_result, [])
+                    if isinstance(cached_result, Resource):
+                        return (cached_result, [])
                 raise ApplicationError(f"Idempotency key {key} ya está RESERVED por otro worker.")
+            self._idem_pending = (store, tid, key, "", None)  # type: ignore[assignment]
 
-        try:
-            # Validación soft del resource_type
-            rt = self.resource_type_repo.get(
-                tenant_id=command.tenant_id,
-                business_id=command.business_id,
-                resource_type_id=command.resource_type_id,
+        rt = self.resource_type_repo.get(
+            tenant_id=tid,
+            business_id=command.business_id,
+            resource_type_id=command.resource_type_id,
+        )
+        if rt is None:
+            raise ApplicationError(
+                f"ResourceType {command.resource_type_id} not found for tenant/business"
             )
-            if rt is not None:
-                _assert_same_tenant(
-                    rt.tenant_id,
-                    command.tenant_id,
-                    entity_label="ResourceType",
-                )
+        _assert_same_scope(
+            entity_tenant_id=rt.tenant_id,
+            entity_business_id=rt.business_id,
+            command_tenant_id=tid,
+            command_business_id=command.business_id,
+            entity_label="ResourceType",
+        )
 
-            r = Resource(
-                id=command.resource_id,
-                tenant_id=command.tenant_id,
-                business_id=command.business_id,
-                resource_type_id=command.resource_type_id,
-                name=command.name,
-                location_id=command.location_id,
-                capacity=command.capacity if command.capacity > 0 else None,
-            )
-            events = list(r.domain_events)
-            self.resource_repo.save(r)
+        r = Resource(
+            id=command.resource_id,
+            tenant_id=tid,
+            business_id=command.business_id,
+            resource_type_id=command.resource_type_id,
+            name=command.name,
+            location_id=command.location_id,
+            capacity=command.capacity if command.capacity > 0 else None,
+        )
+        events = list(r.domain_events)
+        self.resource_repo.save(r)
 
-            if key is not None and store is not None:
-                store.complete(
-                    command.tenant_id,
-                    key,
-                    _result_digest(r),
-                    r,
-                )
+        if key is not None and store is not None:
+            self._idem_pending = (store, tid, key, _result_digest(r), r)
 
-            return (r, events)
-        except Exception:
-            if key is not None and store is not None:
-                store.release(command.tenant_id, key)
-            raise
+        return (r, events)
+
+    def post_commit_success(self, result: Resource, /) -> None:
+        if self._idem_pending is None:
+            return
+        (store, tid, key, digest, _res_captured) = self._idem_pending
+        self._idem_pending = None
+        store.complete(tid, key, digest, _res_captured)
+
+    def post_rollback(self, exc: BaseException, /) -> None:
+        if self._idem_pending is None:
+            return
+        (store, tid, key, _digest, _res) = self._idem_pending
+        self._idem_pending = None
+        store.release(tid, key)
 
 
 class ActivateResourceHandler(CommandHandler[ActivateResource, tuple[Resource, list[DomainEvent]]]):
-    def __init__(
-        self,
-        *,
-        resource_repo: IResourceRepository,
-        resource_type_repo: IResourceTypeRepository,
-        uow: UnitOfWork | None = None,
-        idempotency_store: IdempotencyStore | None = None,
-    ) -> None:
+    def __init__(self, *, resource_repo: IResourceRepository) -> None:
         self.resource_repo = resource_repo
-        self.resource_type_repo = resource_type_repo
-        self.uow = uow
-        self.idempotency_store = idempotency_store
 
     def handle(self, command: ActivateResource) -> tuple[Resource, list[DomainEvent]]:
         r = self.resource_repo.get(
@@ -261,8 +272,15 @@ class ActivateResourceHandler(CommandHandler[ActivateResource, tuple[Resource, l
             business_id=command.business_id,
             resource_id=command.resource_id,
         )
-        assert r is not None, "Resource no encontrado"
-        _assert_same_tenant(r.tenant_id, command.tenant_id, entity_label="Resource")
+        if r is None:
+            raise ApplicationError(f"Resource {command.resource_id} not found")
+        _assert_same_scope(
+            entity_tenant_id=r.tenant_id,
+            entity_business_id=r.business_id,
+            command_tenant_id=command.tenant_id,
+            command_business_id=command.business_id,
+            entity_label="Resource",
+        )
         r.clear_domain_events()
         r.activate()
         events = list(r.domain_events)
@@ -273,18 +291,8 @@ class ActivateResourceHandler(CommandHandler[ActivateResource, tuple[Resource, l
 class DeactivateResourceHandler(
     CommandHandler[DeactivateResource, tuple[Resource, list[DomainEvent]]]
 ):
-    def __init__(
-        self,
-        *,
-        resource_repo: IResourceRepository,
-        resource_type_repo: IResourceTypeRepository,
-        uow: UnitOfWork | None = None,
-        idempotency_store: IdempotencyStore | None = None,
-    ) -> None:
+    def __init__(self, *, resource_repo: IResourceRepository) -> None:
         self.resource_repo = resource_repo
-        self.resource_type_repo = resource_type_repo
-        self.uow = uow
-        self.idempotency_store = idempotency_store
 
     def handle(self, command: DeactivateResource) -> tuple[Resource, list[DomainEvent]]:
         r = self.resource_repo.get(
@@ -292,8 +300,15 @@ class DeactivateResourceHandler(
             business_id=command.business_id,
             resource_id=command.resource_id,
         )
-        assert r is not None, "Resource no encontrado"
-        _assert_same_tenant(r.tenant_id, command.tenant_id, entity_label="Resource")
+        if r is None:
+            raise ApplicationError(f"Resource {command.resource_id} not found")
+        _assert_same_scope(
+            entity_tenant_id=r.tenant_id,
+            entity_business_id=r.business_id,
+            command_tenant_id=command.tenant_id,
+            command_business_id=command.business_id,
+            entity_label="Resource",
+        )
         r.clear_domain_events()
         r.deactivate()
         events = list(r.domain_events)
@@ -302,18 +317,8 @@ class DeactivateResourceHandler(
 
 
 class ArchiveResourceHandler(CommandHandler[ArchiveResource, tuple[Resource, list[DomainEvent]]]):
-    def __init__(
-        self,
-        *,
-        resource_repo: IResourceRepository,
-        resource_type_repo: IResourceTypeRepository,
-        uow: UnitOfWork | None = None,
-        idempotency_store: IdempotencyStore | None = None,
-    ) -> None:
+    def __init__(self, *, resource_repo: IResourceRepository) -> None:
         self.resource_repo = resource_repo
-        self.resource_type_repo = resource_type_repo
-        self.uow = uow
-        self.idempotency_store = idempotency_store
 
     def handle(self, command: ArchiveResource) -> tuple[Resource, list[DomainEvent]]:
         r = self.resource_repo.get(
@@ -321,8 +326,15 @@ class ArchiveResourceHandler(CommandHandler[ArchiveResource, tuple[Resource, lis
             business_id=command.business_id,
             resource_id=command.resource_id,
         )
-        assert r is not None, "Resource no encontrado"
-        _assert_same_tenant(r.tenant_id, command.tenant_id, entity_label="Resource")
+        if r is None:
+            raise ApplicationError(f"Resource {command.resource_id} not found")
+        _assert_same_scope(
+            entity_tenant_id=r.tenant_id,
+            entity_business_id=r.business_id,
+            command_tenant_id=command.tenant_id,
+            command_business_id=command.business_id,
+            entity_label="Resource",
+        )
         r.clear_domain_events()
         r.archive()
         events = list(r.domain_events)
@@ -333,18 +345,8 @@ class ArchiveResourceHandler(CommandHandler[ArchiveResource, tuple[Resource, lis
 class AssignResourceToLocationHandler(
     CommandHandler[AssignResourceToLocation, tuple[Resource, list[DomainEvent]]]
 ):
-    def __init__(
-        self,
-        *,
-        resource_repo: IResourceRepository,
-        resource_type_repo: IResourceTypeRepository,
-        uow: UnitOfWork | None = None,
-        idempotency_store: IdempotencyStore | None = None,
-    ) -> None:
+    def __init__(self, *, resource_repo: IResourceRepository) -> None:
         self.resource_repo = resource_repo
-        self.resource_type_repo = resource_type_repo
-        self.uow = uow
-        self.idempotency_store = idempotency_store
 
     def handle(self, command: AssignResourceToLocation) -> tuple[Resource, list[DomainEvent]]:
         r = self.resource_repo.get(
@@ -352,8 +354,15 @@ class AssignResourceToLocationHandler(
             business_id=command.business_id,
             resource_id=command.resource_id,
         )
-        assert r is not None, "Resource no encontrado"
-        _assert_same_tenant(r.tenant_id, command.tenant_id, entity_label="Resource")
+        if r is None:
+            raise ApplicationError(f"Resource {command.resource_id} not found")
+        _assert_same_scope(
+            entity_tenant_id=r.tenant_id,
+            entity_business_id=r.business_id,
+            command_tenant_id=command.tenant_id,
+            command_business_id=command.business_id,
+            entity_label="Resource",
+        )
         r.clear_domain_events()
         r.assign_to_location(command.new_location_id)
         events = list(r.domain_events)
@@ -367,41 +376,20 @@ class AssignResourceToLocationHandler(
 
 
 class GetResourceHandler(QueryHandler[GetResource, Resource | None]):
-    def __init__(
-        self,
-        *,
-        resource_repo: IResourceRepository,
-        resource_type_repo: IResourceTypeRepository,
-        uow: UnitOfWork | None = None,
-        idempotency_store: IdempotencyStore | None = None,
-    ) -> None:
+    def __init__(self, *, resource_repo: IResourceRepository) -> None:
         self.resource_repo = resource_repo
-        self.resource_type_repo = resource_type_repo
-        self.uow = uow
-        self.idempotency_store = idempotency_store
 
     def handle(self, query: GetResource) -> Resource | None:
-        r = self.resource_repo.get(
+        return self.resource_repo.get(
             tenant_id=query.tenant_id,
             business_id=query.business_id,
             resource_id=query.resource_id,
         )
-        return r
 
 
 class ListResourcesByBusinessHandler(QueryHandler[ListResourcesByBusiness, list[Resource]]):
-    def __init__(
-        self,
-        *,
-        resource_repo: IResourceRepository,
-        resource_type_repo: IResourceTypeRepository,
-        uow: UnitOfWork | None = None,
-        idempotency_store: IdempotencyStore | None = None,
-    ) -> None:
+    def __init__(self, *, resource_repo: IResourceRepository) -> None:
         self.resource_repo = resource_repo
-        self.resource_type_repo = resource_type_repo
-        self.uow = uow
-        self.idempotency_store = idempotency_store
 
     def handle(self, query: ListResourcesByBusiness) -> list[Resource]:
         return self.resource_repo.list_by_business(
@@ -414,18 +402,8 @@ class ListResourcesByBusinessHandler(QueryHandler[ListResourcesByBusiness, list[
 
 
 class ListResourcesByLocationHandler(QueryHandler[ListResourcesByLocation, list[Resource]]):
-    def __init__(
-        self,
-        *,
-        resource_repo: IResourceRepository,
-        resource_type_repo: IResourceTypeRepository,
-        uow: UnitOfWork | None = None,
-        idempotency_store: IdempotencyStore | None = None,
-    ) -> None:
+    def __init__(self, *, resource_repo: IResourceRepository) -> None:
         self.resource_repo = resource_repo
-        self.resource_type_repo = resource_type_repo
-        self.uow = uow
-        self.idempotency_store = idempotency_store
 
     def handle(self, query: ListResourcesByLocation) -> list[Resource]:
         return self.resource_repo.list_by_location(
@@ -437,18 +415,8 @@ class ListResourcesByLocationHandler(QueryHandler[ListResourcesByLocation, list[
 
 
 class ListActiveResourcesHandler(QueryHandler[ListActiveResources, list[Resource]]):
-    def __init__(
-        self,
-        *,
-        resource_repo: IResourceRepository,
-        resource_type_repo: IResourceTypeRepository,
-        uow: UnitOfWork | None = None,
-        idempotency_store: IdempotencyStore | None = None,
-    ) -> None:
+    def __init__(self, *, resource_repo: IResourceRepository) -> None:
         self.resource_repo = resource_repo
-        self.resource_type_repo = resource_type_repo
-        self.uow = uow
-        self.idempotency_store = idempotency_store
 
     def handle(self, query: ListActiveResources) -> list[Resource]:
         return self.resource_repo.list_active(
@@ -462,18 +430,8 @@ class ListActiveResourcesHandler(QueryHandler[ListActiveResources, list[Resource
 class ListResourceTypesByBusinessHandler(
     QueryHandler[ListResourceTypesByBusiness, list[ResourceTypeEntity]]
 ):
-    def __init__(
-        self,
-        *,
-        resource_repo: IResourceRepository,
-        resource_type_repo: IResourceTypeRepository,
-        uow: UnitOfWork | None = None,
-        idempotency_store: IdempotencyStore | None = None,
-    ) -> None:
-        self.resource_repo = resource_repo
+    def __init__(self, *, resource_type_repo: IResourceTypeRepository) -> None:
         self.resource_type_repo = resource_type_repo
-        self.uow = uow
-        self.idempotency_store = idempotency_store
 
     def handle(self, query: ListResourceTypesByBusiness) -> list[ResourceTypeEntity]:
         return self.resource_type_repo.list_by_business(

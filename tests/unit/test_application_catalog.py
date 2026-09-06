@@ -843,26 +843,26 @@ def test_list_active_offerings_returns_only_active() -> None:
 
     # Sin filtro de location → 2 ACTIVE (A1 + B1)
     q_all = ListActiveOfferings(tenant_id=tid, business_id=bid)
-    result_all, _ = handler.handle(q_all)
+    result_all = handler.handle(q_all)
     assert len(result_all) == 2
     names_all = {o.name for o in result_all}
     assert names_all == {"A1", "B1"}
 
     # Filtrado por loc_a → solo A1
     q_a = ListActiveOfferings(tenant_id=tid, business_id=bid, location_id=loc_a)
-    result_a, _ = handler.handle(q_a)
+    result_a = handler.handle(q_a)
     assert len(result_a) == 1
     assert result_a[0].name == "A1"
 
     # Filtrado por loc_b → solo B1
     q_b = ListActiveOfferings(tenant_id=tid, business_id=bid, location_id=loc_b)
-    result_b, _ = handler.handle(q_b)
+    result_b = handler.handle(q_b)
     assert len(result_b) == 1
     assert result_b[0].name == "B1"
 
 
 def test_get_offering_not_found_returns_none() -> None:
-    """GetOffering sobre id inexistente devuelve None + events vacíos."""
+    """GetOffering sobre id inexistente devuelve None."""
     tid = TenantId.generate()
     bid = BusinessId.generate()
     repo = FakeOfferingRepository()
@@ -872,9 +872,8 @@ def test_get_offering_not_found_returns_none() -> None:
         business_id=bid,
         offering_id=OfferingId.generate(),
     )
-    result, events = handler.handle(q)
+    result = handler.handle(q)
     assert result is None
-    assert events == []
 
 
 # ============================================================================

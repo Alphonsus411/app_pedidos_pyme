@@ -128,8 +128,8 @@ Monolito modular DDD con capas segregadas. Dirección única de dependencias:
 | E27. Entidad OfferingResourceRequirement (relación Offering ↔ ResourceType con quantity_required >= 1) | ✅ | Gate 0.3 |
 | E28. Entidad ResourceType ENTITY configurable (no enum), status lifecycle propio | ✅ | Gate 0.3 |
 | E29. Entidad Resource (resource_type_id obligatorio, location_id opcional, status ACTIVE/INACTIVE/MAINTENANCE/RETIRED/ARCHIVED, assign_to_location method) | ✅ | Gate 0.3 |
-| E30. 14 Domain Events de catalog + resources (Created/Updated/StatusChanged/Archived…) | ✅ | Gate 0.3 |
-| E31. Application: 12 Commands frozen (catalog 7 + resources 5), 10 Queries frozen, 22 Handlers con UnitOfWork + IdempotencyStore en creates | ✅ | Gate 0.3 |
+| E30. 12 Domain Events de catalog + resources (6 catalog: OfferingCreated/OfferingActivated/OfferingDeactivated/OfferingArchived/OfferingPriceChanged/CatalogCategoryCreated; 6 resources: ResourceTypeCreated/ResourceCreated/ResourceActivated/ResourceDeactivated/ResourceArchived/ResourceAssignedToLocation) | ✅ | Gate 0.3 |
+| E31. Application: 12 Commands frozen (catalog 7 + resources 5), 10 Queries frozen, 22 Handlers. El UnitOfWork pertenece al orquestador execute_use_case de la capa application/execution; los handlers de catalog/resources NO entran ni salen del context-manager de UnitOfWork y NUNCA invocan uow.commit(). El commit es exclusivo de execute_use_case. Creates usan IdempotencyStore con hooks post_commit_success/post_rollback. | ✅ | Gate 0.3 |
 | E32. Ports actualizados: ICatalogRepository y IResourceRepository con nuevas operaciones | ✅ | Gate 0.3 |
 | E33. ~64 tests unitarios nuevos (dominio catalog+resources + aplicación catalog+resources) — total acumulado ~572 tests | ✅ | Gate 0.3 |
 | E34. ADR-010: Offering como abstracción universal de catálogo (paralelo a CatalogItem legacy) | ✅ | Gate 0.3 |
@@ -173,7 +173,7 @@ Registro de decisiones: ADR-008 (application transaction semantics), ADR-009 (di
 
 | Gate | Alcance | Estado | Fecha |
 |---|---|---|---|
-| **Gate 0.3** | Entidades dominio: Offering (agregado universal), CatalogCategory, OfferingResourceRequirement, ResourceType (ENTITY configurable no enum), Resource (location_id opcional, assign_to_location). Domain Events catalog+resources (14). Application: 12 Commands frozen + 10 Queries frozen + 22 Handlers (UoW + IdempotencyStore en creates). Ports actualizados ICatalogRepository/IResourceRepository. Tests dominio+aplicación (~64 nuevos, total ~572). ADR-010 Offering universal. | ✅ **DONE / APROBADO** | 06-sep-2026 |
+| **Gate 0.3** | Entidades dominio: Offering (agregado universal), CatalogCategory, OfferingResourceRequirement, ResourceType (ENTITY configurable no enum), Resource (location_id opcional, assign_to_location). Domain Events catalog+resources total 12 (6 catalog: OfferingCreated/OfferingActivated/OfferingDeactivated/OfferingArchived/OfferingPriceChanged/CatalogCategoryCreated; 6 resources: ResourceTypeCreated/ResourceCreated/ResourceActivated/ResourceDeactivated/ResourceArchived/ResourceAssignedToLocation). Application: 12 Commands frozen + 10 Queries frozen + 22 Handlers. El UnitOfWork pertenece al orquestador execute_use_case de la capa application/execution; los handlers de catalog/resources NO entran ni salen del context-manager de UnitOfWork y NUNCA invocan uow.commit(). El commit es exclusivo de execute_use_case. Creates usan IdempotencyStore con hooks post_commit_success/post_rollback. Ports actualizados ICatalogRepository/IResourceRepository. Tests dominio+aplicación (~64 nuevos, total ~572). ADR-010 Offering universal. | ✅ **DONE / APROBADO** | 06-sep-2026 |
 
 Criterios de aceptación §33 del `plan_entrega_0.3_catalog_resources.md` cumplidos.
 Registro de decisiones: ADR-010 (Offering como abstracción universal de catálogo).
@@ -249,8 +249,9 @@ src/universal_business/
 │   │   ├── entities.py       ← Offering (DRAFT/ACTIVE/INACTIVE/ARCHIVED, base_price Money opc,
 │   │   │                       location_ids frozenset scope), CatalogCategory (parent_category_id opc,
 │   │   │                       self-parent invalid), OfferingResourceRequirement (quantity_required >= 1)
-│   │   ├── events.py         ← 8 eventos: OfferingCreated/Updated/StatusChanged/Archived,
-│   │   │                       CatalogCategoryCreated/Updated, OfferingResourceRequirementAdded
+│   │   ├── events.py         ← 6 eventos catalog: OfferingCreated, OfferingActivated,
+│   │   │                       OfferingDeactivated, OfferingArchived, OfferingPriceChanged,
+│   │   │                       CatalogCategoryCreated
 │   │   ├── ports.py          ← ICatalogRepository (Offering, Category, Requirement ops)
 │   │   └── value_objects.py  ← VOs específicos catalog (ej. OfferingStatus, etc.)
 │   ├── resources/            ← GATE 0.3 REAL IMPLEMENTATION: ResourceType ENTITY configurable, Resource.
@@ -259,8 +260,9 @@ src/universal_business/
 │   │   ├── entities.py       ← ResourceType (ENTITY no-enum, status lifecycle),
 │   │   │                       Resource (resource_type_id oblig, location_id opc,
 │   │   │                       status ACTIVE/INACTIVE/MAINTENANCE/RETIRED/ARCHIVED, assign_to_location method)
-│   │   ├── events.py         ← 6 eventos: ResourceTypeCreated/Updated/StatusChanged,
-│   │   │                       ResourceCreated/Updated/StatusChanged
+│   │   ├── events.py         ← 6 eventos resources: ResourceTypeCreated, ResourceCreated,
+│   │   │                       ResourceActivated, ResourceDeactivated, ResourceArchived,
+│   │   │                       ResourceAssignedToLocation
 │   │   ├── ports.py          ← IResourceRepository (ResourceType y Resource ops)
 │   │   └── value_objects.py  ← VOs específicos resources (ej. ResourceStatus, ResourceTypeStatus)
 │   ├── availability/         ← Rule/Block mínimos + ports (sin cambios, skeleton)
@@ -333,10 +335,10 @@ explícito aprobado**:
 - ✅ OfferingResourceRequirement (relación Offering ↔ ResourceType, quantity_required >= 1)
 - ✅ ResourceType ENTITY configurable (no enum, no discriminador cerrado)
 - ✅ Resource (resource_type_id oblig, location_id opc, status ACTIVE/INACTIVE/MAINTENANCE/RETIRED/ARCHIVED, assign_to_location)
-- ✅ 14 Domain Events catalog + resources (Created/Updated/StatusChanged/Archived…)
+- ✅ 12 Domain Events catalog + resources (6 catalog: OfferingCreated/OfferingActivated/OfferingDeactivated/OfferingArchived/OfferingPriceChanged/CatalogCategoryCreated; 6 resources: ResourceTypeCreated/ResourceCreated/ResourceActivated/ResourceDeactivated/ResourceArchived/ResourceAssignedToLocation)
 - ✅ 12 Application Commands frozen (catalog 7 + resources 5)
 - ✅ 10 Application Queries frozen (catalog 5 + resources 5)
-- ✅ 22 Application Handlers con UnitOfWork + IdempotencyStore en operaciones de create
+- ✅ 22 Application Handlers. El UnitOfWork pertenece al orquestador execute_use_case de la capa application/execution; los handlers de catalog/resources NO entran ni salen del context-manager de UnitOfWork y NUNCA invocan uow.commit(). El commit es exclusivo de execute_use_case. Operaciones de create usan IdempotencyStore con hooks post_commit_success/post_rollback.
 - ✅ CatalogItem legacy MANTENIDO intacto (no eliminado) — Offering paralelo (ADR-010)
 - ✅ Tests dominio (Offering/Category/Requirement + ResourceType/Resource)
 - ✅ Tests aplicación (catalog commands/queries/handlers + resources commands/queries/handlers)
@@ -389,7 +391,7 @@ explícito aprobado**:
 | **0.1 Architectural Baseline** | Dominio + VOs + Entidades + Ports + Tests AT-1..AT-9 + CI + Docs | ✅ COMPLETE / DONE |
 | **0.1-RC1 Hardening** | Tenancy explícita, Currency sin whitelist, metadata inmutable, mypy strict global | ✅ COMPLETE / DONE |
 | **0.2 Foundation / Application Layer** | Commands/Queries, Handlers, UnitOfWork Port, Idempotency, Event Dispatcher, EventPublisher Port, UseCase Execution, Vertical Extensions, AT-11/12/13/17 | ✅ COMPLETE / DONE |
-| **0.3 Catalog & Resources** | **Offering** agregado universal (DRAFT/ACTIVE/INACTIVE/ARCHIVED, base_price Money opc, scope location_ids frozenset). **CatalogCategory** (parent opc, self-parent inválido). **OfferingResourceRequirement** (quantity_required ≥1). **ResourceType ENTITY configurable no-enum**. **Resource** (resource_type_id oblig, location_id opc, 5-status lifecycle, assign_to_location). 14 Domain Events. 12 Commands + 10 Queries + 22 Handlers (UoW + Idempotency en creates). Ports ICatalog + IResource actualizados. Tests ~64 nuevos (total ~572). ADR-010. | ✅ **COMPLETE / DONE** |
+| **0.3 Catalog & Resources** | **Offering** agregado universal (DRAFT/ACTIVE/INACTIVE/ARCHIVED, base_price Money opc, scope location_ids frozenset). **CatalogCategory** (parent opc, self-parent inválido). **OfferingResourceRequirement** (quantity_required ≥1). **ResourceType ENTITY configurable no-enum**. **Resource** (resource_type_id oblig, location_id opc, 5-status lifecycle, assign_to_location). 12 Domain Events (6 catalog: OfferingCreated/OfferingActivated/OfferingDeactivated/OfferingArchived/OfferingPriceChanged/CatalogCategoryCreated; 6 resources: ResourceTypeCreated/ResourceCreated/ResourceActivated/ResourceDeactivated/ResourceArchived/ResourceAssignedToLocation). 12 Commands + 10 Queries + 22 Handlers. El UnitOfWork pertenece al orquestador execute_use_case de la capa application/execution; los handlers de catalog/resources NO entran ni salen del context-manager de UnitOfWork y NUNCA invocan uow.commit(). El commit es exclusivo de execute_use_case. Creates usan IdempotencyStore con hooks post_commit_success/post_rollback. Ports ICatalog + IResource actualizados. Tests ~64 nuevos (total ~572). ADR-010. | ✅ **COMPLETE / DONE** |
 | **0.4 Orders & Reservations** | Ciclo completo Order / Reservation / OrderLine / Tax / Discount / status lifecycle / cross-references with Offering + Resource + Availability | ⚪ NOT STARTED |
 | **0.5 API & Persistence** | FastAPI (endpoints), SQLAlchemy (models/mappings), PostgreSQL, outbox físico, repositories concretos, migrations (Alembic) | ⚪ NOT STARTED |
 | **0.6 First Vertical** | Ej. pica-pollo u otro TBD: seed data, business rules sector, vertical extension concrete | ⚪ NOT STARTED |

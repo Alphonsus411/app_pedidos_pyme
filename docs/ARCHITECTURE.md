@@ -231,11 +231,9 @@ Emite `OfferingResourceRequirementAdded`.
 Restricción: `offering_id` y `resource_type_id` deben pertenecer al mismo
 `tenant_id` / `business_id`.
 
-### Events del módulo catalog (8)
-`OfferingCreated`, `OfferingUpdated`, `OfferingStatusChanged`, `OfferingArchived`,
-`CatalogCategoryCreated`, `CatalogCategoryUpdated`,
-`OfferingResourceRequirementAdded`, (y cualquier evento adicional específico
-de requirements si aplica).
+### Events del módulo catalog (6)
+`OfferingCreated`, `OfferingActivated`, `OfferingDeactivated`, `OfferingArchived`,
+`OfferingPriceChanged`, `CatalogCategoryCreated`.
 
 ### Application Layer — Catalog (Gate 0.3)
 Paquete: `src/universal_business/application/catalog/`.
@@ -252,8 +250,15 @@ Paquete: `src/universal_business/application/catalog/`.
   `ListOfferingResourceRequirementsQuery`
 
 **Handlers (12 total, 7 cmd + 5 qry):**
-- Todos los create handlers usan **UnitOfWork + IdempotencyStore** (idempotency_key/tenant_id).
-- Todos usan el patrón `execute_use_case` (UoW → commit → dispatch → publish).
+- El UnitOfWork pertenece al orquestador `execute_use_case` de la capa
+  `application/execution`; los handlers de catalog/resources NO entran ni
+  salen del context-manager de UnitOfWork y NUNCA invocan `uow.commit()`.
+  El commit es exclusivo de `execute_use_case`.
+- Los create handlers usan **IdempotencyStore** con hooks opcionales
+  `post_commit_success` (para `IdempotencyStore.complete()`) y `post_rollback`
+  (para `IdempotencyStore.release()`), invocados por `execute_use_case`.
+- Todos usan el patrón `execute_use_case` (UoW enter → handler.handle →
+  uow.commit → exit UoW → dispatcher.dispatch_many → publisher.publish_many).
 
 ---
 
@@ -303,8 +308,8 @@ Métodos destacados:
 Emite `ResourceCreated`, `ResourceUpdated`, `ResourceStatusChanged`.
 
 ### Events del módulo resources (6)
-`ResourceTypeCreated`, `ResourceTypeUpdated`, `ResourceTypeStatusChanged`,
-`ResourceCreated`, `ResourceUpdated`, `ResourceStatusChanged`.
+`ResourceTypeCreated`, `ResourceCreated`, `ResourceActivated`,
+`ResourceDeactivated`, `ResourceArchived`, `ResourceAssignedToLocation`.
 
 ### Application Layer — Resources (Gate 0.3)
 Paquete: `src/universal_business/application/resources/`.
@@ -318,8 +323,14 @@ Paquete: `src/universal_business/application/resources/`.
   `GetResourceByIdQuery`, `ListResourcesQuery`, `ListResourcesByTypeQuery`
 
 **Handlers (10 total, 5 cmd + 5 qry):**
-- Create handlers usan **UnitOfWork + IdempotencyStore**.
-- Resto usa UnitOfWork (sin idempotency obligatorio para updates/queries).
+- El UnitOfWork pertenece al orquestador `execute_use_case` de la capa
+  `application/execution`; los handlers de catalog/resources NO entran ni
+  salen del context-manager de UnitOfWork y NUNCA invocan `uow.commit()`.
+  El commit es exclusivo de `execute_use_case`.
+- Create handlers usan **IdempotencyStore** con hooks `post_commit_success`/
+  `post_rollback` gestionados por `execute_use_case`.
+- Resto usa `execute_use_case` con UoW gestionado por el orquestador (sin
+  idempotency obligatorio para updates/queries).
 
 ---
 
@@ -407,11 +418,11 @@ calidad de código).
 | Capa | Qué se entrega (Gate 0.3) | Qué NO se entrega (FASE ≥0.4) |
 |---|---|---|
 | **domain.catalog (entities)** | ✅ `Offering` agregado universal (4-status lifecycle DRAFT/ACTIVE/INACTIVE/ARCHIVED, base_price Money opcional, scope location_ids frozenset). ✅ `CatalogCategory` parent_category_id opcional + self-parent inválido. ✅ `OfferingResourceRequirement` relación Offering↔ResourceType, quantity_required ≥ 1. ✅ `CatalogItem` legacy MANTENIDO intacto sin borrar. | Pricing SKU avanzado, variantes multi-atributo, bundles, inventario real por Offering. |
-| **domain.catalog (events / VO / ports)** | ✅ 8 events: Offering Created/Updated/StatusChanged/Archived; CatalogCategory Created/Updated; OfferingResourceRequirementAdded. ✅ `ICatalogRepository` Protocol actualizado con operaciones para Offering, Category, Requirement. ✅ VOs específicos (OfferingStatus, CatalogCategoryId, etc.). | |
+| **domain.catalog (events / VO / ports)** | ✅ 6 events catalog: OfferingCreated, OfferingActivated, OfferingDeactivated, OfferingArchived, OfferingPriceChanged, CatalogCategoryCreated. ✅ `ICatalogRepository` Protocol actualizado con operaciones para Offering, Category, Requirement. ✅ VOs específicos (OfferingStatus, CatalogCategoryId, etc.). | |
 | **domain.resources (entities)** | ✅ `ResourceType` ENTITY configurable (NO enum, no discriminador cerrado). ✅ `Resource` entity: resource_type_id OBLIGATORIO, location_id OPCIONAL (None = business-wide). ✅ Resource lifecycle 5 estados: ACTIVE/INACTIVE/MAINTENANCE/RETIRED/ARCHIVED. ✅ `assign_to_location(location_id)` method. | Capacidad real por calendario; pools de recursos; dependencias complejas ResourceGraph. |
-| **domain.resources (events / VO / ports)** | ✅ 6 events: ResourceType Created/Updated/StatusChanged; Resource Created/Updated/StatusChanged. ✅ `IResourceRepository` Protocol actualizado (ResourceType + Resource operations). ✅ VOs específicos (ResourceTypeId, ResourceId, ResourceStatus, ResourceTypeStatus…). | |
-| **application.catalog** | ✅ 7 Commands frozen dataclass kw_only immutable (CreateOffering, UpdateOffering, ChangeOfferingStatus, ArchiveOffering, CreateCatalogCategory, UpdateCatalogCategory, AddOfferingResourceRequirement). ✅ 5 Queries frozen. ✅ 12 Handlers (7 cmd + 5 qry) con **UnitOfWork + IdempotencyStore en creates**. | Búsqueda full-text; filtros complejos por atributos; paginación avanzada cursors. |
-| **application.resources** | ✅ 5 Commands frozen (CreateResourceType, UpdateResourceType, CreateResource, UpdateResource, ChangeResourceStatus). ✅ 5 Queries frozen. ✅ 10 Handlers (5 cmd + 5 qry) con UoW + Idempotency en creates. | |
+| **domain.resources (events / VO / ports)** | ✅ 6 events resources: ResourceTypeCreated, ResourceCreated, ResourceActivated, ResourceDeactivated, ResourceArchived, ResourceAssignedToLocation. ✅ `IResourceRepository` Protocol actualizado (ResourceType + Resource operations). ✅ VOs específicos (ResourceTypeId, ResourceId, ResourceStatus, ResourceTypeStatus…). | |
+| **application.catalog** | ✅ 7 Commands frozen dataclass kw_only immutable (CreateOffering, UpdateOffering, ChangeOfferingStatus, ArchiveOffering, CreateCatalogCategory, UpdateCatalogCategory, AddOfferingResourceRequirement). ✅ 5 Queries frozen. ✅ 12 Handlers (7 cmd + 5 qry). El UnitOfWork pertenece al orquestador execute_use_case de la capa application/execution; los handlers de catalog/resources NO entran ni salen del context-manager de UnitOfWork y NUNCA invocan uow.commit(). El commit es exclusivo de execute_use_case. Creates usan IdempotencyStore con hooks post_commit_success/post_rollback. | Búsqueda full-text; filtros complejos por atributos; paginación avanzada cursors. |
+| **application.resources** | ✅ 5 Commands frozen (CreateResourceType, UpdateResourceType, CreateResource, UpdateResource, ChangeResourceStatus). ✅ 5 Queries frozen. ✅ 10 Handlers (5 cmd + 5 qry). El UnitOfWork pertenece al orquestador execute_use_case de la capa application/execution; los handlers NO invocan uow.commit(). Creates usan IdempotencyStore con hooks post_commit_success/post_rollback. | |
 | **dominio restante (business/customers/availability/reservations/orders/fulfillment)** | **INTACTO** (sin cambios respecto a Gate 0.2). Skeleton modules se mantienen. | Implementación real (Gates 0.4+). |
 | **infrastructure** | SOLO `__init__.py` — SIN CAMBIOS. | Cualquier implementación concreta (SQLAlchemy, Redis, etc.). |
 | **api** | SOLO `__init__.py` — SIN CAMBIOS. | FastAPI / endpoints / Pydantic / OpenAPI. |

@@ -81,22 +81,24 @@ Availability → ResourceType/Resource).
 - Método `assign_to_location(location_id)`: valida que `(tenant_id, business_id)` de la location
   coincida; permite `None` (desasignar).
 
-### F. Domain Events — módulo `catalog/` (8 eventos)
-- `OfferingCreated` (agregado completo).
-- `OfferingUpdated` (delta de campos editables).
-- `OfferingStatusChanged` (from_status → to_status).
-- `OfferingArchived` (timestamp + motivo si aplica).
+### F. Domain Events — módulo `catalog/` (6 eventos)
+- `OfferingCreated`.
+- `OfferingActivated`.
+- `OfferingDeactivated`.
+- `OfferingArchived`.
+- `OfferingPriceChanged`.
 - `CatalogCategoryCreated`.
-- `CatalogCategoryUpdated`.
-- `OfferingResourceRequirementAdded`.
-- (Evento extra de Category reparent si se implementa explicitamente).
 
 Todos: frozen dataclass, `event_id` UUID, `occurred_at` aware UTC, `aggregate_id`,
 `aggregate_type`, `tenant_id`, `business_id`, `metadata MappingProxyType`.
 
 ### G. Domain Events — módulo `resources/` (6 eventos)
-- `ResourceTypeCreated`, `ResourceTypeUpdated`, `ResourceTypeStatusChanged`.
-- `ResourceCreated`, `ResourceUpdated`, `ResourceStatusChanged`.
+- `ResourceTypeCreated`.
+- `ResourceCreated`.
+- `ResourceActivated`.
+- `ResourceDeactivated`.
+- `ResourceArchived`.
+- `ResourceAssignedToLocation`.
 
 Mismos requisitos de inmutabilidad y metadata que F.
 
@@ -152,13 +154,25 @@ Todos frozen dataclass, heredan de `Query`.
 - `ListResourcesByTypeQuery` (tenant/business + resource_type_id).
 
 ### N. Application Handlers (22 total)
+**IMPORTANTE — Semántica UoW (no negociable):**
+El UnitOfWork pertenece al orquestador `execute_use_case` de la capa
+`application/execution`; los handlers de catalog/resources NO entran ni salen
+del context-manager de UnitOfWork y NUNCA invocan `uow.commit()`. El commit
+es exclusivo de `execute_use_case`. Los handlers declaran dependencias de
+**Repositorios** (no de UnitOfWork directamente).
+
 TODOS los handlers de **create** deben:
-1. Declarar dependencias `UnitOfWork` + `IdempotencyStore` Protocol (no concreta).
-2. Hacer `IdempotencyStore.reserve(key, tenant_id/)` antes de escribir.
+1. Declarar dependencias de Repositorios concretos + `IdempotencyStore` Protocol.
+2. Hacer `IdempotencyStore.reserve(key, tenant_id/)` al principio de `handle()`.
 3. Ejecutar dentro de `execute_use_case` helper (ADR-008):
-   UoW enter → handler.handle → uow.commit → exit UoW → dispatcher.dispatch_many →
+   UoW enter → handler.handle → uow.commit → exit UoW →
+   `post_commit_success(result)` hook → dispatcher.dispatch_many →
    publisher.publish_many → return result.
-4. Manejar `IdempotencyConflictError` y `ApplicationError` jerarquía.
+   Si handle() o commit() lanzan: `post_rollback(exc)` hook.
+4. Implementar hooks opcionales:
+   - `post_commit_success(result)` → `IdempotencyStore.complete()` (tras commit OK).
+   - `post_rollback(exc)` → `IdempotencyStore.release()` (tras excepción).
+5. Manejar `IdempotencyConflictError` y `ApplicationError` jerarquía.
 
 Breakdown:
 - **catalog handlers (12):** 7 command handlers + 5 query handlers.
@@ -334,16 +348,16 @@ Criterios contractuales. **Para aprobar Gate 0.3 los 33 deben ser TRUE.**
 - G22. `resource.assign_to_location(None)` des-asigna y retorna sin error.
 
 **Events & VO (G23..G25)**
-- G23. 14 eventos catalog+resources son frozen dataclass, occurent_at tz-aware UTC.
+- G23. 12 eventos catalog+resources son frozen dataclass, occurred_at tz-aware UTC. 6 catalog (OfferingCreated/OfferingActivated/OfferingDeactivated/OfferingArchived/OfferingPriceChanged/CatalogCategoryCreated), 6 resources (ResourceTypeCreated/ResourceCreated/ResourceActivated/ResourceDeactivated/ResourceArchived/ResourceAssignedToLocation).
 - G24. Cada evento tiene `aggregate_type` string ("Offering", "Resource", "ResourceType", etc.).
 - G25. VOs específicos son hashable, frozen, usable como dict key / set members.
 
 **Application Layer — Commands / Queries / Handlers (G26..G30)**
 - G26. 12 Commands frozen (7 catalog + 5 resources): son `frozen=True, kw_only=True`, heredan de `Command`.
 - G27. 10 Queries frozen: heredan de `Query`, no mutan estado.
-- G28. 22 Handlers: cada create handler usa `IdempotencyStore.reserve(key, tenant_id/)` posicional-only.
+- G28. 22 Handlers: el UnitOfWork pertenece al orquestador execute_use_case de la capa application/execution; los handlers NO entran ni salen del context-manager de UnitOfWork y NUNCA invocan uow.commit(). El commit es exclusivo de execute_use_case. Cada create handler usa `IdempotencyStore.reserve(key, tenant_id/)` posicional-only e implementa hooks `post_commit_success` → `IdempotencyStore.complete()` y `post_rollback` → `IdempotencyStore.release()`.
 - G29. Todos los command handlers que escriben usan `execute_use_case` helper (o flujo ADR-008 equivalente explícito).
-- G30. Los 3 Idempotency create handlers: llamadas duplicate lanzan `IdempotencyConflictError` sin efecto lateral en UoW.
+- G30. Los 3 Idempotency create handlers: llamadas duplicate usan caché desde `IdempotencyStore.get()` sin efecto lateral en UoW; si está DONE retorna resultado cached sin segundo save.
 
 **Quality Gates + Docs + Invariants (G31..G33)**
 - G31. QG1..QG10 PASS 100% (~572 tests, ruff, format, mypy strict, scope, grep, import, AT).
