@@ -5,8 +5,11 @@ Requiere extra opcional (NO dependencia runtime del Universal Business Core):
     pip install -e ".[docs]"      # incluye fpdf2
     python docs/_gen_plan_pdf.py
 
-Plan Entrega 0.1: Architectural Baseline — v2.0.
-Usa API fpdf2 v2.x (Unicode nativo si aplica; se mantienen sustituciones por seguridad).
+Plan Entrega 0.1: Architectural Baseline — v2.1 (Gate 0.1 Final Audit).
+Usa API fpdf v1.x (Helvetica con sustituciones ASCII seguras; NO Unicode nativo).
+Las funciones de ayuda (`split_table_row`, list marker preservation, code
+pagination, ASCII fallback tree) son pure-Python y se validan por tests unitarios
+dedicados en `tests/unit/test_docs_pdf_generator.py`.
 """
 from __future__ import annotations
 
@@ -14,6 +17,7 @@ import re
 import sys
 import textwrap
 from pathlib import Path
+from typing import Iterable
 
 from fpdf import FPDF
 
@@ -21,34 +25,196 @@ MD_PATH = Path(__file__).parent / "plan_entrega_0.1_architectural_baseline.md"
 PDF_PATH = Path(__file__).parent / "plan_entrega_0.1_architectural_baseline.pdf"
 
 
-# ----------------------------------------------------------------
-# AYUDA UTF-8: fpdf v1.x no maneja Unicode nativo; usamos
-# latin-1 con replace para evitar errores (caracteres más comunes)
-# ----------------------------------------------------------------
-def _safe(text: str) -> str:
-    """Convierte texto a latin-1 con sustitución de caracteres no imprimibles."""
+# =================================================================
+# Helpers públicos (pure, sin FPDF ni estado) — testables sin PDF.
+# =================================================================
+
+# ---- T2: Escaped pipes en tablas --------------------------------
+_PIPE_RE = re.compile(r"\\?[|]")
+
+
+def split_table_row(row: str) -> list[str]:
+    r"""Divide una fila de tabla Markdown por pipes NO escapados.
+
+    - Ignora los pipes de borde extremo (inicio/fin de línea).
+    - ``foo\|bar`` produce una única celda con el literal ``foo|bar``
+      (el escape ``\\`` se retira solo después de segmentar).
+    - Número de columnas = número de celdas reales.
+    """
+    s = row.strip()
+    if s.startswith("|"):
+        s = s[1:]
+    if s.endswith("|"):
+        s = s[:-1]
+    cells: list[str] = []
+    buf: list[str] = []
+    i = 0
+    while i < len(s):
+        ch = s[i]
+        if ch == "\\" and i + 1 < len(s) and s[i + 1] == "|":
+            # pipe escapado: conservar literal (sin barra invertida)
+            buf.append("|")
+            i += 2
+        elif ch == "|":
+            cells.append("".join(buf).strip())
+            buf = []
+            i += 1
+        else:
+            buf.append(ch)
+            i += 1
+    cells.append("".join(buf).strip())
+    return cells
+
+
+# ---- T3: Preservar marcador fuente de listas ordenadas ---------
+LIST_ORDERED_RE = re.compile(r"^(\s*)(\S+?)\.\s+(.+)$")
+LIST_UNORDERED_RE = re.compile(r"^(\s*)([-*+])\s+(.+)$")
+
+
+def parse_list_line(line: str) -> tuple[int, bool, str | None, str] | None:
+    """Detecta una línea de lista Markdown y extrae:
+    ``(depth, ordered, source_marker_or_None, content)``.
+
+    - Listas ordenadas: ``source_marker`` es el literal antes del ``.``
+      (ej. ``"4"`` para ``4.``, ``"29-40"`` para ``29-40.``).
+    - Listas NO ordenadas: ``source_marker is None``.
+    - Retorna ``None`` si no es una línea de lista.
+    """
+    mo = LIST_ORDERED_RE.match(line.rstrip())
+    if mo:
+        indent = len(mo.group(1).replace("\t", "  "))
+        depth = indent // 2
+        # Aceptamos marcadores NO puramente numéricos tipo "29-40." solo si
+        # son alfanuméricos sin whitespace. Si el prefijo es NO estructural
+        # (letras raras) lo tratamos igual de todas formas: el renderer
+        # conservará el literal fuente y nunca inventará números nuevos.
+        marker_src = mo.group(2)
+        content = mo.group(3)
+        return depth, True, marker_src, content
+    mu = LIST_UNORDERED_RE.match(line.rstrip())
+    if mu:
+        indent = len(mu.group(1).replace("\t", "  "))
+        depth = indent // 2
+        content = mu.group(3)
+        return depth, False, None, content
+    return None
+
+
+# ---- T5: Unicode → ASCII fallbacks seguros (sin ?) -------------
+_ASCII_GLYPHS: dict[str, str] = {
+    # Box-drawing / tree
+    "├": "|",
+    "│": "|",
+    "└": "`",
+    "─": "-",
+    "┬": "+",
+    "┴": "+",
+    "┼": "+",
+    "┌": ",",
+    "┐": ",",
+    "└": "`",
+    "┘": "'",
+    "╔": "+",
+    "╗": "+",
+    "╚": "+",
+    "╝": "+",
+    "═": "=",
+    "║": "|",
+    # Status / misc glyphs
+    "✅": "[OK]",
+    "✔": "[OK]",
+    "☑": "[OK]",
+    "✓": "[OK]",
+    "❌": "[FAIL]",
+    "✖": "[FAIL]",
+    "✗": "[FAIL]",
+    "✘": "[FAIL]",
+    "⚠": "[WARN]",
+    "🛑": "[STOP]",
+    "🟢": "[OK]",
+    "🔴": "[FAIL]",
+    "🟡": "[WARN]",
+    "⚪": "[ ]",
+    "🟣": "[?]",
+    # Pointers
+    "→": "->",
+    "←": "<-",
+    "↔": "<->",
+    "⇒": "=>",
+    "⇐": "<=",
+    "⇔": "<=>",
+    # Guiones / comillas comunes
+    "—": "--",
+    "–": "-",
+    "…": "...",
+    "“": '"',
+    "”": '"',
+    "‘": "'",
+    "’": "'",
+    "«": "<<",
+    "»": ">>",
+    "•": "*",
+    "·": "-",
+    "√": "sqrt",
+    "∞": "inf",
+    "≈": "~=",
+    "≠": "!=",
+    "≤": "<=",
+    "≥": ">=",
+    "±": "+-",
+    "×": "x",
+    "÷": "/",
+    "α": "alpha",
+    "β": "beta",
+    "γ": "gamma",
+    "δ": "delta",
+    "π": "pi",
+    "Ω": "Omega",
+    "©": "(C)",
+    "®": "(R)",
+    "™": "(TM)",
+}
+_ASCII_TRANSLATE = str.maketrans(_ASCII_GLYPHS)
+
+
+def ascii_safe(text: str) -> str:
+    """Convierte texto a ASCII SAFE sin caracteres ``?``.
+
+    Reemplaza:
+      - glifos de árbol box-drawing con equivalentes ASCII
+        (``├──`` → ``|--``, ``└──`` → ```--``, ``│`` → ``|``).
+      - símbolos de estado (``✅/❌/⚠`` → ``[OK]/[FAIL]/[WARN]``).
+      - comillas, em-dash, flechas, operadores matemáticos comunes.
+      - cualquier otro carácter no imprimible en latin-1 se reemplaza por
+        ``[?]`` (estándar visible; nunca el silencioso ``?`` sin
+        delimitadores que confundía el contenido).
+    Nunca genera ``?`` sueltos.
+    """
     if text is None:
         return ""
-    # Sustituciones comunes antes del encoding fallback
-    replacements = {
-        "—": "-",  "–": "-",  "…": "...",
-        "“": '"',  "”": '"',  "‘": "'",  "’": "'",
-        "«": "<<", "»": ">>",
-        "•": "*",  "·": "-",
-        "→": "->", "←": "<-", "↔": "<->", "⇒": "=>",
-        "≈": "~=", "≠": "!=", "≤": "<=", "≥": ">=",
-        "±": "+-", "×": "x",  "÷": "/",
-        "√": "sqrt", "∞": "inf",
-        "α": "alpha", "β": "beta", "γ": "gamma",
-        "δ": "delta", "π": "pi",   "Ω": "Omega",
-        "©": "(C)", "®": "(R)", "™": "(TM)",
-        "←": "<-",
-    }
-    s = text
-    for old, new in replacements.items():
-        s = s.replace(old, new)
-    # Por último, encode a latin-1 con errores reemplazados por '?'
-    return s.encode("latin-1", errors="replace").decode("latin-1")
+    s = text.translate(_ASCII_TRANSLATE)
+    # Box-drawing composites frecuentes sin loop de retrans:
+    s = s.replace("|--", "|--").replace("`--", "`--")
+    # Fallback de lo que quede fuera de latin-1 imprimible a [?]
+    out_chars: list[str] = []
+    for ch in s:
+        code = ord(ch)
+        # imprimibles latin-1: 0x20..0x7E (ASCII) + 0xA0..0xFF (ISO-8859-1 printable).
+        # Excluimos 0x7F (DEL) y el rango 0x80..0x9F (controles).
+        is_printable_latin1 = (0x20 <= code <= 0x7E) or (0xA0 <= code <= 0xFF)
+        if ch in ("\n", "\r", "\t") or is_printable_latin1:
+            out_chars.append(ch)
+        else:
+            out_chars.append("[?]")
+    return "".join(out_chars)
+
+
+def _safe(text: str) -> str:
+    """Wrapper PDF: convierte a ASCII seguro y después encodea latin-1
+    con ``errors='strict'`` (NO se permite ``replace`` que genere ``?``)."""
+    if text is None:
+        return ""
+    return ascii_safe(text).encode("latin-1", errors="strict").decode("latin-1")
 
 
 class PlanPDF(FPDF):
@@ -160,20 +326,42 @@ class PlanPDF(FPDF):
         self.ln(1.5)
 
     # ---------- Lista ----------
-    def add_list_items(self, items: list[tuple[int, bool, str]]) -> None:
+    def add_list_items(self, items: list[tuple[int, bool, str | None, str]]) -> None:
+        """Renderiza lista conservando el marcador fuente cuando está disponible.
+
+        Cada ítem: ``(depth, ordered, source_marker, content)``.
+
+        - Si ``ordered=True`` y ``source_marker`` es str NO vacío → lo usamos
+          literalmente (ej. ``"4"`` → ``"4. "``, ``"29-40"`` → ``"29-40. "``).
+        - Si ``ordered=True`` pero ``source_marker in (None, "")`` → mantenemos
+          un contador *per-depth* como fallback (Markdown realmente no trae
+          marcador explícito → comportamiento seguro, no inventamos para
+          listas que sí lo traían).
+        - Listas no ordenadas siempre ``"- "``.
+        """
         counters: dict[int, int] = {}
-        for depth, ordered, text in items:
-            c = counters.get(depth, 0) + 1 if ordered else 1
-            counters[depth] = c if ordered else 1
+        for item in items:
+            depth, ordered, src_marker, text = item
+            if ordered:
+                if src_marker:
+                    bullet = f"{src_marker}. "
+                else:
+                    c = counters.get(depth, 0) + 1
+                    counters[depth] = c
+                    bullet = f"{c}. "
+            else:
+                bullet = "- "
+                counters[depth] = 1
+            # Resetear contadores de profundidades mayores al actual (reset sublist)
             for k in list(counters.keys()):
                 if k > depth:
                     del counters[k]
-            self._write_list_item(depth, ordered, c, text)
+            self._write_list_item(depth, ordered, bullet, text)
         self.ln(1)
 
-    def _write_list_item(self, depth: int, ordered: bool, num: int, text: str) -> None:
+    def _write_list_item(self, depth: int, ordered: bool, bullet: str, text: str) -> None:
+        _ = ordered  # bullet ya lleva toda la información necesaria
         indent = depth * 6
-        bullet = f"{num}. " if ordered else "- "
         t = re.sub(r"\*\*(.+?)\*\*", r"\1", text)
         t = re.sub(r"`(.+?)`", r"[\1]", t)
         t = re.sub(r"\[(.+?)\]\((.+?)\)", r"\1", t)
@@ -184,60 +372,85 @@ class PlanPDF(FPDF):
             self.add_page()
             y0 = self.get_y()
 
-        # Bullet
+        # Bullet (negrita para distinguir)
         self.set_xy(x0, y0)
         self.set_font("Helvetica", "B", 10)
-        self.cell(5 + depth, 5.5, _safe(bullet))
+        self.cell(max(5 + depth, len(bullet) * 2.1), 5.5, _safe(bullet))
 
         # Texto multi_cell
-        remaining_w = 210 - x0 - 6 - 10
+        bullet_w = max(5 + depth, len(bullet) * 2.1)
+        remaining_w = 210 - x0 - bullet_w - 10
         self.set_font("Helvetica", "", 10)
         self.set_text_color(30, 30, 30)
-        self.set_xy(x0 + 5 + depth, y0)
+        self.set_xy(x0 + bullet_w, y0)
         self.multi_cell(remaining_w, 5.5, _safe(t))
 
-    # ---------- Código ----------
+    # ---------- Código (con paginación por fragmentos) ----------
     def add_code_block(self, lines: list[str]) -> None:
-        self.ln(2)
-        prev_font = (self.font_family, self.font_style_pt, self.font_size_pt) \
-            if hasattr(self, "font_style_pt") else ("Helvetica", "", 10)
-        prev_text = self.text_color
+        """Renderiza un bloque de código paginando correctamente.
 
+        - Si el bloque NO cabe en la página actual, parte el bloque por líneas.
+        - Cada página dibuja SU PROPIO fondo gris (rectángulo) para las líneas
+          que efectivamente imprime en esa página.
+        - Nunca dibuja un rectángulo mayor que el alto disponible.
+        - Reutiliza: line_h, set_code (tipografía, fill_color), márgenes.
+        - No corta texto ilegiblemente: partimos por línea entera.
+        """
+        self.ln(2)
         self.set_code()
         block = lines if lines else [""]
         line_h = 4.8
-        total_h = len(block) * line_h + 4
-        y = self.get_y()
-        if y + total_h > 275:
-            self.add_page()
-            y = self.get_y()
-
-        # Fondo gris
+        pad_top = 2
+        pad_bottom = 2
         x = 10
-        self.rect(x, y, 190, total_h, style="F")
-        self.set_xy(x + 3, y + 2)
+        w = 190
+        top_margin_after_header = 10  # header por defecto ya respeta ~10mm
+        bottom_safe = 275
+        remaining: list[str] = list(block)
+        while remaining:
+            # Líneas que caben en la página actual
+            y = self.get_y()
+            if y > 270:
+                self.add_page()
+                y = self.get_y()
+            available_h = bottom_safe - y
+            # Alto total que queremos ocupar = lines_per_page * line_h + pad_top + pad_bottom
+            # → lines_per_page = floor((available_h - pad_top - pad_bottom) / line_h)
+            lines_per_page = int((available_h - pad_top - pad_bottom) // line_h)
+            if lines_per_page <= 0:
+                lines_per_page = 1
+            chunk = remaining[:lines_per_page]
+            remaining = remaining[lines_per_page:]
 
-        for ln in block:
-            ln_e = ln.replace("\t", "    ")
-            wrapped = textwrap.wrap(ln_e, width=100,
-                                    break_long_words=True,
-                                    break_on_hyphens=False) or [""]
-            for wl in wrapped:
-                self.set_x(x + 3)
-                self.cell(0, line_h, _safe(wl), border=0, ln=1)
+            # Fondo gris para el chunk actual
+            chunk_h = len(chunk) * line_h + pad_top + pad_bottom
+            self.rect(x, y, w, chunk_h, style="F")
+            self.set_xy(x + 3, y + pad_top)
+
+            for ln in chunk:
+                ln_e = ln.replace("\t", "    ")
+                wrapped = textwrap.wrap(
+                    ln_e,
+                    width=100,
+                    break_long_words=True,
+                    break_on_hyphens=False,
+                ) or [""]
+                for wl in wrapped:
+                    self.set_x(x + 3)
+                    self.cell(0, line_h, _safe(wl), border=0, ln=1)
+
+            # Salto de página si quedan líneas pendientes
+            if remaining:
+                self.add_page()
+
         self.ln(3)
         self.set_body()
-        _ = prev_font, prev_text  # no restauramos fuentes v1.x (set_body ya lo hace)
 
     # ---------- Tabla ----------
     def add_table(self, header_line: str, separator_line: str, body_lines: list[str]) -> None:
         def split_row(row: str) -> list[str]:
-            s = row.strip()
-            if s.startswith("|"):
-                s = s[1:]
-            if s.endswith("|"):
-                s = s[:-1]
-            return [c.strip() for c in s.split("|")]
+            # T2: delega al helper robusto que respeta pipes escapados `\|`
+            return split_table_row(row)
 
         headers = split_row(header_line)
         _ = separator_line
@@ -409,36 +622,37 @@ def parse_and_render(md_text: str, pdf: PlanPDF) -> None:
             continue
 
         # --- Listas ---
-        m_ord = re.match(r"^(\s*)(\d+)\.\s+(.+)$", stripped)
-        m_un = re.match(r"^(\s*)([-*+])\s+(.+)$", stripped)
+        # T3: usamos el helper común que captura el marcador fuente literal
+        #     (p. ej. "4", "29-40") para listas ordenadas; el renderer NO inventa números.
+        parsed_head = parse_list_line(stripped)
 
-        def collect_list() -> list[tuple[int, bool, str]]:
+        def _peek_is_list(idx: int) -> bool:
+            if idx >= n:
+                return False
+            return parse_list_line(lines[idx].rstrip()) is not None
+
+        def collect_list() -> list[tuple[int, bool, str | None, str]]:
             nonlocal i
-            items: list[tuple[int, bool, str]] = []
+            items: list[tuple[int, bool, str | None, str]] = []
             while i < n:
                 ln = lines[i].rstrip()
                 if not ln.strip():
-                    # Mirar siguiente línea para listas continuadas
-                    if i + 1 < n and (re.match(r"^(\s*)(\d+)\.\s+", lines[i + 1])
-                                      or re.match(r"^(\s*)([-*+])\s+", lines[i + 1])):
+                    # Mirar siguiente línea para listas continuadas (separador
+                    # de un solo blank line).
+                    if i + 1 < n and _peek_is_list(i + 1):
                         i += 1
                         continue
                     break
-                mo = re.match(r"^(\s*)(\d+)\.\s+(.+)$", ln)
-                mu = re.match(r"^(\s*)([-*+])\s+(.+)$", ln)
-                if mo:
-                    depth = len(mo.group(1)) // 2
-                    items.append((depth, True, mo.group(3)))
-                    i += 1
-                elif mu:
-                    depth = len(mu.group(1)) // 2
-                    items.append((depth, False, mu.group(3)))
+                parsed = parse_list_line(ln)
+                if parsed is not None:
+                    depth, ordered, src_marker, content = parsed
+                    items.append((depth, ordered, src_marker, content))
                     i += 1
                 else:
                     break
             return items
 
-        if m_ord or m_un:
+        if parsed_head is not None:
             items = collect_list()
             pdf.add_list_items(items)
             continue
@@ -451,8 +665,7 @@ def parse_and_render(md_text: str, pdf: PlanPDF) -> None:
             if not nxt.strip():
                 break
             if (re.match(r"^(#{1,6})\s+", nxt)
-                or re.match(r"^(\s*)(\d+)\.\s+", nxt)
-                or re.match(r"^(\s*)([-*+])\s+", nxt)
+                or parse_list_line(nxt) is not None
                 or nxt.strip().startswith("```")
                 or (nxt.strip().startswith("|") and i + 1 < n
                     and re.match(r"^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$", lines[i + 1]))

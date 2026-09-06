@@ -19,31 +19,37 @@
 
 ## Current Git State
 
-| Campo | Valor |
-|---|---|
-| Rama actual de trabajo | `feat/architectural-baseline` |
-| Working tree | **limpio** |
-| Sincronización remota | `up to date with origin/feat/architectural-baseline` |
-| `master` | **intacta** en `25fc345` |
+> **Nota sobre estabilidad:** este documento NO intenta documentar el SHA autoritativo
+> de `HEAD` (sería un bucle lógico). Usa los comandos indicados para consultar el estado
+> real en el momento de retomar el proyecto.
 
-### Commits relevantes (top-down)
+| Campo | Valor estable | Consulta operativa |
+|---|---|---|
+| Rama de referencia | `feat/architectural-baseline` | `git branch --show-current` |
+| Baseline técnico aprobado (último commit funcional relevante) | `7a705fc ("fix: harden Gate 0.1 architectural baseline")` | `git show 7a705fc --stat` |
+| HEAD operativo actual | **NO documentado aquí** (cambia con cada commit) | `git rev-parse HEAD` |
+| `master` actual | **NO documentado aquí** (cambia tras merge) | `git rev-parse master` |
+| Working tree | **NO documentado aquí** (estado transitorio) | `git status --short` |
+| Sincronización remota | **NO documentado aquí** (estado transitorio) | `git branch -vv` |
+
+### Commits históricos relevantes (top-down, snapshot de la auditoría 06-sep-2026)
 
 ```
-* e9ac272 (HEAD, origin/feat/architectural-baseline)  docs: DEVELOPMENT_STATUS refs HEAD 3143ef1 (Gate 0.1 Final Audit)
-* 3143ef1  docs: update DEVELOPMENT_STATUS HEAD SHA after final audit commit
-* 57e7001  docs: finalize Gate 0.1 audit; pin dev tooling ranges for reproducibility
-* ddadd7b  docs: add project README and development status
-*   889fb21  merge: integrate remote baseline history before RC1
+* <HEAD actual>   # consulta con: git log --oneline -1
+* ...             # commits documentales posteriores a RC1
+* 57e7001         docs: finalize Gate 0.1 audit; pin dev tooling ranges for reproducibility
+* ddadd7b         docs: add project README and development status
+*   889fb21       merge: integrate remote baseline history before RC1
 |\
-| * 8ba78e1  Creamos e incluimos documento de auditoria .txt
-* | 7a705fc  fix: harden Gate 0.1 architectural baseline
+| * 8ba78e1       Creamos e incluimos documento de auditoria .txt (solo en historial)
+* | 7a705fc  RC1  fix: harden Gate 0.1 architectural baseline  ← Baseline funcional aprobado
 |/
-* 93d3e95  feat: implement Universal Business Core architectural baseline
-* 256cd8f  chore: remove temporary planning output
-* adbdc75  docs: refine architectural baseline plan
-* 3bb3738  feat: add architectural baseline and project structure
-* ebff09f  feat(docs): add PDF generator for architectural baseline plan
-* 25fc345 (origin/master, origin/HEAD, master)  chore: initialize Universal Business Core repository
+* 93d3e95         feat: implement Universal Business Core architectural baseline
+* 256cd8f         chore: remove temporary planning output
+* adbdc75         docs: refine architectural baseline plan
+* 3bb3738         feat: add architectural baseline and project structure
+* ebff09f         feat(docs): add PDF generator for architectural baseline plan
+* 25fc345 (origin/master baseline)  chore: initialize Universal Business Core repository
 ```
 
 ### Nota sobre `auditoria_gate_0_1.txt`
@@ -279,28 +285,43 @@ no continúes sin entender por qué.
 ### 1. Estado Git
 
 ```bash
-git status
-# Esperado: On branch feat/architectural-baseline
-#          nothing to commit, working tree clean
+# Rama actual
+git branch --show-current
+# Esperado: feat/architectural-baseline
 
+# Working tree (debe estar limpio)
+git status --short
+# Esperado: (sin output)
+
+# Sincronización con origin
 git branch -vv
-# Esperado: * feat/architectural-baseline  e9ac272  [origin/feat/architectural-baseline]  docs: DEVELOPMENT_STATUS refs HEAD 3143ef1 (Gate 0.1 Final Audit)
+# Esperado: feat/architectural-baseline con [origin/feat/architectural-baseline]
 
+# HEAD actual y baseline aprobado
+git rev-parse HEAD
+git show -s --oneline 7a705fc
+# Esperado baseline: 7a705fc fix: harden Gate 0.1 architectural baseline
+
+# Estado actual de master (antes de merge)
+git rev-parse master
+git show -s --oneline 25fc345
+# Esperado master baseline: 25fc345 chore: initialize Universal Business Core repository
+
+# Resumen gráfico 15 commits (cada entorno tendrá SHAs distintos en HEAD/master)
 git log --oneline --decorate --graph --all -n 15
-# Esperado: e9ac272 → 3143ef1 → 57e7001 → ddadd7b → 889fb21 → (7a705fc, 8ba78e1) → 93d3e95 → ... → master=25fc345
 ```
 
 ### 2. Validación técnica
 
 ```bash
-python -m pytest
-# Esperado: 418 passed
+python -m pytest -q
+# Esperado: 418+ tests passed (número puede crecer con nuevos tests documentales)
 
 ruff check .
 # Esperado: All checks passed!
 
 ruff format --check .
-# Esperado: 60 files already formatted
+# Esperado: 60+ files already formatted
 
 mypy src
 # Esperado: Success: no issues found in 47 source files
@@ -313,5 +334,8 @@ PYTHONPATH=src python -c "import universal_business; print(universal_business.__
 # Esperado: 0.1.0
 ```
 
-Si todo lo anterior coincide, puedes proceder a crear PR a master. Si no coinciden los
-números, algo cambió: revisa `git diff` antes de continuar.
+Si todo lo anterior coincide con las condiciones estables (rama = baseline, master = baseline,
+mypy/ruff/pytest pasan, versión = 0.1.0), puedes proceder a crear PR a `master`.
+Si los conteos de tests pasan pero los números son mayores, probablemente se añadieron tests
+documentales — es aceptable. Si `mypy src` no dice `Success`, o si `ruff check` reporta algo,
+revisa `git diff` y arregla antes de continuar. No continúes con `working tree != clean`.
