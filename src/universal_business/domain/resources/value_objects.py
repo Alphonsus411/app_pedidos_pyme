@@ -19,6 +19,7 @@ class ResourceStatus(StrEnum):
     INACTIVE = "inactive"
     MAINTENANCE = "maintenance"
     RETIRED = "retired"
+    ARCHIVED = "archived"
 
 
 __all__ = ["ResourceType", "ResourceStatus"]

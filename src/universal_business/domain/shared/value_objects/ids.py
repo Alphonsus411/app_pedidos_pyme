@@ -138,6 +138,21 @@ class DomainEventId(BaseStrongId):
     pass
 
 
+@dataclass(frozen=True, repr=False)
+class OfferingId(BaseStrongId):
+    pass
+
+
+@dataclass(frozen=True, repr=False)
+class CatalogCategoryId(BaseStrongId):
+    pass
+
+
+@dataclass(frozen=True, repr=False)
+class ResourceTypeId(BaseStrongId):
+    pass
+
+
 # Permite dict-lookup por valor (UUID) sin depender de nombres específicos.
 def _as_id_pair(val: BaseStrongId) -> tuple[str, str]:
     return (type(val).__name__, str(val))
@@ -152,6 +167,9 @@ __all__ = [
     "LocationId",
     "CustomerId",
     "CatalogItemId",
+    "OfferingId",
+    "CatalogCategoryId",
+    "ResourceTypeId",
     "ResourceId",
     "ReservationId",
     "OrderId",
