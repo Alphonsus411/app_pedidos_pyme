@@ -23,9 +23,12 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0",
-    "ruff>=0.4",
-    "mypy>=1.10",
+    # Gate 0.1 reproducibilidad: rangos cerrados minor para tooling.
+    # Evita saltos de versiones breaking en Gates estables.
+    # Versiones validadas actualmente local + CI: pytest 8.4.2 / ruff 0.15.16 / mypy 2.1.0
+    "pytest>=8,<9",
+    "ruff>=0.15,<0.16",
+    "mypy>=2.1,<3",
 ]
 docs = [
     # Generación del PDF del plan. NO es dependencia runtime del core.

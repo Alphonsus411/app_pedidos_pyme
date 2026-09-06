@@ -1,6 +1,6 @@
 # Development Status
 
-> Documento de continuidad técnica. Última actualización: 05-sep-2026.
+> Documento de continuidad técnica. Última actualización: 06-sep-2026 (Gate 0.1 Final Audit).
 > Propósito: retomar el proyecto en semanas o meses sin depender de memoria de conversación.
 
 ---
@@ -29,7 +29,8 @@
 ### Commits relevantes (top-down)
 
 ```
-*   889fb21 (HEAD, origin/feat/architectural-baseline)  merge: integrate remote baseline history before RC1
+* ddadd7b (HEAD, origin/feat/architectural-baseline)  docs: add project README and development status
+*   889fb21  merge: integrate remote baseline history before RC1
 |\
 | * 8ba78e1  Creamos e incluimos documento de auditoria .txt
 * | 7a705fc  fix: harden Gate 0.1 architectural baseline
@@ -88,6 +89,7 @@ Monolito modular DDD con capas segregadas. Dirección única de dependencias:
 | E8. Hardening RC1 (Currency sin whitelist, ports tenancy explícita, mypy strict global) | ✅ | `7a705fc` |
 | E9. CI permanente protege `master` + rama feature | ✅ | `.github/workflows/ci.yml` |
 | E10. Merge recovery historia (sin rebase) — push normal exitoso | ✅ | `889fb21` |
+| E11. Cierre documental formal (README, Development Status) + rangos tooling reproducibles) | ✅ | `ddadd7b` |
 
 ---
 
@@ -220,10 +222,24 @@ explícito aprobado**:
 
 - Gate 0.1 ✅ APROBADO
 - Gate 0.1-RC1 ✅ APROBADO
+- Gate 0.1 FINAL AUDIT ✅ APROBADO (06-sep-2026)
 - Rama `feat/architectural-baseline` publicada en origin.
 - **NO existe trabajo de FASE 1 en curso.**
 - **NO hay trabajo pendiente sin commit en esta rama.**
 - **Master intacta, sin merge.**
+
+### Roadmap por etapas (estado factual actual)
+
+| Etapa | Alcance | Estado |
+|---|---|---|
+| **0.1 Architectural Baseline** | Dominio + VOs + Entidades + Ports + Tests AT-1..AT-9 + CI + Docs | ✅ COMPLETE |
+| **0.1-RC1 Hardening** | Tenancy explícita, Currency sin whitelist, metadata inmutable, mypy strict global | ✅ COMPLETE |
+| **0.2 Foundation / Core** | Use cases skeleton, UnitOfWork, aplicación, vertical skeleton, comando/queries base | ⚪ **NOT STARTED** — NO debe empezarse sin plan formal. |
+| **0.3 Catalog & Resources** | SKU, pricing, stock, capacity, variantes | ⚪ NOT STARTED |
+| **0.4 Orders & Reservations** | Ciclo completo, líneas, impuestos | ⚪ NOT STARTED |
+| **0.5 API & Persistence** | FastAPI, SQLAlchemy, PostgreSQL, outbox físico | ⚪ NOT STARTED |
+| **0.6 First Vertical** | Ej. pica-pollo u otro TBD | ⚪ NOT STARTED |
+| **0.7+ Channels & automation** | WhatsApp, webhooks, delivery providers | ⚪ NOT STARTED |
 
 Cualquier continuación debe arrancar con el paso "Siguiente paso recomendado"
 siguiente, NO continuando directamente en esta rama con código FASE 1.
@@ -264,10 +280,10 @@ git status
 #          nothing to commit, working tree clean
 
 git branch -vv
-# Esperado: * feat/architectural-baseline  889fb21  [origin/feat/architectural-baseline]  merge: integrate remote baseline history before RC1
+# Esperado: * feat/architectural-baseline  ddadd7b  [origin/feat/architectural-baseline]  docs: add project README and development status
 
 git log --oneline --decorate --graph --all -n 15
-# Esperado: merge diamond 889fb21 → (7a705fc, 8ba78e1) → 93d3e95 → ... → master=25fc345
+# Esperado: ddadd7b → 889fb21 → (7a705fc, 8ba78e1) → 93d3e95 → ... → master=25fc345
 ```
 
 ### 2. Validación técnica
