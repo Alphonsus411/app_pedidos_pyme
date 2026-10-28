@@ -934,3 +934,46 @@ def test_create_offering_idempotency_duplicate_key_after_complete_is_noop() -> N
     assert len(repo.save_calls) == saves_after_first, (
         "Las llamadas idempotentes duplicadas no deben disparar save adicionales"
     )
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="Pendiente hardening: replay debe comparar digest y ámbito antes de devolver caché",
+)
+@pytest.mark.parametrize("change_business", [False, True], ids=["payload", "business"])
+def test_create_offering_reused_key_with_different_request_is_rejected(
+    change_business: bool,
+) -> None:
+    """Una clave completada no puede devolver datos de otra petición o negocio."""
+    from dataclasses import replace
+
+    tid = TenantId.generate()
+    bid = BusinessId.generate()
+    oid = OfferingId.generate()
+    key = _new_idempotency_key("different-request-01")
+    repo = FakeOfferingRepository()
+    store = FakeIdempotencyStore()
+    handler = CreateOfferingHandler(offering_repository=repo, idempotency_store=store)
+    original = _build_base_offering_command(
+        tenant_id=tid, business_id=bid, offering_id=oid, idempotency_key=key
+    )
+    execute_use_case(
+        handler=handler,
+        input=original,
+        unit_of_work=FakeUnitOfWork(),
+        event_dispatcher=DomainEventDispatcher(),
+        event_publisher=FakeEventPublisher(),
+    )
+    altered = (
+        replace(original, business_id=BusinessId.generate())
+        if change_business
+        else replace(original, name="Otra solicitud")
+    )
+    with pytest.raises(ApplicationError):
+        execute_use_case(
+            handler=handler,
+            input=altered,
+            unit_of_work=FakeUnitOfWork(),
+            event_dispatcher=DomainEventDispatcher(),
+            event_publisher=FakeEventPublisher(),
+        )
