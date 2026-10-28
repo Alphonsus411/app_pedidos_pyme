@@ -228,3 +228,5 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [COMPLETADO EN BORRADOR] Puerto ReservationAllocationPort: protege y verifica disponibilidad dentro de la misma UnitOfWork que guardará la reserva. La protección debe durar hasta commit/rollback y abarcar escrituras concurrentes que cambien disponibilidad. La consulta informativa no satisface este contrato.
 [COMPLETADO EN BORRADOR] Ejemplo simulado y pruebas de dos intentos simultáneos, rollback y rechazo de scope incorrecto. El fake solo demuestra su propia serialización de solapes y no implementa todas las reglas del contrato.
 [EN CURSO] No hay adaptador durable ni caso de uso de confirmación; faltan pruebas reales de atomicidad, aislamiento, cambios concurrentes de reglas y recuperación tras commit incierto. Gate 0.4 continúa abierto.
+
+[INTEGRADO EN MASTER] PR #11: contrato de adjudicación y pruebas simuladas, merge a3d3803. CI y revisión automática aprobadas: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40695396788 . El caso de uso, adaptadores y garantías transaccionales reales siguen pendientes.
