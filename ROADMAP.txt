@@ -367,3 +367,5 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [COMPLETADO EN BORRADOR] Consulta GetOrder devuelve una vista inmutable del pedido y sus snapshots, comprueba tenant/business/location/ID y no distingue ausencia de registro fuera de ámbito. Rechaza identificadores inválidos.
 [COMPLETADO EN BORRADOR] Pruebas de snapshot independiente, acceso por ámbito incorrecto, ausencia, consulta inválida y pedido legacy sin líneas.
 [EN CURSO] La frontera debe autenticar y autorizar al actor; el repositorio real debe aislar tenant y proporcionar una lectura coherente. La consulta no garantiza snapshot transaccional ni comprueba reglas de negocio; listados/paginación y adaptadores durables siguen pendientes. Gate 0.4 abierto.
+
+[INTEGRADO EN MASTER] PR #28: consulta de pedido con vista inmutable y ámbito explícito, merge 8b4978a. CI y revisión automática sin hallazgos: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40737278323 . Autorización, lecturas consistentes y listados siguen pendientes.
