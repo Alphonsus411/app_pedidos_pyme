@@ -284,3 +284,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] Order aún permite asignación directa de atributos y estados; los métodos de edición no impiden dicha vía. Falta integrar la matriz, proteger invariantes en todas las mutaciones y exigir líneas válidas al confirmar, validar Offering/scope y autorización, añadir eventos y casos de uso. Gate 0.4 continúa abierto.
 
 [INTEGRADO EN MASTER] PR #18: líneas y total de pedido con edición por métodos en DRAFT, merge f6ff38b. CI Python 3.11/3.12 y revisión automática sin hallazgos: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40701330524 . La protección contra asignación directa y confirmación con invariantes permanecen pendientes.
+
+36. REGISTRO DE AVANCE — 28-10-2026 (INVARIANTES Y TRANSICIONES DE PEDIDOS)
+
+[COMPLETADO EN BORRADOR] Order aplica la matriz de transiciones y exige al confirmar al menos una línea y total coherente; las asignaciones y eliminaciones normales directas de status, lines y total se rechazan tras construcción. Los métodos de edición conservan el cálculo y restringen la edición a DRAFT.
+[COMPLETADO EN BORRADOR] Pruebas de flujos y terminales, confirmación sin líneas, total legacy, regreso a borrador, asignación directa y carga histórica. La construcción y rehidratación siguen siendo frontera confiable: permiten estados legacy sin líneas y deben restringirse en los adaptadores; el lenguaje permite eludir protección deliberadamente.
+[EN CURSO] Faltan eventos de transición, casos de uso idempotentes, validación de catálogo y autorización, reglas de entrada/rehidratación seguras y persistencia con aislamiento. Gate 0.4 continúa abierto.
