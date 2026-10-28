@@ -204,3 +204,5 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 
 [COMPLETADO EN BORRADOR] Evaluación pura con intervalos concretos ya expandidos: cobertura completa por una o varias ventanas contiguas, bloqueos prioritarios, estado/capacidad del recurso y reservas solapadas. Sin ventanas se rechaza; se validan tenant, business, location y recurso en los datos recibidos.
 [EN CURSO] No convierte aún AvailabilityRule/AvailabilityBlock existentes en intervalos, no lee repositorios ni configura zonas, no adjudica el recurso ni protege frente a concurrencia. Los recursos sin location se rechazan mientras no exista política explícita. Gate 0.4 continúa abierto.
+
+[INTEGRADO EN MASTER] PR #8: evaluación pura de ventanas y bloqueos concretos, merge fceb343. CI completa y revisión automática aprobadas: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40663733360 . Expansión de reglas, integración con repositorios y adjudicación atómica siguen pendientes.
