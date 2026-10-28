@@ -51,3 +51,22 @@ class RemoveOrderLine(Command):
     order_id: OrderId
     line_id: UUID
     idempotency_key: IdempotencyKey
+
+
+@dataclass(frozen=True, kw_only=True)
+class OrderStatusCommand(Command):
+    tenant_id: TenantId
+    business_id: BusinessId
+    location_id: LocationId
+    order_id: OrderId
+    idempotency_key: IdempotencyKey
+
+
+@dataclass(frozen=True, kw_only=True)
+class ValidateOrder(OrderStatusCommand):
+    pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class ConfirmOrder(OrderStatusCommand):
+    pass

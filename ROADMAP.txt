@@ -344,3 +344,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] La frontera debe autorizar al actor en cada solicitud y replay. Guard y repositorio requieren misma UoW y adaptadores reales; no se demuestra aislamiento real ni publicación durable. Falta confirmación por caso de uso y Gate 0.4 sigue abierto.
 
 [INTEGRADO EN MASTER] PR #25: retirada idempotente de líneas bajo guard, merge 7c4ee01. CI completa: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40713538088 . Revisión manual; la revisión automática seguía en curso al integrar. Autorización, adaptadores y aislamiento real continúan pendientes.
+
+44. REGISTRO DE AVANCE — 28-10-2026 (VALIDACIÓN Y CONFIRMACIÓN DE PEDIDOS)
+
+[COMPLETADO EN BORRADOR] ValidateOrder y ConfirmOrder idempotentes, con guard, relectura, comprobación de ámbito, al menos una línea y total coherente, política inyectada de negocio, matriz de estados y evento postcommit. No hay política por defecto.
+[COMPLETADO EN BORRADOR] Pruebas de flujo, replay, estados y ámbito inválidos, política rechazada, fallos de commit/complete y carrera simulada entre validación y retirada de línea. La política recibe copia y no modifica el agregado preparado.
+[EN CURSO] La frontera debe autorizar al actor incluso en replay; la política de negocio, reglas fiscales y adaptadores reales no están implementados. El guard y repositorios deben compartir UoW; la concurrencia simulada no demuestra aislamiento ni outbox durable. Gate 0.4 sigue abierto.
