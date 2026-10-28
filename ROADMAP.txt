@@ -238,3 +238,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] El caso de uso depende de que todos los puertos compartan la misma transacción y de un adaptador real que implemente todas las verificaciones y protección. No hay adaptador de producción, outbox durable ni pruebas de integración reales. Gate 0.4 continúa abierto.
 
 [INTEGRADO EN MASTER] PR #12: caso de uso idempotente de confirmación protegido por contrato de adjudicación, merge 2772e3e. CI y revisión automática aprobadas: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40696222633 . Adaptador durable, aislamiento de todas las mutaciones y pruebas con infraestructura real siguen pendientes.
+
+30. REGISTRO DE AVANCE — 28-10-2026 (CREACIÓN DE RESERVAS)
+
+[COMPLETADO EN BORRADOR] Comando idempotente CreateReservation para guardar un borrador sin ocupar recurso. Valida ubicación abierta, recurso activo/asignado, capacidad, cliente, scope, intervalo y duplicidad de ID; el evento se despacha después de commit.
+[COMPLETADO EN BORRADOR] La huella v1 admite datetime aware normalizado a UTC; las solicitudes con valores previamente soportados conservan su representación. Pruebas de replay/conflicto, scope, fallos de commit y complete, y flujo de creación seguido de confirmación con fakes.
+[EN CURSO] No existen puertos durables; la unicidad ante creación concurrente y la adjudicación al confirmar deben garantizarse en el adaptador transaccional. No hay outbox físico. Gate 0.4 sigue abierto.

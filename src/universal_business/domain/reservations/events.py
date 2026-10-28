@@ -20,3 +20,13 @@ class ReservationConfirmed(DomainEvent):
     location_id: LocationId
     resource_id: ResourceId
     aggregate_type: str = "Reservation"
+
+
+@dataclass(frozen=True, kw_only=True)
+class ReservationCreated(DomainEvent):
+    aggregate_id: ReservationId
+    tenant_id: TenantId
+    business_id: BusinessId
+    location_id: LocationId
+    resource_id: ResourceId
+    aggregate_type: str = "Reservation"
