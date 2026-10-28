@@ -397,3 +397,5 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [COMPLETADO EN BORRADOR] AddOrderLine copia en profundidad metadata antes de invocar la política; pruebas de diccionarios/listas anidados para aprobación y rechazo. Si la copia falla, se rechaza antes de guardar y se libera la clave.
 [COMPATIBILIDAD] Valores metadata que no admitan deepcopy ahora causan error explícito. Los objetos personalizados pueden definir copias que compartan referencias: se requiere que implementen copia correcta y que la política sea confiable. Un DTO inmutable acotado sigue pendiente de diseño.
 [EN CURSO] Autorización, políticas de negocio reales, persistencia y aislamiento siguen pendientes; el Gate 0.4 continúa abierto.
+
+[INTEGRADO EN MASTER] PR #32: copia de metadata para políticas, merge b4bb0d1. CI y revisión automática sin hallazgos: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40740087511 . Los objetos personalizados requieren copia correcta; DTO inmutable pendiente.
