@@ -307,3 +307,49 @@ def test_context_exit_failure_after_commit_keeps_key_reserved(kind):
         key=command.idempotency_key,
     )
     assert not store.reserve(command.tenant_id, scoped, "retry")
+
+
+@pytest.mark.parametrize("kind", ["offering", "category", "resource_type", "resource"])
+@pytest.mark.parametrize("failure", ["dispatcher", "publisher"])
+def test_complete_and_event_failure_preserve_both_errors(kind, failure):
+    handler, command, store = make_case(kind)
+
+    def fail_complete(*args):
+        raise RuntimeError("complete failed")
+
+    store.complete = fail_complete
+    dispatcher, publisher, uow = DomainEventDispatcher(), FakeEventPublisher(), FakeUnitOfWork()
+    if failure == "dispatcher":
+
+        def fail_dispatch(events):
+            raise ValueError("dispatch failed")
+
+        dispatcher.dispatch_many = fail_dispatch
+    else:
+
+        def fail_publish(events):
+            raise ValueError("publish failed")
+
+        publisher.publish_many = fail_publish
+
+    with pytest.raises(RuntimeError, match="complete failed") as caught:
+        execute_use_case(
+            handler=handler,
+            input=command,
+            unit_of_work=uow,
+            event_dispatcher=dispatcher,
+            event_publisher=publisher,
+        )
+    assert isinstance(caught.value.__cause__, ValueError)
+    assert str(caught.value.__cause__) == (
+        "dispatch failed" if failure == "dispatcher" else "publish failed"
+    )
+    assert uow.commit_count == 1
+    scoped = scoped_idempotency_key(
+        business_id=command.business_id,
+        operation=f"{type(command).__module__}.{type(command).__qualname__}",
+        key=command.idempotency_key,
+    )
+    assert not store.reserve(command.tenant_id, scoped, "retry")
+    if failure == "dispatcher":
+        assert publisher.published == []

@@ -64,8 +64,9 @@ que ``uow.commit()`` haya retornado OK:
     misma key y crear un duplicado del aggregate.
   - El error de ``complete()`` se PROPAGA hacia arriba. El sistema queda en
     estado indeterminado post-commit que requiere reconciliación manual.
-  - Los ``DomainEvent`` **SÍ** se despachan y publican antes de propagar el
-    error: el dominio fue committeado y los eventos deben fluir.
+  - Se intenta despachar y publicar eventos antes de propagar el error; si
+    dispatch falla, aborta la publicación. Si falla dispatch o publish, su
+    excepción queda como causa del fallo de complete. No se garantiza entrega.
   - Importante: ``commit() + complete()`` **NO** son atómicos. Este diseño
     elige *consistencia eventual con seguridad sobre duplicados* en lugar de
     intentar una atomicidad imposible entre dos sistemas separados.
@@ -309,8 +310,13 @@ def execute_use_case(
         # - NO release (la key debe quedar RESERVED para evitar duplicados).
         # - SÍ dispatch + publish (los eventos son parte del dominio confirmado).
         # - Finalmente propagar hook_exc.
-        _dispatch_and_publish_safe(events_list, event_dispatcher, event_publisher)
-        raise hook_exc
+        try:
+            _dispatch_and_publish_safe(events_list, event_dispatcher, event_publisher)
+        except Exception as event_exc:
+            # Preserve the idempotency failure as the primary error and retain
+            # the event failure as an explicit cause for reconciliation.
+            raise hook_exc from event_exc
+        raise
     _dispatch_and_publish_safe(events_list, event_dispatcher, event_publisher)
     return result_val
 

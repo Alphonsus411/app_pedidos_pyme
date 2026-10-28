@@ -148,3 +148,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [COMPLETADO EN BORRADOR] Pruebas para los cuatro handlers: resultado de commit incierto y fallo de salida tras commit conservan la reserva; no se vuelve a ejecutar un reintento. Tests con fakes, no validan un adaptador real ni garantizan publicación durable.
 [EN CURSO] La nueva excepción cambia el contrato de los adaptadores: antes de integrar debe revisarse, validarse en CI y documentarse su adopción. El diseño de persistencia debe reconciliar commits inciertos, garantizar ownership y resolver eventos mediante un mecanismo durable.
 [COMPLETADO] CI completa del commit 7d98915 en Python 3.11 y 3.12, con extras dev/docs, pytest, Ruff y mypy: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40655709244 . El contrato de adaptadores y la revisión humana del PR permanecen pendientes.
+
+18. REGISTRO DE AVANCE — 28-10-2026 (ERROR DOBLE POSTCOMMIT)
+
+[COMPLETADO EN BORRADOR] Si complete falla después del commit y también falla dispatch o publish, el error de complete se preserva como error principal y el de eventos se conserva como causa. Se mantiene la reserva; si dispatch falla, publish no se invoca según ADR-009. Matriz para los cuatro handlers y ambos fallos.
+[COMPLETADO EN BORRADOR] ADR-009 aclara que la validación previa de eventos no evita efectos parciales de handlers anteriores si uno posterior falla.
+[EN CURSO] Las pruebas usan fakes; no proporcionan outbox, recuperación de eventos ni entrega durable. T1 y la revisión del PR siguen abiertas.
