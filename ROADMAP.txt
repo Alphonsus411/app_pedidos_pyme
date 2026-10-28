@@ -133,3 +133,5 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [COMPLETADO EN BORRADOR] Los cuatro handlers verifican tenant, business e identificador del resultado recuperado además de la huella antes de devolver un replay. Matriz de 12 pruebas de datos cacheados corruptos, sin devolver el objeto ajeno.
 [COMPLETADO EN BORRADOR] Se corrige la documentación del port: una reserva propia solo se libera ante fallo previo a la confirmación del dominio; complete fallido tras commit exige conservar la reserva. Se especifica que no debe existir expiración o reasignación automática sin contrato de ownership.
 [EN CURSO] T1 requiere todavía revisión, CI del commit más reciente y estrategia concreta de migración para cada entorno y adaptador real. Las validaciones de fakes no equivalen a garantías transaccionales de producción.
+
+[COMPLETADO] CI completa del commit 4d8aa86 en Python 3.11 y 3.12: extras dev/docs, pytest, Ruff y mypy, todos correctos. Evidencia: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40654644311 .
