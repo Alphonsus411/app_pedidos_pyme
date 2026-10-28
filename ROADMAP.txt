@@ -292,3 +292,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] La función no consulta repositorios ni coordina cambios concurrentes de catálogo, no autoriza ajustes ni precios alternativos, ni se ha integrado en casos de uso; se requieren política y transacción. Gate 0.4 abierto. La numeración 36 y 37 corresponde a PR #19 y #20 aún pendientes de integración.
 
 [INTEGRADO EN MASTER] PR #21: captura conservadora de ofertas en líneas, merge d9f76bd. CI Python 3.11/3.12 y revisión automática sin hallazgos: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40707929556 . Integración transaccional y autorización siguen pendientes.
+
+39. REGISTRO DE AVANCE — 28-10-2026 (PROTECCIÓN DE MUTACIONES DE PEDIDOS)
+
+[COMPLETADO EN BORRADOR] Contrato OrderMutationGuard: protección por tenant/business/location/pedido dentro de la misma UnitOfWork, releer y validar bajo protección, conservar hasta commit o rollback y coordinar todas las mutaciones. La creación requiere unicidad transaccional separada.
+[COMPLETADO EN BORRADOR] Test de dos ediciones coordinadas con fake, que conserva ambas líneas; solo demuestra el comportamiento del fake.
+[EN CURSO] No hay adaptador real ni handlers de pedidos que utilicen el guard; no se han demostrado aislamiento, rollback, deadlocks ni atomicidad de base de datos. Gate 0.4 sigue abierto.
