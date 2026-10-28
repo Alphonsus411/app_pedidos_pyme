@@ -171,3 +171,8 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] Esta función aún no está conectada a los comandos ni a Location o al motor de disponibilidad. El constructor directo de ReservationInterval recibe instantes ya interpretados y no detecta por sí mismo una hora local inexistente.
 
 [COMPLETADO] CI completa del commit ea74a1a en Python 3.11 y 3.12: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40656702306 . Los PR #4 y #5 siguen en borrador y la fase 0.4 continúa abierta.
+
+21. REGISTRO DE AVANCE — 28-10-2026 (MATRIZ DE RESERVAS)
+
+[COMPLETADO EN BORRADOR] T3 parcial: política pura de estados con las transiciones propuestas DRAFT→CONFIRMED/CANCELLED; CONFIRMED→CHECKED_IN/CANCELLED/NO_SHOW; CHECKED_IN→COMPLETED. Los estados finales son terminales. 36 combinaciones y validación de tipos probadas.
+[EN CURSO] La política no modifica Reservation ni confirma recursos. La adjudicación atómica, disponibilidad, eventos y casos de uso siguen pendientes; no existe protección frente a mutaciones directas del agregado actual. La fase 0.4 no está aprobada ni terminada.
