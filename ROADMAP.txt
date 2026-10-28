@@ -178,3 +178,10 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] La política no modifica Reservation ni confirma recursos. La adjudicación atómica, disponibilidad, eventos y casos de uso siguen pendientes; no existe protección frente a mutaciones directas del agregado actual. La fase 0.4 no está aprobada ni terminada.
 
 [COMPLETADO] CI completa del commit 5feb16f en Python 3.11 y 3.12: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40660767593 .
+
+22. REGISTRO DE INTEGRACIÓN — 28-10-2026
+
+[INTEGRADO EN MASTER] PR #3: plan 0.4 y roadmap, merge 54ebafb. El plan continúa siendo una propuesta; el merge documental no aprueba el gate.
+[INTEGRADO EN MASTER] PR #4: hardening de idempotencia, digest, scopes, reservas, errores y pruebas, merge ed28cbb. CI y revisión automática aprobadas para la rama. La migración legacy, atomicidad durable y validación de adaptadores reales continúan pendientes.
+[INTEGRADO EN MASTER] PR #5: ReservationInterval, resolución de horas locales y política pura de estados, merge 49d7ecb. CI y revisión automática aprobadas. Las piezas no están conectadas a Reservation, comandos o disponibilidad; T3 y Gate 0.4 siguen en curso.
+[PENDIENTE] T0: precisar decisiones de alcance de Gate 0.4; T1: revisión y validación de la migración por entorno y adaptadores reales; T2–T8: implementación e integración pendientes según este roadmap.

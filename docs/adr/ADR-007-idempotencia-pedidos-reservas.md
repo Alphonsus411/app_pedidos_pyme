@@ -3,8 +3,8 @@
 ## Estado
 
 La decisión de aislar las operaciones por tenant, negocio, tipo y clave fue
-aceptada en la base 0.1. **La revisión técnica siguiente está propuesta en el
-PR #4 y aún no ha sido aprobada ni integrada.** No implica que pedidos o
+aceptada en la base 0.1. **La revisión técnica siguiente se integró mediante el PR #4; no constituye
+aprobación del Gate 0.4 ni validación de adaptadores reales.** No implica que pedidos o
 reservas tengan ya handlers idempotentes.
 
 ## Contexto y decisión histórica
@@ -15,7 +15,7 @@ en vez de deducirla de un cliente y una fecha. La decisión histórica proponía
 registrar clave y agregado en una misma transacción; el núcleo actual no dispone
 de adaptador durable que implemente esa garantía.
 
-## Propuesta de contrato para el hardening
+## Contrato de hardening integrado en el núcleo
 
 - El cliente proporciona una clave de idempotencia para las operaciones que
   lo requieran. La política exacta por operación se definirá en 0.4. Los cuatro

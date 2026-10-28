@@ -110,11 +110,11 @@ Definiciones Gate 0.2:
   diseño. El futuro adapter de Outbox físico (Gate 0.5) necesitará su propia
   TX / retry.
 
-## Aclaración propuesta — error doble postcommit
+## Aclaración integrada — error doble postcommit
 
 Si falla el hook de finalización de idempotencia después del commit, se intenta
 despachar y publicar. Si también falla el dispatch o el publisher, se propaga
 el error de idempotencia y se conserva el error de eventos como causa explícita.
 Según el flujo existente, un fallo de dispatch impide invocar el publisher. La
 reserva sigue conservada; no se garantiza recuperación o entrega durable.
-Esta aclaración está en el PR de hardening y pendiente de integración.
+Esta aclaración se integró en el PR de hardening; no implica entrega durable.
