@@ -206,3 +206,50 @@ def test_cached_result_with_wrong_scope_is_rejected(case):
     with pytest.raises(IdempotencyConflictError):
         run(handler, tx, cmd, FakeEventPublisher())
     assert not tx.rows
+
+
+def test_failure_before_commit_releases_key_and_emits_no_event(case):
+    cmd, tx, store, _, _, handler = case
+    publisher = FakeEventPublisher()
+
+    def fail_save(order):
+        raise RuntimeError("storage failed")
+
+    tx.save = fail_save
+    with pytest.raises(RuntimeError, match="storage failed"):
+        run(handler, tx, cmd, publisher)
+    assert not tx.rows and not publisher.published
+    assert store.reserve(cmd.tenant_id, scoped(cmd), "retry")
+
+
+def test_concurrent_same_key_rejects_second_execution(case):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    cmd, first_tx, store, locations, customers, first_handler = case
+    entered, resume = Event(), Event()
+    original_save = first_tx.save
+
+    def blocked_save(order):
+        entered.set()
+        if not resume.wait(5):
+            raise TimeoutError("second execution did not complete")
+        original_save(order)
+
+    first_tx.save = blocked_save
+    second_tx = Transaction()
+    second_handler = CreateOrderHandler(
+        orders=second_tx, locations=locations, customers=customers, idempotency=store
+    )
+    publisher = FakeEventPublisher()
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(run, first_handler, first_tx, cmd, publisher)
+        try:
+            assert entered.wait(5)
+            with pytest.raises(IdempotencyConflictError):
+                run(second_handler, second_tx, cmd, FakeEventPublisher())
+        finally:
+            resume.set()
+        future.result(timeout=5)
+    assert first_tx.saves == 1 and second_tx.saves == 0
+    assert len(publisher.published) == 1
