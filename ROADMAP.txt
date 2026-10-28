@@ -375,3 +375,5 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [COMPLETADO EN BORRADOR] ListOrdersByLocation devuelve vistas inmutables con tenant/business/location, filtro opcional de estado y límite 1–100; valida todos los resultados y rechaza ámbitos o estados erróneos, duplicados y exceso de límite.
 [COMPLETADO EN BORRADOR] Pruebas de aislamiento, filtro, límite, duplicados, vacío y snapshot, con repositorio fake. Contrato de list_by_location documenta aislamiento y límite.
 [EN CURSO] No hay orden, paginación, garantía de completitud, autorización del actor ni snapshot transaccional. El port no recibe business; el handler comprueba el business devuelto, el adaptador debe aislar tenant/location. Se requieren adaptadores y validación real; Gate 0.4 abierto.
+
+[INTEGRADO EN MASTER] PR #29: listado limitado de pedidos por ubicación, merge 1996220. CI y revisión automática sin hallazgos: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40738227184 . Paginación, orden, autorización e infraestructura real permanecen pendientes.
