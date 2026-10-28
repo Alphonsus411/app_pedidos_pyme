@@ -7,13 +7,21 @@ from universal_business.application.orders.add_line import (
 )
 from universal_business.application.orders.commands import (
     AddOrderLine,
+    ConfirmOrder,
     CreateOrder,
     RemoveOrderLine,
+    ValidateOrder,
 )
 from universal_business.application.orders.creation import CreateOrderHandler, OrderDraftCreated
 from universal_business.application.orders.remove_line import (
     OrderLineRemoval,
     RemoveOrderLineHandler,
+)
+from universal_business.application.orders.status_change import (
+    ConfirmOrderHandler,
+    OrderStatusResult,
+    OrderTransitionPolicy,
+    ValidateOrderHandler,
 )
 
 __all__ = [
@@ -27,4 +35,10 @@ __all__ = [
     "RemoveOrderLine",
     "RemoveOrderLineHandler",
     "OrderLineRemoval",
+    "ValidateOrder",
+    "ValidateOrderHandler",
+    "ConfirmOrder",
+    "ConfirmOrderHandler",
+    "OrderStatusResult",
+    "OrderTransitionPolicy",
 ]
