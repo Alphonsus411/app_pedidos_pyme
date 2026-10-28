@@ -161,3 +161,5 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [COMPLETADO EN BORRADOR] T3 parcial: ReservationInterval separado, aware y normalizado a UTC, con duración positiva, intervalos semiabiertos y pruebas de contigüidad, solape, zonas equivalentes y cambio horario con fold. TimeRange conserva sus extremos inclusivos.
 [EN CURSO] ReservationInterval aún no está conectado al agregado Reservation, handlers ni disponibilidad; no valida por sí mismo si una hora local introducida en una agenda existe o es ambigua. Queda pendiente una política explícita de entrada local y DST.
 [EN CURSO] El trabajo se basa en el PR #4 aún en borrador; el plan 0.4 y sus gates no se consideran aprobados o completados por esta pieza. Validación local: 700 pruebas sin test del generador PDF (fpdf no instalado), Ruff y mypy correctos.
+
+[COMPLETADO] CI completa del commit ac4e327 en Python 3.11 y 3.12: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40656335816 . La integración de reservas y la revisión de los PR dependientes siguen pendientes.
