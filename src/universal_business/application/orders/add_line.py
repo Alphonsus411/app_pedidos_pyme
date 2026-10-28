@@ -41,6 +41,7 @@ class OrderLinePolicy(Protocol):
 
     No sustituye la autorización del actor en la frontera antes de llamar al
     handler, incluidos replays. El adaptador debe rechazar si no puede decidir.
+    Recibe copias superficiales: no debe mutar valores anidados en metadata.
     """
 
     def approve(self, *, order: Order, offering: Offering, line: OrderLine) -> bool: ...
@@ -158,7 +159,10 @@ class AddOrderLineHandler:
                 discount=command.discount,
                 tax=command.tax,
             )
-            if self._policy.approve(order=order, offering=offering, line=line) is not True:
+            if (
+                self._policy.approve(order=replace(order), offering=replace(offering), line=line)
+                is not True
+            ):
                 raise ApplicationError("Política de línea no aprobada")
             updated = replace(order)
             updated.add_line(line)

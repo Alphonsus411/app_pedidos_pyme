@@ -136,6 +136,34 @@ def test_add_line_and_idempotent_replay(case):
         run(handler, tx, replace(cmd, quantity=Decimal(3)), publisher)
 
 
+@pytest.mark.parametrize("approved", [True, False])
+def test_policy_mutation_does_not_modify_repository_entities(case, approved):
+    cmd, ledger, tx, _, offers, policy, handler = case
+    original_order, original_offer = ledger.order, offers.value
+
+    def mutate(*, order, offering, line):
+        order.notes = "changed by policy"
+        order.business_id = BusinessId.generate()
+        offering.name = "changed by policy"
+        offering.base_price = Money(999, "EUR")
+        return approved
+
+    policy.approve = mutate
+    publisher = FakeEventPublisher()
+    if approved:
+        result = run(handler, tx, cmd, publisher)
+        assert result.total == Money(21, "EUR")
+        assert ledger.order.business_id == cmd.business_id
+        assert ledger.order.notes is None
+        assert ledger.order.lines[0].name == "Servicio"
+    else:
+        with pytest.raises(ApplicationError):
+            run(handler, tx, cmd, publisher)
+        assert ledger.order is original_order and not publisher.published
+    assert original_order.business_id == cmd.business_id and original_order.notes is None
+    assert original_offer.name == "Servicio" and original_offer.base_price == Money(10, "EUR")
+
+
 @pytest.mark.parametrize("invalid", ["scope", "offering", "policy", "state", "duplicate"])
 def test_rejection_has_no_committed_change(case, invalid):
     cmd, ledger, tx, store, offers, policy, handler = case

@@ -384,3 +384,8 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] Los dobles no prueban transacciones, unicidad, autorización, políticas reales, aislamiento de base de datos ni outbox durable. Persisten pruebas y adaptadores de infraestructura y el Gate 0.4 sigue abierto.
 
 [INTEGRADO EN MASTER] PR #30: prueba integrada del flujo de pedidos con fakes, merge 250052d. CI y revisión automática sin hallazgos: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40738731440 . No sustituye pruebas con infraestructura real ni autorización.
+
+49. REGISTRO DE AVANCE — 28-10-2026 (AISLAMIENTO DE POLÍTICA DE LÍNEA)
+
+[COMPLETADO EN BORRADOR] AddOrderLine entrega copias superficiales del pedido y oferta a la política inyectada, evitando que cambios de atributos principales de esas copias alteren las entidades del repositorio. Pruebas para aprobación y rechazo.
+[EN CURSO] Offering.metadata admite valores anidados mutables: la copia es superficial y la política es un componente de confianza que no debe mutarlos. Falta diseñar inmutabilidad profunda o un DTO limitado con estrategia de compatibilidad. Siguen pendientes autorización, adaptadores reales, aislamiento y outbox durable.
