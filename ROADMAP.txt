@@ -214,3 +214,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] No hay recurrencia, expansión de horarios semanales, soporte de capacidad por regla, lectura de repositorios ni adjudicación atómica. La resolución de medianoche local ambigua/inexistente falla de forma conservadora. Gate 0.4 sigue abierto.
 
 [INTEGRADO EN MASTER] PR #9: conversión conservadora de reglas y bloqueos a periodos concretos; merge a4e66ca. CI completa y revisión automática aprobadas: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40692354947 . Recurrencia, capacidad por regla, repositorios y adjudicación atómica permanecen pendientes.
+
+27. REGISTRO DE AVANCE — 28-10-2026 (CONSULTA DE DISPONIBILIDAD)
+
+[COMPLETADO EN BORRADOR] Consulta de solo lectura: carga Location, Resource, reglas, bloqueos y reservas por puertos; valida tenant/business/location/resource, exige Location OPEN, materializa periodos y devuelve la evaluación. El rango de búsqueda de fechas es conservador frente a offsets y cambios de zona.
+[COMPLETADO EN BORRADOR] Contratos documentados: repositorios deben devolver todos los candidatos sin truncamiento; reglas y bloqueos generales de location se incluyen, y reservas se consultan sin filtrar estados. Pruebas con fakes cubren disponibilidad, bloqueos, reservas y scopes inválidos.
+[EN CURSO] La consulta no es una adjudicación ni snapshot transaccional garantizado. La completitud y el aislamiento de los adaptadores reales no se han probado. Faltan confirmación atómica, mutaciones de Reservation, reglas recurrentes y capacidad por regla. Gate 0.4 sigue abierto.

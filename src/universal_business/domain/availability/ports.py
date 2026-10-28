@@ -17,6 +17,14 @@ from universal_business.domain.shared.value_objects.temporal import DateRange
 
 
 class IAvailabilityRepository(Protocol):
+    """Read methods return complete candidates for the requested inclusive dates.
+
+    list_rules_for_resource includes location-wide rules (resource_id=None)
+    and rules for that resource; list_blocks includes both kinds of block.
+    Neither method may silently truncate results. Caller validates tenant,
+    location and resource scope and applies status and time filtering.
+    """
+
     def save_rule(self, rule: AvailabilityRule) -> None: ...
     def save_block(self, block: AvailabilityBlock) -> None: ...
 
