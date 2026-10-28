@@ -206,3 +206,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] No convierte aún AvailabilityRule/AvailabilityBlock existentes en intervalos, no lee repositorios ni configura zonas, no adjudica el recurso ni protege frente a concurrencia. Los recursos sin location se rechazan mientras no exista política explícita. Gate 0.4 continúa abierto.
 
 [INTEGRADO EN MASTER] PR #8: evaluación pura de ventanas y bloqueos concretos, merge fceb343. CI completa y revisión automática aprobadas: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40663733360 . Expansión de reglas, integración con repositorios y adjudicación atómica siguen pendientes.
+
+26. REGISTRO DE AVANCE — 28-10-2026 (MATERIALIZACIÓN DE REGLAS)
+
+[COMPLETADO EN BORRADOR] Conversión explícita de AvailabilityRule y AvailabilityBlock a ventanas y bloqueos concretos para el evaluador. DateRange se interpreta en la zona IANA de Location con fechas locales inclusivas; los TimeRange de reglas se interpretan como intervalos absolutos semiabiertos solo para esta operación y se recortan al rango efectivo.
+[COMPLETADO EN BORRADOR] Pruebas de scope, precedencia al conectar con el evaluador, DST de 23 horas, día omitido, rangos vacíos y datos inválidos. Las reglas con capacidad propia se rechazan, no se ignoran.
+[EN CURSO] No hay recurrencia, expansión de horarios semanales, soporte de capacidad por regla, lectura de repositorios ni adjudicación atómica. La resolución de medianoche local ambigua/inexistente falla de forma conservadora. Gate 0.4 sigue abierto.
