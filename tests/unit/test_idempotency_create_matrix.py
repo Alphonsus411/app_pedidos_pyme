@@ -133,3 +133,116 @@ def test_failed_commit_releases_owned_key(kind):
         key=command.idempotency_key,
     )
     assert store.reserve(command.tenant_id, scoped, "can-retry")
+
+
+@pytest.mark.parametrize("kind", ["offering", "category", "resource_type", "resource"])
+def test_complete_failure_after_commit_preserves_reservation(kind):
+    handler, command, store = make_case(kind)
+    releases = []
+    original_release = store.release
+
+    def release(tenant_id, key):
+        releases.append(key)
+        original_release(tenant_id, key)
+
+    def fail_complete(*args):
+        raise RuntimeError("idempotency storage unavailable")
+
+    store.release = release
+    store.complete = fail_complete
+    publisher = FakeEventPublisher()
+    uow = FakeUnitOfWork()
+    with pytest.raises(RuntimeError, match="idempotency storage unavailable"):
+        execute_use_case(
+            handler=handler,
+            input=command,
+            unit_of_work=uow,
+            event_dispatcher=DomainEventDispatcher(),
+            event_publisher=publisher,
+        )
+    scoped = scoped_idempotency_key(
+        business_id=command.business_id,
+        operation=f"{type(command).__module__}.{type(command).__qualname__}",
+        key=command.idempotency_key,
+    )
+    assert uow.commit_count == 1
+    assert uow.rollback_count == 0
+    assert releases == []
+    assert not store.reserve(command.tenant_id, scoped, "retry")
+    assert publisher.published
+    with pytest.raises(ApplicationError):
+        run(handler, command)
+
+
+@pytest.mark.parametrize("kind", ["offering", "category", "resource_type", "resource"])
+def test_concurrent_same_key_rejects_second_request(kind):
+    """Concurrencia entre handlers usando un store fake de reserva atómica."""
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event, Lock
+
+    handler, command, store = make_case(kind)
+    repo = {
+        "offering": lambda: handler._offering_repository,
+        "category": lambda: handler._category_repository,
+        "resource_type": lambda: handler.resource_type_repo,
+        "resource": lambda: handler.resource_repo,
+    }[kind]()
+    entered, resume, lock = Event(), Event(), Lock()
+    original_save, original_reserve = repo.save, store.reserve
+
+    def blocking_save(entity):
+        entered.set()
+        if not resume.wait(timeout=5):
+            raise RuntimeError("test synchronization timed out")
+        original_save(entity)
+
+    def atomic_reserve(tenant_id, key, digest):
+        with lock:
+            return original_reserve(tenant_id, key, digest)
+
+    repo.save = blocking_save
+    store.reserve = atomic_reserve
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(run, handler, command)
+        try:
+            assert entered.wait(timeout=5)
+            second = pool.submit(run, handler, command)
+            with pytest.raises(ApplicationError):
+                second.result(timeout=5)
+        finally:
+            resume.set()
+        first_result = first.result(timeout=5)
+    assert run(handler, command) is first_result
+
+
+@pytest.mark.parametrize("kind", ["offering", "category", "resource_type", "resource"])
+def test_repository_failure_releases_reservation_and_publishes_nothing(kind):
+    handler, command, store = make_case(kind)
+    repo = {
+        "offering": lambda: handler._offering_repository,
+        "category": lambda: handler._category_repository,
+        "resource_type": lambda: handler.resource_type_repo,
+        "resource": lambda: handler.resource_repo,
+    }[kind]()
+
+    def fail_save(entity):
+        raise RuntimeError("repository unavailable")
+
+    repo.save = fail_save
+    publisher, uow = FakeEventPublisher(), FakeUnitOfWork()
+    with pytest.raises(RuntimeError, match="repository unavailable"):
+        execute_use_case(
+            handler=handler,
+            input=command,
+            unit_of_work=uow,
+            event_dispatcher=DomainEventDispatcher(),
+            event_publisher=publisher,
+        )
+    scoped = scoped_idempotency_key(
+        business_id=command.business_id,
+        operation=f"{type(command).__module__}.{type(command).__qualname__}",
+        key=command.idempotency_key,
+    )
+    assert uow.commit_count == 0
+    assert publisher.published == []
+    assert store.reserve(command.tenant_id, scoped, "retry")

@@ -114,3 +114,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [COMPLETADO EN BORRADOR] Matriz común de Offering, CatalogCategory, ResourceType y Resource: replay idéntico, solicitud modificada con la misma clave, identificador ya existente con clave nueva y liberación de clave tras fallo de commit simulado.
 [COMPLETADO EN BORRADOR] Los cuatro handlers rechazan un identificador existente en vez de tratar una clave nueva como replay o sobrescribir el agregado. La comprobación previa no sustituye una restricción de unicidad transaccional en la futura infraestructura.
 [EN CURSO] T1 continúa abierta: faltan pruebas de fallo postcommit, concurrencia y aislamiento para todos los handlers, revisión contractual de propiedad y migración legacy y CI completa. Los fakes no validan rollback ni atomicidad de una base de datos real.
+
+13. REGISTRO DE AVANCE — 28-10-2026 (FALLOS Y CONCURRENCIA)
+
+[COMPLETADO EN BORRADOR] Para los cuatro handlers, pruebas de fallo de repositorio antes del commit (sin publicación y con liberación de la clave), fallo de commit y fallo de complete después del commit (reserva conservada y eventos publicados en el fake).
+[COMPLETADO EN BORRADOR] Para los cuatro handlers, pruebas de dos solicitudes concurrentes con una misma clave usando un almacén fake con reserve atómico; se rechaza la segunda mientras se procesa la primera.
+[EN CURSO] T1 sigue abierta: revisar la propiedad de reserva en adaptadores reales, la migración de entradas legacy y el ADR; completar CI con los extras de documentación. Estas pruebas no demuestran atomicidad de una base de datos ni entrega durable de eventos.
