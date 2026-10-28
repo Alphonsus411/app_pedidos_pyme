@@ -5,8 +5,16 @@ from universal_business.application.orders.add_line import (
     OrderLinePolicy,
     OrderLineResult,
 )
-from universal_business.application.orders.commands import AddOrderLine, CreateOrder
+from universal_business.application.orders.commands import (
+    AddOrderLine,
+    CreateOrder,
+    RemoveOrderLine,
+)
 from universal_business.application.orders.creation import CreateOrderHandler, OrderDraftCreated
+from universal_business.application.orders.remove_line import (
+    OrderLineRemoval,
+    RemoveOrderLineHandler,
+)
 
 __all__ = [
     "CreateOrder",
@@ -16,4 +24,7 @@ __all__ = [
     "AddOrderLineHandler",
     "OrderLinePolicy",
     "OrderLineResult",
+    "RemoveOrderLine",
+    "RemoveOrderLineHandler",
+    "OrderLineRemoval",
 ]

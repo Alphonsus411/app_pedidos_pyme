@@ -336,3 +336,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] Se requiere autorización del actor en la frontera también para replay; no hay política fiscal/de ajustes ni adaptador por defecto. Guard, repositorios y UoW deben compartir transacción y el adaptador debe asegurar lectura consistente de catálogo; los fakes no demuestran aislamiento real ni entrega durable. No comprueba si Location sigue abierta. Gate 0.4 sigue abierto.
 
 [INTEGRADO EN MASTER] PR #24: incorporación idempotente de líneas bajo guard y política inyectada, merge 80b4326. CI y revisión automática sin hallazgos: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40712415401 . Autorización del actor, política fiscal, consistencia del catálogo, adaptadores reales y outbox siguen pendientes.
+
+43. REGISTRO DE AVANCE — 28-10-2026 (RETIRADA DE LÍNEAS DE PEDIDOS)
+
+[COMPLETADO EN BORRADOR] RemoveOrderLine idempotente relee el pedido bajo guard, comprueba ámbito, elimina solo en DRAFT sobre una copia y emite OrderLineRemoved mediante el orquestador; total None al eliminar última línea.
+[COMPLETADO EN BORRADOR] Pruebas con fakes: replay/conflicto, ámbito, estado, línea inexistente y fallos de commit/complete; sin mutación del agregado original antes del commit.
+[EN CURSO] La frontera debe autorizar al actor en cada solicitud y replay. Guard y repositorio requieren misma UoW y adaptadores reales; no se demuestra aislamiento real ni publicación durable. Falta confirmación por caso de uso y Gate 0.4 sigue abierto.
