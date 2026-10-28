@@ -284,3 +284,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] Order aún permite asignación directa de atributos y estados; los métodos de edición no impiden dicha vía. Falta integrar la matriz, proteger invariantes en todas las mutaciones y exigir líneas válidas al confirmar, validar Offering/scope y autorización, añadir eventos y casos de uso. Gate 0.4 continúa abierto.
 
 [INTEGRADO EN MASTER] PR #18: líneas y total de pedido con edición por métodos en DRAFT, merge f6ff38b. CI Python 3.11/3.12 y revisión automática sin hallazgos: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40701330524 . La protección contra asignación directa y confirmación con invariantes permanecen pendientes.
+
+38. REGISTRO DE AVANCE — 28-10-2026 (CAPTURA DE OFERTAS EN LÍNEAS)
+
+[COMPLETADO EN BORRADOR] Función pura para capturar una oferta activa en una línea, comprobando tenant, business y location; copia nombre y precio del catálogo y rechaza ofertas sin precio. Precio cero admitido; ajustes se validan como importes de línea.
+[COMPLETADO EN BORRADOR] Pruebas de snapshot ante cambios de catálogo, ámbito, estado, precio ausente/cero, ofertas sin restricción de location y moneda de ajustes.
+[EN CURSO] La función no consulta repositorios ni coordina cambios concurrentes de catálogo, no autoriza ajustes ni precios alternativos, ni se ha integrado en casos de uso; se requieren política y transacción. Gate 0.4 abierto. La numeración 36 y 37 corresponde a PR #19 y #20 aún pendientes de integración.
