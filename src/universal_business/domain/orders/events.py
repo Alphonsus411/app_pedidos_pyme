@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from uuid import UUID
 
 from universal_business.domain.orders.value_objects import OrderStatus
 from universal_business.domain.shared.events import DomainEvent
 from universal_business.domain.shared.value_objects.ids import (
     BusinessId,
     LocationId,
+    OfferingId,
     OrderId,
     TenantId,
 )
@@ -22,6 +24,17 @@ class OrderCreated(DomainEvent):
     tenant_id: TenantId
     business_id: BusinessId
     location_id: LocationId
+    aggregate_type: str = "Order"
+
+
+@dataclass(frozen=True, kw_only=True)
+class OrderLineAdded(DomainEvent):
+    aggregate_id: OrderId
+    tenant_id: TenantId
+    business_id: BusinessId
+    location_id: LocationId
+    offering_id: OfferingId
+    line_id: UUID
     aggregate_type: str = "Order"
 
 
