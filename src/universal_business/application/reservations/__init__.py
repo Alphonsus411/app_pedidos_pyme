@@ -1,6 +1,11 @@
 """Casos de uso de reservas."""
 
+from universal_business.application.reservations.cancellation import (
+    CancelReservationHandler,
+    ReservationCancellation,
+)
 from universal_business.application.reservations.commands import (
+    CancelReservation,
     ConfirmReservation,
     CreateReservation,
 )
@@ -14,6 +19,9 @@ from universal_business.application.reservations.handlers import (
 )
 
 __all__ = [
+    "CancelReservation",
+    "CancelReservationHandler",
+    "ReservationCancellation",
     "ConfirmReservation",
     "ConfirmReservationHandler",
     "ReservationConfirmation",

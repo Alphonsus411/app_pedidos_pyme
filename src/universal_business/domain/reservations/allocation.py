@@ -59,4 +59,24 @@ class ReservationAllocationPort(Protocol):
         ...
 
 
-__all__ = ["ReservationAllocationPort", "ReservationUnavailableError"]
+class ReservationMutationGuard(Protocol):
+    """Proteger una reserva y su recurso hasta terminar la misma UnitOfWork.
+
+    Las mutaciones de reserva y de disponibilidad, incluida la confirmación,
+    deben usar protección compatible o aislamiento equivalente. La llamada no
+    comprueba disponibilidad y no hace commit; el adaptador valida el ámbito.
+    El caller relee la reserva bajo protección antes de aplicar la transición.
+    """
+
+    def protect(
+        self,
+        *,
+        tenant_id: TenantId,
+        business_id: BusinessId,
+        location_id: LocationId,
+        resource_id: ResourceId,
+        reservation_id: ReservationId,
+    ) -> None: ...
+
+
+__all__ = ["ReservationAllocationPort", "ReservationMutationGuard", "ReservationUnavailableError"]

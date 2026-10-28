@@ -246,3 +246,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] No existen puertos durables; la unicidad ante creación concurrente y la adjudicación al confirmar deben garantizarse en el adaptador transaccional. No hay outbox físico. Gate 0.4 sigue abierto.
 
 [INTEGRADO EN MASTER] PR #13: creación idempotente de reservas DRAFT y soporte datetime aware en huella, merge bc639ee. CI y revisión automática aprobadas: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40697214872 . Los adaptadores durables y sus garantías siguen pendientes.
+
+31. REGISTRO DE AVANCE — 28-10-2026 (CANCELACIÓN DE RESERVAS)
+
+[COMPLETADO EN BORRADOR] CancelReservation idempotente para DRAFT y CONFIRMED, con guard de mutación compatible con adjudicación, validación de scope, relectura bajo protección, transición y evento postcommit. CHECKED_IN y estados terminales se rechazan según la matriz actual.
+[COMPLETADO EN BORRADOR] Pruebas de replay, ocupación tras cancelar, ámbitos, cambios entre lecturas, fallos de commit y carrera simulada confirmación/cancelación.
+[EN CURSO] El guard y el repositorio reales deben compartir UoW, protección y orden de adquisición coherente; los fakes no prueban aislamiento real, ausencia de deadlocks ni entrega durable. Gate 0.4 sigue abierto.
