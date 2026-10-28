@@ -58,3 +58,8 @@ el estado de aprobación del gate ni afirma que exista un adaptador durable.
 - El requisito de idempotencia de pedidos y reservas sigue siendo parte de 0.4;
   todavía no se han implementado sus handlers. Los hooks y las carreras deben
   revisarse antes de aprobar este hardening.
+
+La propuesta de transición y sus condiciones de bloqueo constan en
+[plan_migracion_idempotencia_v1.md](../plan_migracion_idempotencia_v1.md).
+El uso del nombre cualificado de clase como operación exige migración si cambia
+el nombre; no se permite asumir compatibilidad automática.

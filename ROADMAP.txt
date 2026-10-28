@@ -120,3 +120,10 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [COMPLETADO EN BORRADOR] Para los cuatro handlers, pruebas de fallo de repositorio antes del commit (sin publicación y con liberación de la clave), fallo de commit y fallo de complete después del commit (reserva conservada y eventos publicados en el fake).
 [COMPLETADO EN BORRADOR] Para los cuatro handlers, pruebas de dos solicitudes concurrentes con una misma clave usando un almacén fake con reserve atómico; se rechaza la segunda mientras se procesa la primera.
 [EN CURSO] T1 sigue abierta: revisar la propiedad de reserva en adaptadores reales, la migración de entradas legacy y el ADR; completar CI con los extras de documentación. Estas pruebas no demuestran atomicidad de una base de datos ni entrega durable de eventos.
+
+14. REGISTRO DE AVANCE — 28-10-2026 (TRANSICIÓN DE FORMATO)
+
+[COMPLETADO EN BORRADOR] Plan operativo propuesto para inventario, drenaje, reconciliación, migración verificable y vuelta atrás; vinculado a ADR-007. Establece que v1 no se activa sobre datos legacy o reintentos anteriores sin conciliación y evidencia.
+[PENDIENTE] No se ha comprobado existencia de adaptadores externos ni se ha ejecutado migración; el procedimiento real, ownership/TTL, fallos entre commit y complete y pruebas transaccionales dependen de infraestructura. El nombre cualificado de operación no puede renombrarse sin migración.
+
+[COMPLETADO] CI completa del código f44908e en Python 3.11 y 3.12: instalación de extras dev/docs, Ruff, mypy y pytest, todos correctos. Ejecución: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40654251826 . La CI valida ese commit; los cambios documentales posteriores requieren su propia revisión.
