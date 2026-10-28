@@ -45,13 +45,13 @@ El enum actual tiene DRAFT, VALIDATED, CONFIRMED, PREPARING, READY, DELIVERING, 
 |---|---|
 | DRAFT | VALIDATED, CANCELLED |
 | VALIDATED | DRAFT, CONFIRMED, CANCELLED |
-| CONFIRMED | PREPARING, CANCELLED |
+| CONFIRMED | PREPARING, COMPLETED, CANCELLED |
 | PREPARING | READY, CANCELLED |
 | READY | DELIVERING, COMPLETED, CANCELLED |
 | DELIVERING | COMPLETED, CANCELLED |
 | COMPLETED / CANCELLED | Ninguno |
 
-Cada transición se valida y emite su evento solo cuando cambia el estado. No asumir que todas las verticales necesitan cada estado; recorridos abreviados adicionales requieren decisión explícita. Validar al menos una línea y totales coherentes antes de confirmar. La cancelación no implica por sí misma reembolso, stock ni envío.
+Cada transición se valida y emite su evento solo cuando cambia el estado. No asumir que todas las verticales necesitan cada estado; se propone el recorrido directo CONFIRMED → COMPLETED; otros recorridos abreviados requieren decisión explícita. Validar al menos una línea y totales coherentes antes de confirmar. La cancelación no implica por sí misma reembolso, stock ni envío.
 
 ## 4. Reservas y disponibilidad mínima
 
