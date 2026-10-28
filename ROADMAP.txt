@@ -222,3 +222,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] La consulta no es una adjudicación ni snapshot transaccional garantizado. La completitud y el aislamiento de los adaptadores reales no se han probado. Faltan confirmación atómica, mutaciones de Reservation, reglas recurrentes y capacidad por regla. Gate 0.4 sigue abierto.
 
 [INTEGRADO EN MASTER] PR #10: consulta de disponibilidad por puertos, merge 758d009. CI completa y revisión automática aprobadas: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40693820908 . La consulta es informativa; adjudicación atómica y garantías de los adaptadores reales siguen pendientes.
+
+28. REGISTRO DE AVANCE — 28-10-2026 (CONTRATO DE ADJUDICACIÓN)
+
+[COMPLETADO EN BORRADOR] Puerto ReservationAllocationPort: protege y verifica disponibilidad dentro de la misma UnitOfWork que guardará la reserva. La protección debe durar hasta commit/rollback y abarcar escrituras concurrentes que cambien disponibilidad. La consulta informativa no satisface este contrato.
+[COMPLETADO EN BORRADOR] Ejemplo simulado y pruebas de dos intentos simultáneos, rollback y rechazo de scope incorrecto. El fake solo demuestra su propia serialización de solapes y no implementa todas las reglas del contrato.
+[EN CURSO] No hay adaptador durable ni caso de uso de confirmación; faltan pruebas reales de atomicidad, aislamiento, cambios concurrentes de reglas y recuperación tras commit incierto. Gate 0.4 continúa abierto.
