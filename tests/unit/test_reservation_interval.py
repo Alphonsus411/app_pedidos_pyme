@@ -56,3 +56,54 @@ def test_equivalent_timezones_compare_as_same_instant():
     equivalent = start.astimezone(ZoneInfo("Europe/Madrid"))
     assert interval.contains(equivalent)
     assert interval == ReservationInterval(equivalent, interval.end)
+
+
+def test_from_local_rejects_spring_gap_and_accepts_valid_neighbors():
+    madrid = ZoneInfo("Europe/Madrid")
+    with pytest.raises(TemporalRangeError, match="no existe"):
+        ReservationInterval.from_local(
+            datetime(2026, 3, 29, 2, 30), datetime(2026, 3, 29, 4), madrid
+        )
+    interval = ReservationInterval.from_local(
+        datetime(2026, 3, 29, 1, 30), datetime(2026, 3, 29, 3, 30), madrid
+    )
+    assert interval.duration == timedelta(hours=1)
+
+
+def test_from_local_ambiguous_time_requires_explicit_fold():
+    madrid = ZoneInfo("Europe/Madrid")
+    local = datetime(2026, 10, 25, 2, 30)
+    with pytest.raises(TemporalRangeError, match="ambigua"):
+        ReservationInterval.from_local(local, datetime(2026, 10, 25, 4), madrid)
+    interval = ReservationInterval.from_local(local, local, madrid, start_fold=0, end_fold=1)
+    assert interval.duration == timedelta(hours=1)
+    with pytest.raises(TemporalRangeError, match="anterior"):
+        ReservationInterval.from_local(local, local, madrid, start_fold=1, end_fold=0)
+
+
+def test_local_resolution_requires_naive_input_and_valid_fold():
+    from universal_business.domain.reservations.local_time import resolve_local_datetime
+
+    zone = ZoneInfo("Europe/Madrid")
+    with pytest.raises(TemporalRangeError, match="sin zona"):
+        resolve_local_datetime(datetime(2026, 1, 1, tzinfo=UTC), zone)
+    with pytest.raises(ValueError, match="fold"):
+        resolve_local_datetime(datetime(2026, 1, 1), zone, fold=2)
+    with pytest.raises(ValueError, match="fold"):
+        resolve_local_datetime(datetime(2026, 1, 1), zone, fold=True)
+    with pytest.raises(TypeError, match="ZoneInfo"):
+        resolve_local_datetime(datetime(2026, 1, 1), UTC)
+
+
+def test_non_hour_transition_and_skipped_day():
+    from universal_business.domain.reservations.local_time import resolve_local_datetime
+
+    lord_howe = ZoneInfo("Australia/Lord_Howe")
+    repeated = datetime(2026, 4, 5, 1, 45)
+    with pytest.raises(TemporalRangeError, match="ambigua"):
+        resolve_local_datetime(repeated, lord_howe)
+    assert resolve_local_datetime(repeated, lord_howe, fold=1) - resolve_local_datetime(
+        repeated, lord_howe, fold=0
+    ) == timedelta(minutes=30)
+    with pytest.raises(TemporalRangeError, match="no existe"):
+        resolve_local_datetime(datetime(2011, 12, 30, 12), ZoneInfo("Pacific/Apia"))

@@ -163,3 +163,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] El trabajo se basa en el PR #4 aún en borrador; el plan 0.4 y sus gates no se consideran aprobados o completados por esta pieza. Validación local: 700 pruebas sin test del generador PDF (fpdf no instalado), Ruff y mypy correctos.
 
 [COMPLETADO] CI completa del commit ac4e327 en Python 3.11 y 3.12: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40656335816 . La integración de reservas y la revisión de los PR dependientes siguen pendientes.
+
+20. REGISTRO DE AVANCE — 28-10-2026 (HORAS LOCALES Y DST)
+
+[COMPLETADO EN BORRADOR] T3 parcial: resolución de fechas locales con zona IANA explícita; se rechazan horas inexistentes y se exige seleccionar fold en horas ambiguas. ReservationInterval.from_local convierte los extremos a instantes UTC y conserva la semántica semiabierta.
+[COMPLETADO EN BORRADOR] Pruebas: cambios horarios de Madrid, transición de media hora en Lord Howe, día omitido en Apia, extremos invertidos y validación de zona/fold. Las pruebas dependen de la base de zonas instalada; el despliegue deberá disponer de datos IANA actualizados.
+[EN CURSO] Esta función aún no está conectada a los comandos ni a Location o al motor de disponibilidad. El constructor directo de ReservationInterval recibe instantes ya interpretados y no detecta por sí mismo una hora local inexistente.
