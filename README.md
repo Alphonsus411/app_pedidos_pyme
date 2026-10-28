@@ -2,7 +2,7 @@
 
 > Motor backend empresarial **universal y agnóstico**, diseñado para reutilizarse en múltiples verticales de negocio sin necesidad de reescribir el núcleo.
 
-**Paquete Python:** `universal_business` · **Versión:** `0.1.0` · **Estado:** Architectural Baseline ✅
+**Paquete Python:** `universal_business` · **Versión:** `0.3.0` · **Estado:** Gate 0.3 Catalog & Resources integrado ✅
 
 ---
 
@@ -50,11 +50,11 @@ o cualquier otro sector particular.
 └──────────────┬───────────────────┘
                │
 ┌──────────────▼───────────────────┐
-│   Application        (⏳ FASE 1) │  ← Casos de uso / commands / queries
+│   Application        (✅ 0.2–0.3) │  ← Casos de uso / commands / queries
 └──────────────┬───────────────────┘
                │
 ┌──────────────▼───────────────────┐
-│              Domain              │  ← ✅ 0.1 IMPLEMENTADO
+│              Domain              │  ← ✅ 0.1–0.3 IMPLEMENTADO
 │  shared · business · customers   │
 │  catalog · resources · avail.    │
 │  reservations · orders · full.   │
@@ -65,7 +65,7 @@ o cualquier otro sector particular.
 │   Infrastructure   (⏳ FASE 2)   │  ← ORM / DB / brokers / clientes externos
 └──────────────────────────────────┘
 
-      verticals/  ──►  dependen HACIA DENTRO (⏳ FASE 1+)
+      verticals/  ──►  dependen HACIA DENTRO (contratos 0.2; implementación futura)
                       NUNCA al revés. El core NO conoce los verticales.
 ```
 
@@ -78,6 +78,8 @@ o cualquier otro sector particular.
 ---
 
 ## Módulos de dominio
+
+La tabla siguiente conserva el alcance de la entrega 0.1; desde 0.3, catálogo y recursos incluyen `Offering`, categorías, requisitos de recursos, `ResourceType` y `Resource`, con casos de uso en la capa de aplicación.
 
 | Módulo | Estado 0.1 | Propósito |
 |---|---|---|
@@ -118,16 +120,16 @@ Tenant  ────  (boundary superior, NO necesariamente persona jurídica)
 
 | Indicador | Valor |
 |---|---|
-| Architectural Baseline 0.1 | ✅ Aprobado |
-| Gate 0.1-RC1 Hardening | ✅ Aprobado |
-| Tests (pytest) | **418 passing** |
-| Ruff lint | ✅ All checks passed |
-| Ruff format | ✅ 60 files already formatted |
-| Mypy strict global (47 source files) | ✅ 0 issues |
-| FastAPI | ⏳ FASE 2 |
-| SQLAlchemy / PostgreSQL | ⏳ FASE 2 |
-| Primer vertical | ⏳ FASE 1+ |
-| Master | ✅ Intacta (sin merge) |
+| Gate 0.1 — Architectural Baseline | ✅ Integrado |
+| Gate 0.2 — Foundation / Application Layer | ✅ Integrado |
+| Gate 0.3 — Catalog & Resources | ✅ Integrado en `master` |
+| Última validación documentada del hardening 0.3 | 646 pruebas superadas; ver [informe](docs/informe_hardening_0.3_execution_hooks_stateless_20260906.md) |
+| CI del merge 0.3 | ✅ Python 3.11 y 3.12, pytest, Ruff y mypy |
+| API, persistencia y primera vertical | ⏳ Pendientes |
+
+La implementación actual es un núcleo backend: API, infraestructura y verticales
+concretas son esqueletos. Pedidos, reservas y disponibilidad aún no tienen su
+comportamiento completo.
 
 ---
 
@@ -136,7 +138,7 @@ Tenant  ────  (boundary superior, NO necesariamente persona jurídica)
 Ejecutar siempre en este orden:
 
 ```bash
-python -m pytest          # 418 tests unit + arquitectura + imports
+python -m pytest          # tests unit + arquitectura + imports
 ruff check .              # lint
 ruff format --check .     # formatter
 mypy src                  # strict global typing
@@ -175,12 +177,12 @@ python docs/_gen_plan_pdf.py
 
 | Documento | Ruta |
 |---|---|
-| 🏛️ Hoja de ruta del Universal Business Core (PDF autoritativo) | [`hoja_ruta_universal_business_core.pdf`](file:///C:/Users/Adolfo/PycharmProjects/app_pedidos_pyme/hoja_ruta_universal_business_core.pdf) |
-| 📘 Arquitectura detallada + alcance 0.1 | [`docs/ARCHITECTURE.md`](file:///C:/Users/Adolfo/PycharmProjects/app_pedidos_pyme/docs/ARCHITECTURE.md) |
-| 📋 Plan de entrega 0.1 Architectural Baseline (v2.1 RC1) | [`docs/plan_entrega_0.1_architectural_baseline.md`](file:///C:/Users/Adolfo/PycharmProjects/app_pedidos_pyme/docs/plan_entrega_0.1_architectural_baseline.md) |
-| 📋 Versión PDF del plan | [`docs/plan_entrega_0.1_architectural_baseline.pdf`](file:///C:/Users/Adolfo/PycharmProjects/app_pedidos_pyme/docs/plan_entrega_0.1_architectural_baseline.pdf) |
-| 📝 Registro de decisión arquitectónica (ADRs) | [`docs/adr/`](file:///C:/Users/Adolfo/PycharmProjects/app_pedidos_pyme/docs/adr/) |
-| 🛑 Estado actual y punto de parada | [`docs/DEVELOPMENT_STATUS.md`](file:///C:/Users/Adolfo/PycharmProjects/app_pedidos_pyme/docs/DEVELOPMENT_STATUS.md) |
+| 🏛️ Hoja de ruta del Universal Business Core (PDF autoritativo) | [`hoja_ruta_universal_business_core.pdf`](hoja_ruta_universal_business_core.pdf) |
+| 📘 Arquitectura detallada + alcance 0.1 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
+| 📋 Plan de entrega 0.1 Architectural Baseline (v2.1 RC1) | [`docs/plan_entrega_0.1_architectural_baseline.md`](docs/plan_entrega_0.1_architectural_baseline.md) |
+| 📋 Versión PDF del plan | [`docs/plan_entrega_0.1_architectural_baseline.pdf`](docs/plan_entrega_0.1_architectural_baseline.pdf) |
+| 📝 Registro de decisión arquitectónica (ADRs) | [`docs/adr/`](docs/adr/) |
+| 🛑 Estado actual y punto de parada | [`docs/DEVELOPMENT_STATUS.md`](docs/DEVELOPMENT_STATUS.md) |
 
 ---
 
@@ -194,20 +196,21 @@ python docs/_gen_plan_pdf.py
 | **ADR-004** | Domain Events + Outbox → **Mixin recolector + tabla outbox físico FASE ≥2** | ✅ |
 | **ADR-005** | Extensiones verticales → **verticals/ hacia adentro, nunca al revés** | ✅ |
 | **ADR-006** | Resources / Availability → **Recursos como capacidad, disponibilidad como rules+blocks** | ✅ |
-| **ADR-007** | Idempotencia pedidos / reservas → **Idempotency-Key en capa aplicación FASE ≥1** | ✅ |
+| **ADR-007** | Idempotencia pedidos / reservas → **Idempotency-Key en capa aplicación** | ✅ |
+| **ADR-008–010** | Transacciones, publicación de eventos y Offering universal | ✅ |
 
 ---
 
 ## Roadmap (alto nivel, sin fechas)
 
 ```
-0.1  Architectural Baseline        ✅ (actual HEAD feat/architectural-baseline)
+0.1  Architectural Baseline        ✅ integrado
      │
      ▼
-0.2  Foundation / Core             ⏳  Use cases, UnitOfWork, vertical skeleton
+0.2  Foundation / Core             ✅  Use cases, UnitOfWork, vertical skeleton
      │
      ▼
-0.3  Catalog & Resources           ⏳  SKU, pricing, stock, capacity
+0.3  Catalog & Resources           ✅  Offering, categorías y recursos
      │
      ▼
 0.4  Orders & Reservations         ⏳  Ciclo completo, líneas, impuestos
@@ -246,7 +249,7 @@ No se avanza a la siguiente etapa sin aprobación humana del Gate anterior.
 El punto de parada actual, la checklist para retomar en otro día, y los hitos
 cumplidos están registrados en:
 
-👉 [**`docs/DEVELOPMENT_STATUS.md`**](file:///C:/Users/Adolfo/PycharmProjects/app_pedidos_pyme/docs/DEVELOPMENT_STATUS.md)
+👉 [**`docs/DEVELOPMENT_STATUS.md`**](docs/DEVELOPMENT_STATUS.md)
 
 ---
 

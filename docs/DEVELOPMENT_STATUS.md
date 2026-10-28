@@ -1,6 +1,7 @@
 # Development Status
 
-> Documento de continuidad técnica. Última actualización: 06-sep-2026 (Gate 0.3 Catalog & Resources).
+> Documento de continuidad técnica. Actualizado: 28-oct-2026 para reflejar la integración de Gate 0.3 en `master`.
+> Las cifras y referencias de ejecución históricas se conservan como instantáneas, no como estado en vivo.
 > Propósito: retomar el proyecto en semanas o meses sin depender de memoria de conversación.
 
 ---
@@ -25,7 +26,7 @@
 
 | Campo | Valor estable | Consulta operativa |
 |---|---|---|
-| Rama de referencia actual | `feat/fase-2-catalog-resources` | `git branch --show-current` |
+| Rama de referencia | `master` (Gate 0.3 integrado en `945015b`) | `git branch --show-current` |
 | Baseline de entrada Gate 0.3 | `master @ c6a4327` (post-Gate-0.2 merge commit) | `git show c6a4327 --stat` |
 | Baseline de entrada Gate 0.2 | `master @ 4947f06` (merge commit Gate 0.1 final) | `git show 4947f06 --stat` |
 | Baseline técnico aprobado Gate 0.1 | `7a705fc ("fix: harden Gate 0.1 architectural baseline")` | `git show 7a705fc --stat` |
@@ -129,9 +130,9 @@ Monolito modular DDD con capas segregadas. Dirección única de dependencias:
 | E28. Entidad ResourceType ENTITY configurable (no enum), status lifecycle propio | ✅ | Gate 0.3 |
 | E29. Entidad Resource (resource_type_id obligatorio, location_id opcional, status ACTIVE/INACTIVE/MAINTENANCE/RETIRED/ARCHIVED, assign_to_location method) | ✅ | Gate 0.3 |
 | E30. 12 Domain Events de catalog + resources (6 catalog: OfferingCreated/OfferingActivated/OfferingDeactivated/OfferingArchived/OfferingPriceChanged/CatalogCategoryCreated; 6 resources: ResourceTypeCreated/ResourceCreated/ResourceActivated/ResourceDeactivated/ResourceArchived/ResourceAssignedToLocation) | ✅ | Gate 0.3 |
-| E31. Application: 12 Commands frozen (catalog 7 + resources 5), 10 Queries frozen, 22 Handlers. El UnitOfWork pertenece al orquestador execute_use_case de la capa application/execution; los handlers de catalog/resources NO entran ni salen del context-manager de UnitOfWork y NUNCA invocan uow.commit(). El commit es exclusivo de execute_use_case. Creates usan IdempotencyStore con hooks post_commit_success/post_rollback. | ✅ | Gate 0.3 |
+| E31. Application: 12 Commands frozen (catalog 7 + resources 5), 10 Queries frozen, 22 Handlers. El UnitOfWork pertenece al orquestador execute_use_case de la capa application/execution; los handlers de catalog/resources NO entran ni salen del context-manager de UnitOfWork y NUNCA invocan uow.commit(). El commit es exclusivo de execute_use_case. Creates usan IdempotencyStore con hooks por ejecución, sin estado mutable compartido entre ejecuciones. | ✅ | Gate 0.3 |
 | E32. Ports actualizados: ICatalogRepository y IResourceRepository con nuevas operaciones | ✅ | Gate 0.3 |
-| E33. ~64 tests unitarios nuevos (dominio catalog+resources + aplicación catalog+resources) — total acumulado ~572 tests | ✅ | Gate 0.3 |
+| E33. ~64 tests unitarios nuevos (dominio catalog+resources + aplicación catalog+resources) — total histórico inicial ~572 tests; posteriormente 646 en hardening | ✅ | Gate 0.3 |
 | E34. ADR-010: Offering como abstracción universal de catálogo (paralelo a CatalogItem legacy) | ✅ | Gate 0.3 |
 | E35. Spec Mode 0.3: spec.md + tasks.md en `.trae/specs/gate03-catalog-resources/` | ✅ | Gate 0.3 |
 | E36. docs/plan_entrega_0.3_catalog_resources.md + DEVELOPMENT_STATUS + ARCHITECTURE actualizados | ✅ | Gate 0.3 |
@@ -173,7 +174,7 @@ Registro de decisiones: ADR-008 (application transaction semantics), ADR-009 (di
 
 | Gate | Alcance | Estado | Fecha |
 |---|---|---|---|
-| **Gate 0.3** | Entidades dominio: Offering (agregado universal), CatalogCategory, OfferingResourceRequirement, ResourceType (ENTITY configurable no enum), Resource (location_id opcional, assign_to_location). Domain Events catalog+resources total 12 (6 catalog: OfferingCreated/OfferingActivated/OfferingDeactivated/OfferingArchived/OfferingPriceChanged/CatalogCategoryCreated; 6 resources: ResourceTypeCreated/ResourceCreated/ResourceActivated/ResourceDeactivated/ResourceArchived/ResourceAssignedToLocation). Application: 12 Commands frozen + 10 Queries frozen + 22 Handlers. El UnitOfWork pertenece al orquestador execute_use_case de la capa application/execution; los handlers de catalog/resources NO entran ni salen del context-manager de UnitOfWork y NUNCA invocan uow.commit(). El commit es exclusivo de execute_use_case. Creates usan IdempotencyStore con hooks post_commit_success/post_rollback. Ports actualizados ICatalogRepository/IResourceRepository. Tests dominio+aplicación (~64 nuevos, total ~572). ADR-010 Offering universal. | ✅ **DONE / APROBADO** | 06-sep-2026 |
+| **Gate 0.3** | Entidades dominio: Offering (agregado universal), CatalogCategory, OfferingResourceRequirement, ResourceType (ENTITY configurable no enum), Resource (location_id opcional, assign_to_location). Domain Events catalog+resources total 12 (6 catalog: OfferingCreated/OfferingActivated/OfferingDeactivated/OfferingArchived/OfferingPriceChanged/CatalogCategoryCreated; 6 resources: ResourceTypeCreated/ResourceCreated/ResourceActivated/ResourceDeactivated/ResourceArchived/ResourceAssignedToLocation). Application: 12 Commands frozen + 10 Queries frozen + 22 Handlers. El UnitOfWork pertenece al orquestador execute_use_case de la capa application/execution; los handlers de catalog/resources NO entran ni salen del context-manager de UnitOfWork y NUNCA invocan uow.commit(). El commit es exclusivo de execute_use_case. Creates usan IdempotencyStore con hooks por ejecución, sin estado mutable compartido entre ejecuciones. Ports actualizados ICatalogRepository/IResourceRepository. Tests dominio+aplicación (~64 nuevos, total histórico inicial ~572; posteriormente 646 en hardening). ADR-010 Offering universal. | ✅ **DONE / APROBADO** | 06-sep-2026 |
 
 Criterios de aceptación §33 del `plan_entrega_0.3_catalog_resources.md` cumplidos.
 Registro de decisiones: ADR-010 (Offering como abstracción universal de catálogo).
@@ -186,13 +187,13 @@ Ejecutados por última vez: 06-sep-2026 (Python 3.11, Windows sandbox).
 
 | Verificación | Comando exacto | Resultado |
 |---|---|---|
-| Tests unit + arquitectura + imports | `python -m pytest -q` | **~572 passed** (508 baseline Gate 0.2 + ~64 tests Gate 0.3) |
+| Tests unit + arquitectura + imports | `python -m pytest -q` | El informe de hardening posterior registra **646 passed**; ejecutar para verificar el estado actual. |
 | Ruff lint | `ruff check .` | **All checks passed** |
 | Ruff formatter | `ruff format --check .` | **~85+ files already formatted** |
 | Mypy strict GLOBAL | `mypy src` | **Success: no issues found in ~80+ source files** |
 | Import core sin externos | `python -c "import universal_business; print(universal_business.__version__)"` | **`0.3.0`** OK |
 | Working tree | `git status` | **clean** |
-| Repo sync | `git branch -vv` | **feat/fase-2-catalog-resources (pendiente push a origin)** |
+| Repo sync | `git branch -vv` | Consultar en el entorno local; Gate 0.3 ya está integrado en `master`. |
 | Git whitespace audit | `git diff --check` | **0 whitespace errors** |
 | Scope audit (master...HEAD) | `git diff master...HEAD --name-only \| grep -E "^src/universal_business/(infrastructure\|api\|verticals)/"` | **Empty output** (no tocados) |
 | Application forbidden imports | `grep -RniE "fastapi\|starlette\|sqlalchemy\|redis\|celery\|kafka\|pika\|openai\|anthropic\|stripe\|twilio\|firebase" src/universal_business/application/` | **Empty output** |
@@ -274,7 +275,7 @@ src/universal_business/
 ```
 
 Límites de capa PROTEGIDOS por tests arquitectónicos en
-[test_architecture_boundaries.py](file:///C:/Users/Adolfo/PycharmProjects/app_pedidos_pyme/tests/architecture/test_architecture_boundaries.py) (AT-1..AT-9, AT-11..AT-13, AT-17).
+[test_architecture_boundaries.py](../tests/architecture/test_architecture_boundaries.py) (AT-1..AT-9, AT-11..AT-13, AT-17).
 
 ---
 
@@ -378,10 +379,9 @@ explícito aprobado**:
 - Gate 0.1 FINAL AUDIT ✅ DONE / APROBADO (06-sep-2026)
 - Gate 0.2 Foundation / Application Layer ✅ DONE / APROBADO (06-sep-2026)
 - **Gate 0.3 Catalog & Resources ✅ DONE / APROBADO** (06-sep-2026)
-- Rama actual: `feat/fase-2-catalog-resources`. Entry baseline: `master @ c6a4327`.
+- Gate 0.3 integrado en `master` mediante `945015b`; su baseline de entrada fue `c6a4327`.
 - **NO existe trabajo de FASE 0.4 en curso.**
-- **NO hay trabajo pendiente sin commit en esta rama (post Gate 0.3).**
-- **Master intacta, sin merge de Gate 0.3.**
+- El estado del árbol local debe consultarse con `git status`; no se infiere del remoto.
 - **infrastructure/**, **api/**, **verticals/** siguen skeleton-only (sin cambios respecto a 0.2).
 
 ### Roadmap por etapas (estado factual actual)
@@ -391,7 +391,7 @@ explícito aprobado**:
 | **0.1 Architectural Baseline** | Dominio + VOs + Entidades + Ports + Tests AT-1..AT-9 + CI + Docs | ✅ COMPLETE / DONE |
 | **0.1-RC1 Hardening** | Tenancy explícita, Currency sin whitelist, metadata inmutable, mypy strict global | ✅ COMPLETE / DONE |
 | **0.2 Foundation / Application Layer** | Commands/Queries, Handlers, UnitOfWork Port, Idempotency, Event Dispatcher, EventPublisher Port, UseCase Execution, Vertical Extensions, AT-11/12/13/17 | ✅ COMPLETE / DONE |
-| **0.3 Catalog & Resources** | **Offering** agregado universal (DRAFT/ACTIVE/INACTIVE/ARCHIVED, base_price Money opc, scope location_ids frozenset). **CatalogCategory** (parent opc, self-parent inválido). **OfferingResourceRequirement** (quantity_required ≥1). **ResourceType ENTITY configurable no-enum**. **Resource** (resource_type_id oblig, location_id opc, 5-status lifecycle, assign_to_location). 12 Domain Events (6 catalog: OfferingCreated/OfferingActivated/OfferingDeactivated/OfferingArchived/OfferingPriceChanged/CatalogCategoryCreated; 6 resources: ResourceTypeCreated/ResourceCreated/ResourceActivated/ResourceDeactivated/ResourceArchived/ResourceAssignedToLocation). 12 Commands + 10 Queries + 22 Handlers. El UnitOfWork pertenece al orquestador execute_use_case de la capa application/execution; los handlers de catalog/resources NO entran ni salen del context-manager de UnitOfWork y NUNCA invocan uow.commit(). El commit es exclusivo de execute_use_case. Creates usan IdempotencyStore con hooks post_commit_success/post_rollback. Ports ICatalog + IResource actualizados. Tests ~64 nuevos (total ~572). ADR-010. | ✅ **COMPLETE / DONE** |
+| **0.3 Catalog & Resources** | **Offering** agregado universal (DRAFT/ACTIVE/INACTIVE/ARCHIVED, base_price Money opc, scope location_ids frozenset). **CatalogCategory** (parent opc, self-parent inválido). **OfferingResourceRequirement** (quantity_required ≥1). **ResourceType ENTITY configurable no-enum**. **Resource** (resource_type_id oblig, location_id opc, 5-status lifecycle, assign_to_location). 12 Domain Events (6 catalog: OfferingCreated/OfferingActivated/OfferingDeactivated/OfferingArchived/OfferingPriceChanged/CatalogCategoryCreated; 6 resources: ResourceTypeCreated/ResourceCreated/ResourceActivated/ResourceDeactivated/ResourceArchived/ResourceAssignedToLocation). 12 Commands + 10 Queries + 22 Handlers. El UnitOfWork pertenece al orquestador execute_use_case de la capa application/execution; los handlers de catalog/resources NO entran ni salen del context-manager de UnitOfWork y NUNCA invocan uow.commit(). El commit es exclusivo de execute_use_case. Creates usan IdempotencyStore con hooks por ejecución, sin estado mutable compartido entre ejecuciones. Ports ICatalog + IResource actualizados. Tests de catálogo y recursos; el informe de hardening posterior registra 646 pruebas. ADR-010. | ✅ **COMPLETE / DONE** |
 | **0.4 Orders & Reservations** | Ciclo completo Order / Reservation / OrderLine / Tax / Discount / status lifecycle / cross-references with Offering + Resource + Availability | ⚪ NOT STARTED |
 | **0.5 API & Persistence** | FastAPI (endpoints), SQLAlchemy (models/mappings), PostgreSQL, outbox físico, repositories concretos, migrations (Alembic) | ⚪ NOT STARTED |
 | **0.6 First Vertical** | Ej. pica-pollo u otro TBD: seed data, business rules sector, vertical extension concrete | ⚪ NOT STARTED |
@@ -404,27 +404,13 @@ siguiente, NO continuando directamente en esta rama con código FASE 0.4.
 
 ## Next Recommended Actions
 
-Orden estricto recomendado al retomar:
+1. Actualizar `master` y ejecutar la checklist de validación.
+2. Verificar si existe la etiqueta `v0.3.0` antes de plantear su creación.
+3. Crear una rama nueva desde `master`: `feat/fase-3-orders-reservations`.
+4. Definir el plan 0.4: alcance de pedidos, reservas y disponibilidad; criterios de aceptación, pruebas y gate.
+5. Mantener aislamiento por tenant, dinero con Decimal, dominio sin frameworks y contratos de aplicación desacoplados.
 
-1. **Confirmar que el árbol sigue válido:** ejecutar el *Resume Checklist* (abajo).
-2. **Auditoría de Gate 0.3 manual humana (opcional):** revisar criterios aceptación §33 del `plan_entrega_0.3_catalog_resources.md`.
-3. **Crear PR formal** en GitHub: `feat/fase-2-catalog-resources → feat/architectural-baseline` (o directamente a `master` según política del repo).
-4. **Revisar CI del PR**; el workflow `.github/workflows/ci.yml` corre automáticamente en PR a master.
-5. **Mergear SOLO si CI está 100% verde** (~572 tests, ruff, format, mypy strict).
-6. Después del merge al baseline:
-   - Actualizar la rama base (`git checkout feat/architectural-baseline && git pull` o `git checkout master && git pull`).
-   - **Crear una NUEVA rama** para Gate 0.4 (nunca seguir escribiendo directamente sobre `feat/fase-2-catalog-resources`). Nombre sugerido: `feat/fase-3-orders-reservations`.
-7. **Definir formalmente el scope de Gate 0.4** antes de abrir IDE: escribir plan, criterios de aceptación, Gate 0.4. NO decidir el contenido de FASE 0.4 sobre la marcha.
-8. Conservar como inamovibles:
-   - Float para dinero (solo `Money` con `Decimal`).
-   - Currency sin whitelist.
-   - TODOS los repository ports tenant-scoped con `tenant_id` explícito (AT-9).
-   - Application Layer NO importa infrastructure / API / verticales (AT-7, AT-11, AT-12).
-   - Application Layer sin frameworks/SDK externos (AT-13).
-   - UnitOfWork, IdempotencyStore, EventPublisher son Protocol/ABC sin implementación concreta en core (AT-17).
-   - Runtime dependencies `[]` (vacío).
-   - Offering como agregado de catálogo universal (ADR-010); CatalogItem legacy se conserva sin tocar.
-   - ResourceType ENTITY configurable (no enum). Resource.location_id opcional.
+El merge de 0.3 ya se realizó en `945015b`; no es necesario repetirlo.
 
 ---
 
@@ -438,15 +424,15 @@ no continúes sin entender por qué.
 ```bash
 # Rama actual
 git branch --show-current
-# Esperado: feat/fase-2-catalog-resources
+# Verifica que sea la rama prevista para el trabajo actual
 
 # Working tree (debe estar limpio)
 git status --short
 # Esperado: (sin output)
 
-# Sincronización con origin (cuando se haga push)
+# Sincronización con origin
 git branch -vv
-# Esperado: feat/fase-2-catalog-resources
+# Comprobar seguimiento de la rama actual
 
 # HEAD actual, Gate 0.3 baseline, Gate 0.2 baseline, Gate 0.1 RC1 baseline
 git rev-parse HEAD
@@ -469,7 +455,7 @@ git log --oneline --decorate --graph --all -n 20
 ```bash
 # 1. Tests
 python -m pytest -q
-# Esperado: ~572 tests passed (508 baseline Gate 0.2 + ~64 tests Gate 0.3)
+# Referencia histórica: 646 pruebas en el informe de hardening 0.3
 
 # 2. Lint
 ruff check .
@@ -511,7 +497,6 @@ PYTHONPATH=src python -c "import universal_business; print(universal_business.__
 # Esperado: 0.3.0
 ```
 
-Si todo lo anterior coincide, Gate 0.3 está estable. Puedes proceder a crear PR
-y planificar Gate 0.4. Si `mypy src` no dice `Success`, o si `ruff check` reporta
+Si las comprobaciones pasan, puedes preparar el plan de Gate 0.4. Si `mypy src` no dice `Success`, o si `ruff check` reporta
 algo, revisa `git diff` y arregla antes de continuar. No continúes con
 `working tree != clean`.
