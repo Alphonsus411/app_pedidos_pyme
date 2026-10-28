@@ -1,0 +1,84 @@
+UNIVERSAL BUSINESS CORE — ROADMAP Y TRAZABILIDAD
+Repositorio: https://github.com/Alphonsus411/app_pedidos_pyme
+Fecha de corte: 28-10-2026 (Europe/Madrid)
+Estado: documento de seguimiento; las propuestas pendientes no están aprobadas.
+
+1. OBJETIVO Y ALCANCE
+
+Núcleo backend en Python, modular, multitenant y agnóstico de sector, para reutilizar conceptos de catálogo, recursos, pedidos y reservas en distintas pymes. Las verticales concretas, la API y la persistencia se abordan en fases posteriores. El proyecto no es todavía una aplicación lista para producción.
+
+2. TRAZABILIDAD DE HITOS
+
+05-09-2026 — Gate 0.1: base arquitectónica y hardening inicial. Estructura de capas, objetos de valor, entidades básicas, puertos por dominio, aislamiento de tenant, pruebas de arquitectura y CI.
+
+06-09-2026 — Gate 0.1 integrado en master: commit 4947f06. Gate 0.2 Foundation/Application Layer integrado: commit c6a4327. Incluye comandos, consultas, UnitOfWork, idempotencia como contrato, despacho/publicación de eventos y extensión por verticales.
+
+06-09-2026 — Gate 0.3 Catalog & Resources integrado: commit 945015b. Introduce Offering, CatalogCategory, requisitos de recursos, ResourceType y Resource, con handlers y pruebas. Hardening de transacciones, scope e idempotencia y hooks sin estado compartido entre ejecuciones: commits 84060c9 y 9b0f906. Informe de hardening: 646 pruebas superadas, como resultado histórico documentado.
+
+28-10-2026 — Actualización documental y versión: PR #2 fusionado en master mediante a33176e. README y DEVELOPMENT_STATUS reflejan el merge de 0.3; pyproject.toml se alinea con la versión 0.3.0 ya declarada por el módulo. CI de PR #2 aprobada con pytest, Ruff y mypy en Python 3.11 y 3.12.
+
+28-10-2026 — Plan 0.4 creado en la rama feat/fase-3-orders-reservations, commit 5bc5b6d; PR #3 abierto como borrador. El plan aún no está fusionado ni aprobado. La revisión posterior identificó los ajustes de las secciones 4 y 5; son propuestas y hallazgos por verificar, no cambios ya implementados.
+
+3. ESTADO POR FASE
+
+[INTEGRADO] 0.1 — Baseline arquitectónica y contratos de dominio.
+[INTEGRADO] 0.2 — Foundation y contratos de aplicación.
+[INTEGRADO] 0.3 — Catálogo y recursos, con hardening documentado.
+[PROPUESTO] Hardening previo — Reproducir y corregir los problemas compartidos de idempotencia, actualizar contratos y pruebas.
+[PROPUESTO] 0.4 — Pedidos, reservas y disponibilidad mínima; plan en borrador, implementación no iniciada en el PR #3.
+[FUTURO] 0.5 — API y persistencia: FastAPI, SQLAlchemy/PostgreSQL, repositorios, migraciones y outbox físico, sujetos a su propio diseño y gate.
+[FUTURO] 0.6 — Primera vertical concreta; sector por determinar.
+[FUTURO] 0.7+ — Canales y automatización: webhooks, mensajería y proveedores, según necesidades y priorización.
+
+Las fases futuras carecen de fechas comprometidas. Cada gate requiere criterios de aceptación y revisión humana antes de avanzar.
+
+4. CORRECCIONES Y DECISIONES PREVIAS A 0.4
+
+P0 — Idempotencia compartida (hallazgo de revisión estática, pendiente de prueba y corrección):
+- CreateOfferingHandler recupera el objeto almacenado por clave sin comparar en ese camino el digest de la nueva solicitud con el original. El port actual usa tenant y clave; ADR-007 también plantea business y operación. Reproducir con test el riesgo de replay indebido para solicitud o negocio distinto; revisar también los demás creates.
+- Acordar ámbito (tenant, business, operación, clave), digest canónico de solicitud separado del resultado, replay idéntico, conflicto por payload distinto y comportamiento de operación en curso. Actualizar ADR-007 y contratos; mantener aislamiento y compatibilidad explícitos.
+- Cubrir fallo de handler y de commit, y fallo de complete después de commit: no liberar ni repetir ciegamente una operación ya confirmada. Definir reconciliación. La solución durable y su atomicidad real corresponden a infraestructura y pruebas de integración posteriores.
+
+P0 — Reservas y disponibilidad:
+- Corregir el borrador: CONFIRMED y CHECKED_IN deben ocupar recurso; decidir y probar qué ocurre con COMPLETED, CANCELLED, NO_SHOW y DRAFT. La propuesta de revisión conserva el intervalo de COMPLETED para evitar reutilización anticipada; requiere aprobación.
+- Definir adjudicación atómica dentro de una frontera transaccional; lectura seguida de save no evita carreras. Probar el contrato con fake coordinado y, en 0.5, con transacciones concurrentes reales.
+- Para reservas se proponen intervalos [inicio, fin), aware y de duración positiva. TimeRange actual es inclusivo; no cambiarlo silenciosamente. Añadir operación o tipo específico y probar continuidad, solapes, zona horaria y DST.
+- Definir precedencia de bloqueos, reglas y reservas, zona IANA, ausencia de reglas y política de recurso sin location. Propuesta: ausencia de regla = no disponible y recurso business-wide solo si política explícita lo permite.
+
+P1 — Pedidos y dinero:
+- Snapshot de Offering y precio en cada línea, una moneda por pedido, cantidades Decimal positivas y congelación al confirmar. Diferenciar precio cero y precio ausente; un Offering sin precio requiere precio explícito autorizado antes de confirmar.
+- Simplificar el primer incremento a descuentos e impuestos como importes por línea con límites y trazabilidad; decidir base, impuestos añadidos o incluidos, precisión y redondeo antes de añadir porcentajes. Money usa escala 4 y ROUND_HALF_EVEN; ello no equivale a una política fiscal o factura legal.
+- Revisar la matriz para permitir un flujo directo CONFIRMED -> COMPLETED y otro con PREPARING/READY/DELIVERING, sin imponer un proceso sectorial a todas las pymes. Definir permisos y transiciones terminales para reservas.
+
+5. SECUENCIA PROPUESTA
+
+T0. Aprobar o ajustar D1–D6, decisiones de los apartados anteriores, ADR-006/007 y contratos. Actualizar el plan del PR #3. Estado: pendiente.
+T1. Reproducir, corregir y probar idempotencia compartida, incluyendo ámbito, digest, concurrencia y fallos de transacción. Estado: pendiente.
+T2. Especificar matrices de estados, cálculos monetarios, snapshots, disponibilidad y reglas temporales. Estado: pendiente.
+T3. Implementar dominio de pedidos: líneas, totales, invariantes, transiciones y eventos, con pruebas. Estado: pendiente.
+T4. Implementar dominio de reservas: estados, intervalos, ámbito y disponibilidad mínima; establecer contrato de adjudicación atómica. Estado: pendiente.
+T5. Añadir comandos, consultas y handlers; validar tenant/business/location y reutilizar UoW y hooks por ejecución. Estado: pendiente.
+T6. Probar reintentos, rollback, eventos postcommit, fallo de complete y concurrencia simulada; documentar sus límites. Estado: pendiente.
+T7. Ejecutar pytest, Ruff lint y formato, mypy estricto, diff-check y CI en Python 3.11/3.12; registrar evidencias y revisar gate. Estado: pendiente.
+T8. Diseñar 0.5 y validar en infraestructura real atomicidad de reservas, idempotencia, outbox y recuperación. Estado: futuro.
+
+6. CRITERIOS DE CIERRE DE 0.4
+
+- Pedido con líneas y snapshot, importes reproducibles, controles de moneda y transiciones válidas.
+- Reserva con aislamiento, estados y disponibilidad acordados; bordes temporales cubiertos.
+- Dos solicitudes incompatibles sobre un fake transaccional no confirman ambas; sin afirmar por ello garantías de base de datos real.
+- Replay idéntico, clave con solicitud diferente, fallos antes y después de commit y publicación de eventos probados.
+- Pruebas de aislamiento cross-tenant, cross-business y cross-location; sin publicar eventos de transacciones fallidas.
+- CI y checks en verde, ADR y documentos actualizados, limitaciones registradas y aprobación humana del gate.
+
+7. REFERENCIAS
+
+Repositorio: https://github.com/Alphonsus411/app_pedidos_pyme
+PR #2 integrado: https://github.com/Alphonsus411/app_pedidos_pyme/pull/2
+PR #3 borrador: https://github.com/Alphonsus411/app_pedidos_pyme/pull/3
+Plan 0.4: https://github.com/Alphonsus411/app_pedidos_pyme/blob/feat/fase-3-orders-reservations/docs/plan_entrega_0.4_orders_reservations.md
+Estado de desarrollo: https://github.com/Alphonsus411/app_pedidos_pyme/blob/master/docs/DEVELOPMENT_STATUS.md
+Informe hardening: https://github.com/Alphonsus411/app_pedidos_pyme/blob/master/docs/informe_hardening_0.3_execution_hooks_stateless_20260906.md
+ADR-007: https://github.com/Alphonsus411/app_pedidos_pyme/blob/master/docs/adr/ADR-007-idempotencia-pedidos-reservas.md
+
+Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos futuros. La existencia de la etiqueta v0.3.0 no se ha verificado. Este documento resume el estado observado y no modifica el repositorio.
