@@ -328,3 +328,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [COMPLETADO EN BORRADOR] Pruebas adicionales con fakes de fallo de almacenamiento previo a commit y concurrencia de solicitudes con la misma clave; la segunda se rechaza durante la primera ejecución. La unicidad de IDs con claves distintas sigue siendo responsabilidad del adaptador transaccional.
 
 [INTEGRADO EN MASTER] PR #23: creación idempotente de pedidos DRAFT, merge fc4da5b. CI completa: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40711698259 . Revisión manual de código y pruebas; la revisión automática original continuaba en curso al integrar. Unicidad concurrente real, autorización y outbox durable siguen pendientes.
+
+42. REGISTRO DE AVANCE — 28-10-2026 (INCORPORACIÓN DE LÍNEAS)
+
+[COMPLETADO EN BORRADOR] AddOrderLine idempotente obtiene protección por pedido y relee bajo guard, captura oferta activa y valida ámbito; requiere política inyectada para aprobar ajustes/impuestos, actualiza una copia del pedido y emite OrderLineAdded mediante orquestación postcommit.
+[COMPLETADO EN BORRADOR] Pruebas con fakes para replay/conflicto, ámbitos, rechazo de política, estados/duplicados, fallos de commit/complete y dos ediciones concurrentes con guard simulado.
+[EN CURSO] Se requiere autorización del actor en la frontera también para replay; no hay política fiscal/de ajustes ni adaptador por defecto. Guard, repositorios y UoW deben compartir transacción y el adaptador debe asegurar lectura consistente de catálogo; los fakes no demuestran aislamiento real ni entrega durable. No comprueba si Location sigue abierta. Gate 0.4 sigue abierto.
