@@ -15,6 +15,17 @@ from universal_business.domain.shared.value_objects.ids import (
 
 
 @dataclass(frozen=True, kw_only=True)
+class OrderCreated(DomainEvent):
+    """Creación de un borrador sin líneas."""
+
+    aggregate_id: OrderId
+    tenant_id: TenantId
+    business_id: BusinessId
+    location_id: LocationId
+    aggregate_type: str = "Order"
+
+
+@dataclass(frozen=True, kw_only=True)
 class OrderStatusChanged(DomainEvent):
     """Cambio real de estado; su persistencia y publicación son externas."""
 
