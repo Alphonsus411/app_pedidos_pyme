@@ -199,3 +199,8 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] La evaluación consulta una colección recibida y no adjudica ni coordina transacciones. Aún faltan ventanas/reglas/bloqueos, integración de repositorios y comandos, protección ante concurrencia real y la validación del Gate 0.4.
 
 [INTEGRADO EN MASTER] PR #7: detección pura de reservas solapadas por tenant, business, location y recurso; merge 273f546. CI completa y revisión automática aprobadas: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40663148225 . Ventanas, bloqueos y adjudicación atómica permanecen pendientes.
+
+25. REGISTRO DE AVANCE — 28-10-2026 (VENTANAS Y BLOQUEOS)
+
+[COMPLETADO EN BORRADOR] Evaluación pura con intervalos concretos ya expandidos: cobertura completa por una o varias ventanas contiguas, bloqueos prioritarios, estado/capacidad del recurso y reservas solapadas. Sin ventanas se rechaza; se validan tenant, business, location y recurso en los datos recibidos.
+[EN CURSO] No convierte aún AvailabilityRule/AvailabilityBlock existentes en intervalos, no lee repositorios ni configura zonas, no adjudica el recurso ni protege frente a concurrencia. Los recursos sin location se rechazan mientras no exista política explícita. Gate 0.4 continúa abierto.
