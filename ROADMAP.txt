@@ -192,3 +192,8 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] La política no está integrada en Reservation ni disponibilidad y no garantiza adjudicación atómica. T3, T4 y Gate 0.4 continúan abiertos.
 
 [INTEGRADO EN MASTER] PR #6: política pura de ocupación, merge d337879; CI completa Python 3.11/3.12 y revisión automática sin hallazgos. CI: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40662578050 . La integración con disponibilidad y la adjudicación atómica continúan pendientes.
+
+24. REGISTRO DE AVANCE — 28-10-2026 (CONFLICTOS DE RESERVA)
+
+[COMPLETADO EN BORRADOR] Evaluación pura de reservas que ocupan y solapan el intervalo solicitado para un tenant, business, location y recurso explícitos. Rechaza registros fuera de ámbito; conserva la semántica semiabierta, resultados deterministas y falla ante rangos ocupantes inválidos.
+[EN CURSO] La evaluación consulta una colección recibida y no adjudica ni coordina transacciones. Aún faltan ventanas/reglas/bloqueos, integración de repositorios y comandos, protección ante concurrencia real y la validación del Gate 0.4.
