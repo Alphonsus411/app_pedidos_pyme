@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from decimal import ROUND_HALF_EVEN, Context, localcontext
 from uuid import UUID
 
+from universal_business.domain.orders.lifecycle import validate_order_transition
 from universal_business.domain.orders.line import OrderLine
 from universal_business.domain.orders.value_objects import OrderChannel, OrderStatus
 from universal_business.domain.shared.base import BaseEntity
@@ -22,7 +23,12 @@ from universal_business.domain.shared.value_objects.money import Money
 
 @dataclass(kw_only=True)
 class Order(BaseEntity[OrderId]):
-    """Pedido — genérico (no sectorial)."""
+    """Pedido genérico. La construcción también permite rehidratar datos legacy.
+
+    La construcción y rehidratación son fronteras de confianza: pueden recibir
+    estados históricos, incluso sin líneas. Los cambios posteriores de estado,
+    líneas y total deben pasar por los métodos de dominio.
+    """
 
     tenant_id: TenantId
     business_id: BusinessId
@@ -53,6 +59,19 @@ class Order(BaseEntity[OrderId]):
             if not er:
                 raise InvariantViolationError("Order.external_ref vacío no permitido")
             object.__setattr__(self, "external_ref", er)
+        object.__setattr__(self, "_order_initialized", True)
+
+    def __setattr__(self, name: str, value: object) -> None:
+        if name in {"status", "lines", "total", "_order_initialized"} and getattr(
+            self, "_order_initialized", False
+        ):
+            raise InvariantViolationError(f"Order.{name} solo puede modificarse mediante métodos")
+        object.__setattr__(self, name, value)
+
+    def __delattr__(self, name: str) -> None:
+        if name in {"status", "lines", "total", "_order_initialized"}:
+            raise InvariantViolationError(f"Order.{name} no puede eliminarse")
+        object.__delattr__(self, name)
 
     def add_line(self, line: OrderLine) -> None:
         """Añadir una línea al borrador y recalcular, sin validar el catálogo."""
@@ -60,8 +79,8 @@ class Order(BaseEntity[OrderId]):
             raise InvariantViolationError("Solo se pueden editar líneas en DRAFT")
         new_lines = (*self.lines, line)
         total = _calculate_total(new_lines)
-        self.lines = new_lines
-        self.total = total
+        object.__setattr__(self, "lines", new_lines)
+        object.__setattr__(self, "total", total)
         self.touch()
 
     def remove_line(self, line_id: UUID) -> None:
@@ -72,8 +91,21 @@ class Order(BaseEntity[OrderId]):
             raise InvariantViolationError("Línea de pedido inexistente")
         new_lines = tuple(line for line in self.lines if line.line_id != line_id)
         total = _calculate_total(new_lines)
-        self.lines = new_lines
-        self.total = total
+        object.__setattr__(self, "lines", new_lines)
+        object.__setattr__(self, "total", total)
+        self.touch()
+
+    def transition_to(self, target: OrderStatus) -> None:
+        """Aplicar la matriz; confirmar exige líneas y total coherente.
+
+        No sustituye autorización, idempotencia, persistencia ni eventos.
+        """
+        validate_order_transition(self.status, target)
+        if target == OrderStatus.CONFIRMED:
+            calculated = _calculate_total(self.lines)
+            if calculated is None or self.total != calculated:
+                raise InvariantViolationError("Confirmar requiere líneas y un total coherente")
+        object.__setattr__(self, "status", target)
         self.touch()
 
 

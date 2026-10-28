@@ -85,7 +85,7 @@ def test_duplicate_and_mixed_currency_rejected_without_mutation(
 @pytest.mark.parametrize("status", [s for s in OrderStatus if s != OrderStatus.DRAFT])
 def test_lines_frozen_outside_draft(order: Order, line: OrderLine, status: OrderStatus) -> None:
     order.add_line(line)
-    order.status = status
+    order = replace(order, status=status)
     with pytest.raises(InvariantViolationError):
         order.add_line(replace(line, line_id=uuid4()))
     with pytest.raises(InvariantViolationError):
