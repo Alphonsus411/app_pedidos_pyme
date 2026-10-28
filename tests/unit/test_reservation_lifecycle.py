@@ -45,3 +45,27 @@ def test_untyped_status_is_rejected_even_when_string_matches():
         validate_reservation_transition("draft", ReservationStatus.CONFIRMED)
     with pytest.raises(StatusTransitionError):
         validate_reservation_transition(ReservationStatus.DRAFT, "confirmed")
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        (ReservationStatus.DRAFT, False),
+        (ReservationStatus.CONFIRMED, True),
+        (ReservationStatus.CHECKED_IN, True),
+        (ReservationStatus.COMPLETED, True),
+        (ReservationStatus.CANCELLED, False),
+        (ReservationStatus.NO_SHOW, False),
+    ],
+)
+def test_occupancy_by_status(status, expected):
+    from universal_business.domain.reservations.lifecycle import reservation_occupies_interval
+
+    assert reservation_occupies_interval(status) is expected
+
+
+def test_occupancy_rejects_untyped_status():
+    from universal_business.domain.reservations.lifecycle import reservation_occupies_interval
+
+    with pytest.raises(StatusTransitionError):
+        reservation_occupies_interval("confirmed")

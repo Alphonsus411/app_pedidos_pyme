@@ -41,3 +41,19 @@ def validate_reservation_transition(source: ReservationStatus, target: Reservati
         raise StatusTransitionError("El estado de destino debe ser ReservationStatus")
     if target not in allowed_reservation_transitions(source):
         raise StatusTransitionError(f"Transición de reserva no permitida: {source} -> {target}")
+
+
+def reservation_occupies_interval(status: ReservationStatus) -> bool:
+    """Indicar si el estado bloquea el intervalo original de la reserva.
+
+    COMPLETED conserva la ocupación del intervalo original aunque se complete
+    anticipadamente; no modela una liberación anticipada ni modifica un agregado.
+    El caso de uso de disponibilidad debe combinar esta política con el solape.
+    """
+    if not isinstance(status, ReservationStatus):
+        raise StatusTransitionError("El estado debe ser ReservationStatus")
+    return status in {
+        ReservationStatus.CONFIRMED,
+        ReservationStatus.CHECKED_IN,
+        ReservationStatus.COMPLETED,
+    }
