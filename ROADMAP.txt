@@ -197,3 +197,5 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 
 [COMPLETADO EN BORRADOR] Evaluación pura de reservas que ocupan y solapan el intervalo solicitado para un tenant, business, location y recurso explícitos. Rechaza registros fuera de ámbito; conserva la semántica semiabierta, resultados deterministas y falla ante rangos ocupantes inválidos.
 [EN CURSO] La evaluación consulta una colección recibida y no adjudica ni coordina transacciones. Aún faltan ventanas/reglas/bloqueos, integración de repositorios y comandos, protección ante concurrencia real y la validación del Gate 0.4.
+
+[INTEGRADO EN MASTER] PR #7: detección pura de reservas solapadas por tenant, business, location y recurso; merge 273f546. CI completa y revisión automática aprobadas: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40663148225 . Ventanas, bloqueos y adjudicación atómica permanecen pendientes.
