@@ -377,3 +377,8 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] No hay orden, paginación, garantía de completitud, autorización del actor ni snapshot transaccional. El port no recibe business; el handler comprueba el business devuelto, el adaptador debe aislar tenant/location. Se requieren adaptadores y validación real; Gate 0.4 abierto.
 
 [INTEGRADO EN MASTER] PR #29: listado limitado de pedidos por ubicación, merge 1996220. CI y revisión automática sin hallazgos: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40738227184 . Paginación, orden, autorización e infraestructura real permanecen pendientes.
+
+48. REGISTRO DE AVANCE — 28-10-2026 (FLUJO INTEGRADO DE PEDIDOS)
+
+[COMPLETADO EN BORRADOR] Prueba integrada con puertos fake: crear borrador, añadir oferta, validar, confirmar, consultar y listar. Cubre reintentos de creación/confirmación y reutilización de la misma clave entre operaciones, sin duplicar eventos ni sustituir el pedido confirmado.
+[EN CURSO] Los dobles no prueban transacciones, unicidad, autorización, políticas reales, aislamiento de base de datos ni outbox durable. Persisten pruebas y adaptadores de infraestructura y el Gate 0.4 sigue abierto.
