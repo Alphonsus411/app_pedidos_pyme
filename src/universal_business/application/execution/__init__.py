@@ -30,9 +30,10 @@ Sea un ``UseCaseHandler[InT, OutT]`` que toma input y devuelve una tupla
   hooks legacy ``PostRollbackHook``; los STATLESS handlers usan ``on_failure``
   que ya capturaron en el mismo ``handle()`` (ver más abajo). NO se
   despacha/publica nada.
-- Si commit() lanza error → excepción propagada; rollback automático; se
-  invocan ``ExecutionHooks.on_failure`` (si existen) y/o legacy
-  ``PostRollbackHook``; NO se despacha/publica nada.
+- Si commit() lanza CommitNotAppliedError, el adapter garantiza que no se
+  confirmó y se invocan hooks de fallo. Para cualquier otro error de commit,
+  el resultado puede ser incierto: se conserva la reserva para reconciliación.
+  En ambos casos la excepción se propaga y no se despachan eventos aquí.
 - Si un hook on_success lanza error después de commit:
   Ver :ref:`complete-failure-semantics` más abajo.
 
@@ -79,7 +80,7 @@ from typing import Generic, Protocol, TypeVar, runtime_checkable
 from universal_business.application.events.dispatcher import DomainEventDispatcher
 from universal_business.application.events.publisher import EventPublisher
 from universal_business.application.idempotency import IdempotencyKey, IdempotencyStore
-from universal_business.application.unit_of_work import UnitOfWork
+from universal_business.application.unit_of_work import CommitNotAppliedError, UnitOfWork
 from universal_business.domain.shared.events import DomainEvent
 from universal_business.domain.shared.value_objects.ids import TenantId
 
@@ -249,6 +250,8 @@ def execute_use_case(
     result_holder: dict[str, OutT] = {}
     hooks_holder: dict[str, ExecutionHooks[OutT] | None] = {"h": None}
     replay_holder = {"is_replay": False}
+    commit_started = False
+    commit_succeeded = False
     try:
         with unit_of_work as uow:
             outcome = handler.handle(input)
@@ -264,15 +267,27 @@ def execute_use_case(
             if _collector_override is not None:
                 events = list(_collector_override(result, events))
             events_holder["e"] = events
+            commit_started = True
             uow.commit()
+            commit_succeeded = True
     except BaseException as e:  # noqa: BLE001 - rollback semantics
         hooks = hooks_holder["h"]
-        if hooks is not None and hooks.on_failure is not None:
+        # A failed commit may have reached durable storage. Do not release a
+        # reservation or invoke rollback hooks unless no commit was attempted
+        # or the adapter explicitly guarantees that it was not applied.
+        definitely_uncommitted = not commit_started or (
+            not commit_succeeded and isinstance(e, CommitNotAppliedError)
+        )
+        if definitely_uncommitted and hooks is not None and hooks.on_failure is not None:
             try:
                 hooks.on_failure(e)
             except Exception:  # noqa: BLE001 - hook failure never masks original
                 pass
-        if not replay_holder["is_replay"] and isinstance(handler, PostRollbackHook):
+        if (
+            definitely_uncommitted
+            and not replay_holder["is_replay"]
+            and isinstance(handler, PostRollbackHook)
+        ):
             try:
                 handler.post_rollback(e)
             except Exception:  # noqa: BLE001 - hook failure never masks original

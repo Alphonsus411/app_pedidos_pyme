@@ -50,6 +50,7 @@ from universal_business.application.idempotency import (
     IdempotencyKey,
     scoped_idempotency_key,
 )
+from universal_business.application.unit_of_work import CommitNotAppliedError
 from universal_business.domain.catalog.entities import CatalogCategory, Offering
 from universal_business.domain.catalog.events import (
     OfferingActivated,
@@ -215,7 +216,7 @@ class FakeUnitOfWork:
         if self._rolledback:
             return
         if self.fail_on_commit:
-            raise RuntimeError("simulated commit failure")
+            raise CommitNotAppliedError("simulated commit failure")
         self._committed = True
         self.commit_count += 1
 

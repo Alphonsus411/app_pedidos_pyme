@@ -31,8 +31,10 @@ de adaptador durable que implemente esa garantía.
   curso no debe ejecutar otra petición.
 - El resultado devuelto se valida por tipo, tenant, business e identificador.
   Los eventos y hooks del replay no vuelven a ejecutar los efectos originales.
-- Una reserva adquirida se libera si la ejecución falla antes de confirmar el
-  dominio. Si `complete()` falla después de un commit exitoso, no se libera:
+- Una reserva adquirida se libera si la ejecución falla antes de intentar el
+  commit o el adaptador confirma con `CommitNotAppliedError` que no se aplicó.
+  Un error de commit de resultado incierto conserva la reserva. Si `complete()`
+  falla después de un commit exitoso, tampoco se libera:
   el estado queda incierto y requiere reconciliación. No se promete que un
   fallo de red permita distinguir siempre si un commit fue aplicado.
 - El port actual **no garantiza atomicidad** entre persistir dominio y completar

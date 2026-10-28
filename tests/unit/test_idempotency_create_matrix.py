@@ -258,3 +258,52 @@ def test_corrupt_cached_result_is_not_returned(kind, field):
     object.__setattr__(original, field, wrong)
     with pytest.raises(ApplicationError):
         run(handler, command)
+
+
+@pytest.mark.parametrize("kind", ["offering", "category", "resource_type", "resource"])
+def test_unknown_commit_outcome_keeps_key_reserved(kind):
+    """Una desconexión durante commit no implica que la escritura no se haya aplicado."""
+    handler, command, store = make_case(kind)
+
+    class AmbiguousUnitOfWork(FakeUnitOfWork):
+        def commit(self):
+            self.commit_count += 1  # Simula que pudo aplicarse antes de perder la respuesta.
+            raise RuntimeError("commit outcome unknown")
+
+    publisher = FakeEventPublisher()
+    with pytest.raises(RuntimeError, match="commit outcome unknown"):
+        execute_use_case(
+            handler=handler,
+            input=command,
+            unit_of_work=AmbiguousUnitOfWork(),
+            event_dispatcher=DomainEventDispatcher(),
+            event_publisher=publisher,
+        )
+    scoped = scoped_idempotency_key(
+        business_id=command.business_id,
+        operation=f"{type(command).__module__}.{type(command).__qualname__}",
+        key=command.idempotency_key,
+    )
+    assert not store.reserve(command.tenant_id, scoped, "retry")
+    assert publisher.published == []
+    with pytest.raises(ApplicationError):
+        run(handler, command)
+
+
+@pytest.mark.parametrize("kind", ["offering", "category", "resource_type", "resource"])
+def test_context_exit_failure_after_commit_keeps_key_reserved(kind):
+    handler, command, store = make_case(kind)
+
+    class FailedExitUnitOfWork(FakeUnitOfWork):
+        def __exit__(self, exc_type, exc, tb):
+            super().__exit__(exc_type, exc, tb)
+            raise RuntimeError("exit failed after commit")
+
+    with pytest.raises(RuntimeError, match="exit failed after commit"):
+        run(handler, command, FailedExitUnitOfWork())
+    scoped = scoped_idempotency_key(
+        business_id=command.business_id,
+        operation=f"{type(command).__module__}.{type(command).__qualname__}",
+        key=command.idempotency_key,
+    )
+    assert not store.reserve(command.tenant_id, scoped, "retry")

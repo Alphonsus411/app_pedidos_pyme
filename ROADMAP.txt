@@ -141,3 +141,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [COMPLETADO EN BORRADOR] ADR-007 distingue la decisión histórica aceptada de la revisión propuesta y describe el comportamiento real, la incompatibilidad de formatos, la política de fallo postcommit y las limitaciones de ownership/TTL. Retira la sugerencia de generar claves automáticamente a partir del payload.
 [COMPLETADO EN BORRADOR] ADR-008 aclara que publicar después de commit no garantiza entrega atómica ni durable y corrige los casos de replay y liberación de claves.
 [EN CURSO] No hay aprobación o integración de estos ADR revisados; la conciliación de entornos reales y las pruebas con infraestructura persisten como tareas futuras.
+
+17. REGISTRO DE AVANCE — 28-10-2026 (RESULTADO INCIERTO DE COMMIT)
+
+[COMPLETADO EN BORRADOR] Se introduce CommitNotAppliedError para que un adaptador declare explícitamente que el commit no tuvo efecto. El orquestador solo libera la reserva si el fallo ocurrió antes del intento o se recibió esa garantía; ante otro fallo de commit o de salida posterior conserva la clave para reconciliación.
+[COMPLETADO EN BORRADOR] Pruebas para los cuatro handlers: resultado de commit incierto y fallo de salida tras commit conservan la reserva; no se vuelve a ejecutar un reintento. Tests con fakes, no validan un adaptador real ni garantizan publicación durable.
+[EN CURSO] La nueva excepción cambia el contrato de los adaptadores: antes de integrar debe revisarse, validarse en CI y documentarse su adopción. El diseño de persistencia debe reconciliar commits inciertos, garantizar ownership y resolver eventos mediante un mecanismo durable.

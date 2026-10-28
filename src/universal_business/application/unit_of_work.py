@@ -7,8 +7,8 @@ comportar la frontera:
 1. ``__enter__``: abre el ámbito transaccional (equivalente a begin()).
 2. Se ejecuta la lógica de dominio/orquestación (capa de aplicación).
 3. Se llama a :meth:`commit` **explícitamente** si todo fue OK.
-4. ``__exit__``: si hubo excepción (``exc is not None``) o si nunca se llamó
-   a :meth:`commit`, hace :meth:`rollback` automático.
+4. ``__exit__``: ante una excepción o ausencia de commit, intenta rollback.
+   Un rollback posterior no demuestra que un commit incierto no se aplicó.
 
 **No hay commit implícito por ``__exit__``.** Se elige esto en vez de "commit
 cuando no hay error" para minimizar los commits accidentales y dejar muy
@@ -25,6 +25,14 @@ from __future__ import annotations
 
 from types import TracebackType
 from typing import Protocol, Self, runtime_checkable
+
+
+class CommitNotAppliedError(RuntimeError):
+    """The adapter guarantees the attempted commit had no durable effect.
+
+    Raise only when this guarantee is known. Other exceptions from commit
+    represent an unknown outcome and require reconciliation.
+    """
 
 
 @runtime_checkable
@@ -75,6 +83,10 @@ class UnitOfWork(Protocol):
     def commit(self) -> None:
         """Consolida la transacción lógica.
 
+        El adaptador solo puede lanzar CommitNotAppliedError si sabe que no
+        hubo commit. Cualquier otra excepción deja el resultado indeterminado:
+        no se puede asumir que rollback posterior haya deshecho el commit.
+
         ``commit()`` múltiples (doble commit) sin operaciones intermedias
         debe ser seguro (idempotente). La semántica específica queda delegada
         a cada implementación concreta; pero se recomienda no lanzar error
@@ -85,11 +97,10 @@ class UnitOfWork(Protocol):
     def rollback(self) -> None:
         """Deshace la transacción lógica.
 
-        Después de :meth:`rollback`, llamadas a :meth:`commit` previas no
-        deben haber tenido efectos externos (propiedad atómica de la
-        frontera). Idempotente.
+        Idempotente. No revierte un commit ya aplicado ni prueba que un
+        commit con resultado incierto no se haya aplicado.
         """
         raise NotImplementedError
 
 
-__all__ = ["UnitOfWork"]
+__all__ = ["CommitNotAppliedError", "UnitOfWork"]

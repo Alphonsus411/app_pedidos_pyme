@@ -50,7 +50,9 @@ Convención canónica de caso de uso:
 Reglas inviolables:
 - **NUNCA se publica/dispacha eventos antes de commit.**
 - **NUNCA commit implícito en `__exit__`** (commit es decisión de código cliente).
-- **Si commit falla → 0 eventos publicados/dispachados.**
+- **Si commit falla → 0 eventos publicados/dispachados por este flujo.** Si
+  el resultado es incierto, la reserva se conserva y se requiere reconciliación;
+  no hay garantía de entrega durable sin outbox.
 - **Si handler falla → rollback + 0 eventos.**
 - **Si post-commit falla (dispatcher/publisher): el resultado ya fue committeado,
   no se hace rollback.** El código cliente es responsable de reintentar o
@@ -82,7 +84,9 @@ Para idempotencia (Gate 0.2):
   Si un handler necesita modificar estado → debe lanzar un comando nuevo o ser
   un caso de uso separado.
 - ⚠️ **Idempotency: liberar reservas en fallo.** Si ``reserve()`` tuvo éxito
-  pero el handler/UoW falla antes de confirmar el dominio, es obligatorio llamar a
-  ``release()`` para devolver la key a ``FREE``. Si ``complete()`` falla tras
-  commit, no se libera; se requiere reconciliación. Gate 0.2 no asume TTL; sin
+  pero el handler falla antes de intentar commit, o el adaptador lanza
+  ``CommitNotAppliedError`` garantizando que no se aplicó, se llama a
+  ``release()``. Ante cualquier otro error de commit o un fallo de salida
+  posterior al commit, el resultado puede ser incierto y no se libera. Si
+  ``complete()`` falla tras commit tampoco se libera; se requiere reconciliación. Gate 0.2 no asume TTL; sin
   ``release()`` la key permanece ``RESERVED`` indefinidamente.

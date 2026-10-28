@@ -46,7 +46,7 @@ from universal_business.application.idempotency import (
     scoped_idempotency_key,
 )
 from universal_business.application.resources.commands import CreateResource
-from universal_business.application.unit_of_work import UnitOfWork
+from universal_business.application.unit_of_work import CommitNotAppliedError, UnitOfWork
 from universal_business.domain.catalog.entities import CatalogCategory, Offering
 from universal_business.domain.catalog.events import (
     OfferingCreated,
@@ -946,7 +946,7 @@ def test_idempotency_commit_fail_triggers_release_not_complete(
     clean_offering_repo: FakeOfferingRepository,
 ) -> None:
     uow_fail = FakeUnitOfWork()
-    uow_fail.commit_raises = RuntimeError("db down")
+    uow_fail.commit_raises = CommitNotAppliedError("db down")
 
     handler = HookedCreateOfferingHandler(
         offering_repository=clean_offering_repo,
@@ -1502,7 +1502,7 @@ def test_stateless_handler_rollback_a_no_release_b(
     )
 
     uow_a = FakeUnitOfWork()
-    uow_a.commit_raises = RuntimeError("boom-A")
+    uow_a.commit_raises = CommitNotAppliedError("boom-A")
     with pytest.raises(RuntimeError, match="boom-A"):
         execute_use_case(
             handler=handler,

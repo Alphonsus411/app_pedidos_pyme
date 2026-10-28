@@ -14,7 +14,9 @@ El flujo reserva una clave de almacenamiento con scope y huella de solicitud.
 Si está completada, el replay exige la misma huella y valida el resultado. Si
 está en curso, falla sin repetir la operación. Si la ejecución o el commit
 fallan antes de confirmarse, se libera solo la reserva adquirida por esa
-operación. Si ``complete`` falla después del commit, NO se libera: se conserva
+operación y el fallo es anterior al intento de commit, o el adaptador garantiza
+que el commit no se aplicó. Si el resultado del commit es incierto o ``complete``
+falla después del commit, NO se libera: se conserva
 la reserva y se requiere reconciliación. ``commit`` y ``complete`` no son
 atómicos en el contrato actual; no se garantiza recuperación durable.
 
@@ -28,7 +30,8 @@ atómicos en el contrato actual; no se garantiza recuperación durable.
 ### Recuperación tras fallo (``release``)
 
 Una operación que haya reservado una key con :meth:`IdempotencyStore.reserve`
-y falle **antes de confirmar el dominio** debe invocar
+y falle antes de intentar commit, o reciba del adaptador una garantía explícita
+de que el commit no se aplicó, debe invocar
 :meth:`IdempotencyStore.release` para devolver la key al estado ``FREE`` y
 permitir reintentos posteriores. Sin :meth:`release` la key permanecería
 ``RESERVED`` indefinidamente (0.2 no asume TTL automático).
@@ -190,8 +193,9 @@ class IdempotencyStore(Protocol):
           deshace una operación terminada; :meth:`release` se convierte en
           silencioso).
 
-        Debe invocarse si el handler o el UnitOfWork fallan antes de confirmar
-        el dominio, para evitar que la key quede
+        Debe invocarse si el handler falla antes de intentar commit o si el
+        adaptador garantiza que el commit no se aplicó. Ante resultado de
+        commit incierto no debe liberarse. Evita que la key quede
         indefinidamente ``RESERVED`` (Gate 0.2 no asume TTL).
         """
         raise NotImplementedError
