@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import fields, is_dataclass
+from datetime import UTC, datetime
 from decimal import Decimal
 from enum import Enum
 from typing import Any, cast
@@ -24,6 +25,10 @@ def _encode(value: object) -> object:
             f"{type(value).__module__}.{type(value).__qualname__}",
             _encode(value.value),
         ]
+    if isinstance(value, datetime):
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("Naive datetime is not supported in idempotency requests")
+        return ["datetime-utc", value.astimezone(UTC).isoformat(timespec="microseconds")]
     if isinstance(value, UUID):
         return ["uuid", str(value)]
     if isinstance(value, Decimal):
