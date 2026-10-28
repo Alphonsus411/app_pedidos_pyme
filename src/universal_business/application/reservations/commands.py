@@ -36,3 +36,12 @@ class CreateReservation(Command):
     idempotency_key: IdempotencyKey
     party_size: int | None = None
     notes: str | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class CancelReservation(Command):
+    tenant_id: TenantId
+    business_id: BusinessId
+    location_id: LocationId
+    reservation_id: ReservationId
+    idempotency_key: IdempotencyKey
