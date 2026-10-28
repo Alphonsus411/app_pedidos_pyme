@@ -259,3 +259,5 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 
 [COMPLETADO EN BORRADOR] Casos de uso idempotentes y protegidos de CHECKED_IN, COMPLETED y NO_SHOW, con scope, matriz de transición, relectura bajo guard y evento ReservationStatusChanged postcommit. Tests con fakes cubren replay, estados inválidos, scope, commit incierto, cambios y carrera check-in/no-show.
 [EN CURSO] Los comandos no aplican ventanas temporales, política de no-show ni autorización: deben definirse y aplicarse en la frontera antes de exponerlos. No hay guard/repository durables ni pruebas reales de concurrencia. Gate 0.4 sigue abierto.
+
+[INTEGRADO EN MASTER] PR #15: llegada, finalización y no presentación con protección e idempotencia; merge 30077ad. CI en Python 3.11/3.12 y revisión automática sin hallazgos: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40698886952 . Política temporal y autorización, adaptadores durables y pruebas de concurrencia real permanecen pendientes.
