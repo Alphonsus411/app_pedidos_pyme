@@ -16,8 +16,6 @@ Reglas implementadas (no negociables):
 
 from __future__ import annotations
 
-from dataclasses import asdict
-
 from universal_business.application.errors import ApplicationError
 from universal_business.application.execution import (
     ExecutionHooks,
@@ -31,6 +29,7 @@ from universal_business.application.messaging.handlers import (
     CommandHandler,
     QueryHandler,
 )
+from universal_business.application.request_digest import request_digest as _command_digest
 from universal_business.application.resources.commands import (
     ActivateResource,
     ArchiveResource,
@@ -65,20 +64,6 @@ from universal_business.domain.shared.value_objects.ids import (
 # ---------------------------------------------------------------------------
 # Helpers internos
 # ---------------------------------------------------------------------------
-
-
-def _command_digest(command: object) -> str:
-    """Genera un digest determinista (simple) para una request idempotente.
-
-    En producción el adapter real usaría hash criptográfico; aquí basta con
-    una representación textual estable (suficiente para tests y semántica).
-    """
-    try:
-        data = asdict(command)  # type: ignore[call-overload]
-    except Exception:  # noqa: BLE001 - fallback por seguridad
-        data = {"cmd": type(command).__name__}
-    data.pop("idempotency_key", None)
-    return f"{type(command).__name__}:{sorted(data.items())!r}"
 
 
 def _assert_same_scope(

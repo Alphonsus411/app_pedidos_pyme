@@ -16,7 +16,6 @@ STATLESS: ``build_hooks`` devuelve un :class:`ExecutionHooks` con closures
 
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
@@ -41,6 +40,7 @@ from universal_business.application.execution import (
     UseCaseHandlerWithExecutionHooks,
 )
 from universal_business.application.idempotency import IdempotencyKey, IdempotencyStore
+from universal_business.application.request_digest import request_digest as _command_digest
 from universal_business.domain.catalog.entities import CatalogCategory, Offering
 from universal_business.domain.catalog.events import (
     CatalogCategoryCreated,
@@ -59,12 +59,6 @@ if TYPE_CHECKING:
 
 
 _CROSS_SCOPE_MSG = "cross-tenant/business mutation denied"
-
-
-def _command_digest(command: object) -> str:
-    """Helper simple para generar un request_digest de un command frozen."""
-    raw = repr(command)
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 def _assert_same_scope(

@@ -90,3 +90,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] Hardening parcial en PR #4: comparación del digest de solicitud en los cuatro handlers de creación y ausencia de hooks al reproducir un resultado completado. La clave existente por tenant se rechaza ante solicitud distinta; esto todavía no implementa namespaces independientes por business y operación.
 [PENDIENTE] Diseño estable y canónico del digest, revisión de la atomicidad y propiedad de reservas en hooks, trazabilidad del port y ADR-007, escenarios de fallo/concurrencia y cobertura de los cuatro handlers. Verificar compatibilidad con registros persistidos existentes antes de migrar.
 [PENDIENTE] Suite completa incluyendo generador PDF y CI Python 3.11/3.12. En la comprobación local de esta revisión se ejecutó la suite salvo test_docs_pdf_generator.py (falta fpdf), además de Ruff y mypy. No se declara completada T1 ni aprobado el gate.
+
+9. REGISTRO DE AVANCE — 28-10-2026 (HUELLA DE SOLICITUD)
+
+[COMPLETADO EN BORRADOR] Huella request v1 compartida por handlers de catálogo y recursos: incluye tipo y datos de la operación, excluye la clave, ordena conjuntos y rechaza valores no soportados. Prueba de estabilidad entre procesos con distintas semillas de hash, cambios de solicitud/negocio y rechazo de float. Cambios aún pendientes de revisión e integración.
+[EN CURSO] T1 no está terminada: sigue pendiente identidad de clave por tenant/business/operación, revisión de los hooks y de escenarios concurrentes y de fallo para los cuatro handlers, cobertura integral y ADR-007.
+[PENDIENTE] Compatibilidad: el formato v1 cambia las huellas anteriores; no se ha implementado migración de entradas persistidas. Antes de introducir un adaptador duradero habrá que definir migración o caducidad explícita y probarla. No interpretar un conflicto por una huella legacy como igualdad.
