@@ -164,6 +164,38 @@ def test_policy_mutation_does_not_modify_repository_entities(case, approved):
     assert original_offer.name == "Servicio" and original_offer.base_price == Money(10, "EUR")
 
 
+@pytest.mark.parametrize("approved", [True, False])
+def test_nested_metadata_is_isolated(case, approved):
+    cmd, ledger, tx, _, offers, policy, handler = case
+    offers.value = replace(offers.value, metadata={"rules": {"tags": ["original"]}})
+    original_offer, original_order = offers.value, ledger.order
+
+    def mutate(*, order, offering, line):
+        offering.metadata["rules"]["tags"].append("changed")
+        return approved
+
+    policy.approve = mutate
+    publisher = FakeEventPublisher()
+    if approved:
+        run(handler, tx, cmd, publisher)
+        assert len(ledger.order.lines) == 1
+    else:
+        with pytest.raises(ApplicationError):
+            run(handler, tx, cmd, publisher)
+        assert ledger.order is original_order and not publisher.published
+    assert original_offer.metadata["rules"]["tags"] == ["original"]
+
+
+def test_noncopyable_metadata_fails_and_releases_key(case):
+    cmd, ledger, tx, store, offers, _, handler = case
+    offers.value = replace(offers.value, metadata={"lock": Lock()})
+    publisher = FakeEventPublisher()
+    with pytest.raises(ApplicationError, match="metadatos"):
+        run(handler, tx, cmd, publisher)
+    assert not ledger.order.lines and not publisher.published
+    assert store.reserve(cmd.tenant_id, scoped(cmd), "retry")
+
+
 @pytest.mark.parametrize("invalid", ["scope", "offering", "policy", "state", "duplicate"])
 def test_rejection_has_no_committed_change(case, invalid):
     cmd, ledger, tx, store, offers, policy, handler = case
