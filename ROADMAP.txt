@@ -295,3 +295,5 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 
 [COMPLETADO EN BORRADOR] Cada transición válida de Order registra un OrderStatusChanged inmutable con estados anterior/nuevo e identificadores de ámbito. Las transiciones inválidas, repetidas o fallidas no generan evento; pruebas de aislamiento, inmutabilidad y limpieza de la cola.
 [EN CURSO] Incremento dependiente de PR #19, no integrado en master. Los eventos permanecen en memoria: faltan integración con casos de uso, commit/rollback, publicación postcommit y outbox durable. La edición de líneas no emite eventos. Gate 0.4 sigue abierto.
+
+[EN CURSO] PR #20 apunta a master para validar conjuntamente los cambios dependientes de PR #19 y los eventos en CI. Ninguno se considera integrado hasta que el merge se confirme.
