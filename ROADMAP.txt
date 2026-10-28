@@ -359,3 +359,5 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [COMPLETADO EN BORRADOR] Pruebas de recorridos, replay, estados terminales, rechazo de política y fallos de commit con fakes.
 [COMPATIBILIDAD] OrderStatusResult.total pasa de Money a Money | None para transiciones de pedidos vacíos o legacy; los consumidores tipados deben adaptarse. La cancelación/entrega no realizan reembolso, stock ni envío.
 [EN CURSO] Autenticación/autorización en frontera, políticas de negocio reales, adaptadores compartidos, aislamiento y outbox durable siguen pendientes; no se consideran aprobados Gate 0.4 ni las fases posteriores.
+
+[INTEGRADO EN MASTER] PR #27: comandos restantes del ciclo de pedidos, merge ed0db7d. CI y revisión automática sin hallazgos: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40732744972 . OrderStatusResult.total puede ser None; pendientes autorización, políticas y adaptadores durables.
