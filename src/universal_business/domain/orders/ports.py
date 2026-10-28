@@ -33,7 +33,13 @@ class IOrderRepository(Protocol):
         location_id: LocationId,
         status: OrderStatus | None = None,
         limit: int = 50,
-    ) -> list[Order]: ...
+    ) -> list[Order]:
+        """Devolver como máximo limit pedidos del tenant y location, con filtro aplicado.
+
+        La capa llamadora valida business. No se garantizan orden ni paginación;
+        cada implementación debe asegurar aislamiento y lectura coherente.
+        """
+        ...
 
     def list_by_customer(
         self,
