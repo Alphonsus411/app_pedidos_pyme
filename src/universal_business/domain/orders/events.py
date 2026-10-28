@@ -39,6 +39,17 @@ class OrderLineAdded(DomainEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
+class OrderLineRemoved(DomainEvent):
+    aggregate_id: OrderId
+    tenant_id: TenantId
+    business_id: BusinessId
+    location_id: LocationId
+    offering_id: OfferingId
+    line_id: UUID
+    aggregate_type: str = "Order"
+
+
+@dataclass(frozen=True, kw_only=True)
 class OrderStatusChanged(DomainEvent):
     """Cambio real de estado; su persistencia y publicación son externas."""
 

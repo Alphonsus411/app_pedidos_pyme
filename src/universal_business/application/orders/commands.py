@@ -41,3 +41,13 @@ class AddOrderLine(Command):
     discount: Money
     tax: Money
     idempotency_key: IdempotencyKey
+
+
+@dataclass(frozen=True, kw_only=True)
+class RemoveOrderLine(Command):
+    tenant_id: TenantId
+    business_id: BusinessId
+    location_id: LocationId
+    order_id: OrderId
+    line_id: UUID
+    idempotency_key: IdempotencyKey
