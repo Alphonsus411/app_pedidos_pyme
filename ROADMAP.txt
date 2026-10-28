@@ -276,3 +276,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] No se ha integrado la línea en Order ni implementado totales del pedido, validación de Offering/scope, autorización de precios, impuestos legales, eventos o persistencia. Los límites y política de cálculo deben revisarse en el gate; no constituyen facturación fiscal.
 
 [INTEGRADO EN MASTER] PR #17: snapshot y cálculo de línea de pedido, merge 1f469fb. CI Python 3.11/3.12 y revisión automática sin hallazgos: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40700538670 . Integración con Order y políticas de autorización y fiscales siguen pendientes.
+
+35. REGISTRO DE AVANCE — 28-10-2026 (LÍNEAS Y TOTAL DE PEDIDO)
+
+[COMPLETADO EN BORRADOR] Order admite tupla de líneas, calcula el total sumando los totales por línea en moneda única, rechaza identificadores duplicados y discrepancias con un total suministrado y ofrece añadir/eliminar líneas solo en DRAFT. El límite propuesto es de 1000 líneas; tras eliminar la última, el total pasa a None. Mantiene la construcción legacy sin líneas y con total opcional.
+[COMPLETADO EN BORRADOR] Pruebas de cálculo, rehidratación, estados no editables, duplicados, monedas, límite, entradas inválidas y contexto decimal.
+[EN CURSO] Order aún permite asignación directa de atributos y estados; los métodos de edición no impiden dicha vía. Falta integrar la matriz, proteger invariantes en todas las mutaciones y exigir líneas válidas al confirmar, validar Offering/scope y autorización, añadir eventos y casos de uso. Gate 0.4 continúa abierto.
