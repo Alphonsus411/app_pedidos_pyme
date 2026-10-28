@@ -1,65 +1,69 @@
-# ADR-007 — Idempotencia para Pedidos y Reservas
+# ADR-007 — Idempotencia de operaciones
 
 ## Estado
-**Aceptado.** Definido en Entrega 0.1 (contrato; implementación de la entidad → FASE 1).
 
-## Contexto
-Un reintento HTTP, un webhook reenviado o un usuario que pulsa dos veces
-"confirmar reserva" NO deben duplicar un pedido o una reserva. El PDF exige
-"operaciones externas sensibles con idempotencia".
+La decisión de aislar las operaciones por tenant, negocio, tipo y clave fue
+aceptada en la base 0.1. **La revisión técnica siguiente está propuesta en el
+PR #4 y aún no ha sido aprobada ni integrada.** No implica que pedidos o
+reservas tengan ya handlers idempotentes.
 
-## Alternativas consideradas
-| # | Modelo |
-|---|---|
-| A | Cabecera HTTP `Idempotency-Key` + tabla por endpoint. |
-| B | `IdempotencyKey` como entidad de dominio: `(scope, key, tenant_id, business_id)` ÚNICO. |
-| C | Llaves por customer.external_ref + fecha (débil). |
+## Contexto y decisión histórica
 
-## Decisión
-**Opción B.**
+Un reintento de cliente o una entrega repetida no debe duplicar efectos. Se
+eligió identificar una operación mediante `(tenant, business, operación, clave)`
+en vez de deducirla de un cliente y una fecha. La decisión histórica proponía
+registrar clave y agregado en una misma transacción; el núcleo actual no dispone
+de adaptador durable que implemente esa garantía.
 
-### Contrato para FASE 1
-- `IdempotencyScope ∈ {ORDER_CREATE, RESERVATION_CREATE, ORDER_CONFIRM, RESERVATION_CONFIRM, ...}`.
-- Entidad `IdempotencyKey`: `idempotency_id`, `scope`, `key`, `aggregate_type`,
-  `aggregate_id` (nullable), `created_at`, `locked_until` (TTL).
-- Flujo en application service:
-  1. Si la llave `(scope, key, tenant, business)` existe → **retornar el aggregate ya creado** (NO副作用重复).
-  2. Si no existe → crear aggregate + registrar la llave **dentro de la misma transacción**.
-- Exclusividad a nivel `(tenant_id, business_id)`; no global (multi-tenant).
+## Propuesta de contrato para el hardening
 
-### Entrega 0.1
-- ❌ NO se implementa la entidad.
-- ✅ Se define la decisión y se reserva el espacio (el ADR es el contrato).
+- El cliente proporciona una clave de idempotencia para las operaciones que
+  lo requieran. La política exacta por operación se definirá en 0.4. Los cuatro
+  creates existentes de catálogo y recursos aún permiten omitirla; con clave,
+  el store debe estar disponible.
+- El port exige `tenant_id` explícito y recibe una clave derivada y versionada de
+  `business_id`, nombre cualificado de operación y clave original. El espacio
+  de nombres evita que operaciones o negocios distintos compartan replay.
+- El digest v1 se calcula a partir del tipo de comando y de sus campos, sin la
+  clave; ordena conjuntos, usa tipos soportados explícitamente y falla ante
+  valores no soportados. Una misma clave de ámbito con distinto digest produce
+  conflicto; igual digest y resultado válido permiten replay. Una reserva en
+  curso no debe ejecutar otra petición.
+- El resultado devuelto se valida por tipo, tenant, business e identificador.
+  Los eventos y hooks del replay no vuelven a ejecutar los efectos originales.
+- Una reserva adquirida se libera si la ejecución falla antes de confirmar el
+  dominio. Si `complete()` falla después de un commit exitoso, no se libera:
+  el estado queda incierto y requiere reconciliación. No se promete que un
+  fallo de red permita distinguir siempre si un commit fue aplicado.
+- El port actual **no garantiza atomicidad** entre persistir dominio y completar
+  idempotencia, ni publicación durable. El futuro adaptador debe definir la
+  transacción o estrategia de recuperación y demostrarla con pruebas reales.
+- Sin token de ownership, este contrato no admite expiración automática o
+  reasignación de una reserva mientras pueda quedar un ejecutor activo. TTL,
+  leases y recuperación de workers requieren un contrato ampliado con ownership
+  verificable y operaciones atómicas, además de pruebas de concurrencia.
 
-## Consecuencias
-- ✅ Reintentos seguros por diseño.
-- ✅ Integrable con webhooks y cualquier canal (WhatsApp, API, cliente móvil).
-- ⚠️ Toda API de mutación requiere llave → mitigado: hash determinista como
-  valor por defecto en canales que no la proveen; TTL por scope.
+## Compatibilidad y transición
 
-## Propuesta de revisión — 28-10-2026 (PR en borrador)
+Los identificadores de storage y el digest cambian respecto de los previos.
+Los registros anteriores no se migran automáticamente. Antes de desplegar en
+un entorno con datos o reintentos anteriores debe aplicarse una estrategia
+verificada de drenaje, reconciliación, migración o expiración segura. Véase
+[plan de transición v1](../plan_migracion_idempotencia_v1.md).
 
-Este apartado está propuesto para el hardening de la rama de trabajo; no modifica
-el estado de aprobación del gate ni afirma que exista un adaptador durable.
+El nombre cualificado de la clase forma parte del ámbito de operación: renombrar
+una clase o moverla de módulo cambia el scope y requiere una estrategia de
+migración. La serialización v1 conserva la representación de Decimal; valores
+numéricamente iguales con distintas escalas pueden tener huellas diferentes.
+No se debe cambiar el algoritmo v1 sin versionarlo y gestionar las entradas
+existentes.
 
-- El puerto conserva `tenant_id` explícito. La aplicación deriva una clave de
-  almacenamiento versionada a partir de `business_id`, nombre cualificado de la
-  operación y clave aportada; el tenant permanece en la frontera del puerto.
-- La huella v1 de la solicitud incluye el tipo de comando y sus campos, excepto
-  la clave; usa representación determinista y rechaza valores no soportados.
-  Igual scope, clave y huella permite replay; una huella distinta falla cerrada.
-- La actualización cambia el formato previo de clave y huella: los registros
-  existentes **no se migran automáticamente**. Antes de desplegar con datos
-  durables hay que acordar migración o caducidad, evitando repetir efectos.
-- La reserva, el registro del resultado y el commit del dominio no son atómicos
-  en el contrato actual. Un fallo de complete después del commit conserva la
-  reserva y exige reconciliación; bloqueo duradero y recuperación transaccional
-  requieren diseño y pruebas de integración posteriores.
-- El requisito de idempotencia de pedidos y reservas sigue siendo parte de 0.4;
-  todavía no se han implementado sus handlers. Los hooks y las carreras deben
-  revisarse antes de aprobar este hardening.
+## Consecuencias y límites
 
-La propuesta de transición y sus condiciones de bloqueo constan en
-[plan_migracion_idempotencia_v1.md](../plan_migracion_idempotencia_v1.md).
-El uso del nombre cualificado de clase como operación exige migración si cambia
-el nombre; no se permite asumir compatibilidad automática.
+- La protección depende de un `reserve` atómico y de un adaptador que respete el
+  contrato. Las pruebas con fakes no prueban las garantías de producción.
+- No se genera una clave automáticamente a partir del payload: dos operaciones
+  legítimas con igual contenido podrían colisionar. El canal debe identificar el
+  intento lógico y conservar su clave al reintentarlo.
+- La cobertura, migración, concurrencia real y coherencia con la infraestructura
+  de fase 0.5 se validarán antes de declarar el sistema apto para producción.

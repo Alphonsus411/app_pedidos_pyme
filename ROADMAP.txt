@@ -135,3 +135,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] T1 requiere todavía revisión, CI del commit más reciente y estrategia concreta de migración para cada entorno y adaptador real. Las validaciones de fakes no equivalen a garantías transaccionales de producción.
 
 [COMPLETADO] CI completa del commit 4d8aa86 en Python 3.11 y 3.12: extras dev/docs, pytest, Ruff y mypy, todos correctos. Evidencia: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40654644311 .
+
+16. REGISTRO DE AVANCE — 28-10-2026 (REVISIÓN DE ADR)
+
+[COMPLETADO EN BORRADOR] ADR-007 distingue la decisión histórica aceptada de la revisión propuesta y describe el comportamiento real, la incompatibilidad de formatos, la política de fallo postcommit y las limitaciones de ownership/TTL. Retira la sugerencia de generar claves automáticamente a partir del payload.
+[COMPLETADO EN BORRADOR] ADR-008 aclara que publicar después de commit no garantiza entrega atómica ni durable y corrige los casos de replay y liberación de claves.
+[EN CURSO] No hay aprobación o integración de estos ADR revisados; la conciliación de entornos reales y las pruebas con infraestructura persisten como tareas futuras.

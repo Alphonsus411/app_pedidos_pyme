@@ -24,7 +24,7 @@ Para eventos post-commit:
 | # | Estrategia |
 |---|---|
 | 1 | Publicar eventos **dentro** del UnitOfWork antes de commit. | Muy peligroso (evento enviado pero rollback después). |
-| 2 | Commit OK → zona post-commit: dispatcher interno síncrono + EventPublisher externo (ADR-009). | Consistencia fuerte; el dominio queda persistido antes de notificar. |
+| 2 | Commit OK → zona post-commit: dispatcher interno síncrono + EventPublisher externo (ADR-009). | La publicación ocurre tras commit; no es atómica ni durable por sí misma. |
 | 3 | Commit OK → solo escribir en tabla Outbox dentro del UoW. | Requiere infraestructura (Gate 0.5), en 0.2 es prematuro. |
 
 ## Decisión
@@ -58,11 +58,11 @@ Reglas inviolables:
 
 Para idempotencia (Gate 0.2):
 - `IdempotencyStore.reserve()` debe ocurrir **dentro** del UnitOfWork antes del
-  commit. Si reserve() devuelve False → lanzar IdempotencyConflictError
-  (rollback).
+  commit. Si reserve() devuelve False, un resultado completado con digest y ámbito válidos
+  puede devolverse como replay; una reserva en curso o una solicitud distinta falla.
 
 ## Consecuencias
-- ✅ Consistencia fuerte entre estado de dominio y publicación de eventos.
+- ✅ No se publica antes del commit; la entrega puede fallar después y no es atómica.
 - ✅ Error rápido si alguien olvida `commit()` (rollback automático, no hay
   "commit accidental").
 - ✅ El helper `execute_use_case` encapsula la semántica canónica (una única
@@ -82,6 +82,7 @@ Para idempotencia (Gate 0.2):
   Si un handler necesita modificar estado → debe lanzar un comando nuevo o ser
   un caso de uso separado.
 - ⚠️ **Idempotency: liberar reservas en fallo.** Si ``reserve()`` tuvo éxito
-  pero el handler/UoW falla antes de ``complete()``, es obligatorio llamar a
-  ``release()`` para devolver la key a ``FREE``. Gate 0.2 no asume TTL; sin
+  pero el handler/UoW falla antes de confirmar el dominio, es obligatorio llamar a
+  ``release()`` para devolver la key a ``FREE``. Si ``complete()`` falla tras
+  commit, no se libera; se requiere reconciliación. Gate 0.2 no asume TTL; sin
   ``release()`` la key permanece ``RESERVED`` indefinidamente.
