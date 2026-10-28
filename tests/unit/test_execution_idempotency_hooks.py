@@ -1434,8 +1434,8 @@ def test_stateless_handler_two_concurrent_executions_independent_keys(
 
     ka, kb = key_a.value, key_b.value
 
-    ops_a = [(op, v) for (op, v) in global_timeline if v == ka]
-    ops_b = [(op, v) for (op, v) in global_timeline if v == kb]
+    ops_a = [(op, v) for (op, v) in global_timeline if v == ka and op != "get"]
+    ops_b = [(op, v) for (op, v) in global_timeline if v == kb and op != "get"]
 
     assert [op for op, _ in ops_a] == ["reserve", "complete"], (
         f"Ops A deben ser reserve+complete, got {ops_a}"
@@ -1515,8 +1515,8 @@ def test_stateless_handler_rollback_a_no_release_b(
     )
 
     ka, kb = key_a.value, key_b.value
-    ops_a = [op for (op, v) in idem_store.timeline if v == ka]
-    ops_b = [op for (op, v) in idem_store.timeline if v == kb]
+    ops_a = [op for (op, v) in idem_store.timeline if v == ka and op != "get"]
+    ops_b = [op for (op, v) in idem_store.timeline if v == kb and op != "get"]
 
     assert ops_a == ["reserve", "release"], f"esperado reserve+release A, got {ops_a}"
     assert ops_b == ["reserve", "complete"], f"esperado reserve+complete B, got {ops_b}"

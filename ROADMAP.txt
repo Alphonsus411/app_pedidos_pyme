@@ -82,3 +82,11 @@ Informe hardening: https://github.com/Alphonsus411/app_pedidos_pyme/blob/master/
 ADR-007: https://github.com/Alphonsus411/app_pedidos_pyme/blob/master/docs/adr/ADR-007-idempotencia-pedidos-reservas.md
 
 Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos futuros. La existencia de la etiqueta v0.3.0 no se ha verificado. Este documento resume el estado observado y no modifica el repositorio.
+
+8. REGISTRO DE AVANCE — 28-10-2026
+
+[COMPLETADO] Documento ROADMAP.txt incorporado a la rama del PR #3, commit ef94acb. Todavía pendiente de integración en master.
+[COMPLETADO] Reproducidos en ejecución directa dos replays inseguros en CreateOffering: solicitud distinta y business distinto con la misma clave y tenant. Se incorporaron pruebas de regresión al PR #4.
+[EN CURSO] Hardening parcial en PR #4: comparación del digest de solicitud en los cuatro handlers de creación y ausencia de hooks al reproducir un resultado completado. La clave existente por tenant se rechaza ante solicitud distinta; esto todavía no implementa namespaces independientes por business y operación.
+[PENDIENTE] Diseño estable y canónico del digest, revisión de la atomicidad y propiedad de reservas en hooks, trazabilidad del port y ADR-007, escenarios de fallo/concurrencia y cobertura de los cuatro handlers. Verificar compatibilidad con registros persistidos existentes antes de migrar.
+[PENDIENTE] Suite completa incluyendo generador PDF y CI Python 3.11/3.12. En la comprobación local de esta revisión se ejecutó la suite salvo test_docs_pdf_generator.py (falta fpdf), además de Ruff y mypy. No se declara completada T1 ni aprobado el gate.

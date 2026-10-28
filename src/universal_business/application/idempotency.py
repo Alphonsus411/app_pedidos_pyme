@@ -23,7 +23,7 @@ Todo flujo de trabajo típico::
 
         # 3) commit() del UoW.
         # 4) almacenar resultado y marcar como COMPLETADO.
-        store.complete(tenant_id, key, digest(result), result)
+        store.complete(tenant_id, key, digest(request), result)
         return result
     except Exception:
         # 5) Fallo antes de complete: liberar la reserva para reintentos.
@@ -148,11 +148,14 @@ class IdempotencyStore(Protocol):
         self,
         tenant_id: TenantId,
         key: IdempotencyKey,
-        result_digest: str,
+        request_digest: str,
         result_object: object = None,
         /,
     ) -> None:
-        """Marca key como DONE y almacena (digest, result_object).
+        """Marca key como DONE y conserva el digest de la solicitud y el resultado.
+
+        El digest debe ser el mismo suministrado a reserve, para detectar
+        reintentos con una solicitud diferente.
 
         Después de ``complete``, :meth:`reserve` sobre la misma
         ``(tenant_id, key)`` devolverá ``False``.

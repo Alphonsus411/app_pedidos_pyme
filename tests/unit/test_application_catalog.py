@@ -936,10 +936,6 @@ def test_create_offering_idempotency_duplicate_key_after_complete_is_noop() -> N
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Pendiente hardening: replay debe comparar digest y ámbito antes de devolver caché",
-)
 @pytest.mark.parametrize("change_business", [False, True], ids=["payload", "business"])
 def test_create_offering_reused_key_with_different_request_is_rejected(
     change_business: bool,
@@ -977,3 +973,43 @@ def test_create_offering_reused_key_with_different_request_is_rejected(
             event_dispatcher=DomainEventDispatcher(),
             event_publisher=FakeEventPublisher(),
         )
+
+
+def test_completed_replay_does_not_complete_or_release_key() -> None:
+    """El replay no debe modificar la clave ni tras commit ni tras fallo de commit."""
+
+    class TrackingStore(FakeIdempotencyStore):
+        def __init__(self) -> None:
+            super().__init__()
+            self.completes = 0
+            self.releases = 0
+
+        def complete(self, tenant_id, key, result_digest, result_object=None):
+            self.completes += 1
+            return super().complete(tenant_id, key, result_digest, result_object)
+
+        def release(self, tenant_id, key):
+            self.releases += 1
+            return super().release(tenant_id, key)
+
+    tid, bid = TenantId.generate(), BusinessId.generate()
+    store = TrackingStore()
+    handler = CreateOfferingHandler(
+        offering_repository=FakeOfferingRepository(), idempotency_store=store
+    )
+    cmd = _build_base_offering_command(
+        tenant_id=tid,
+        business_id=bid,
+        offering_id=OfferingId.generate(),
+        idempotency_key=_new_idempotency_key("replay-ownership-01"),
+    )
+    for _ in range(2):
+        execute_use_case(
+            handler=handler,
+            input=cmd,
+            unit_of_work=FakeUnitOfWork(),
+            event_dispatcher=DomainEventDispatcher(),
+            event_publisher=FakeEventPublisher(),
+        )
+    assert store.completes == 1
+    assert store.releases == 0

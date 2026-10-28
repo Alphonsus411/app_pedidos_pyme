@@ -81,15 +81,6 @@ def _command_digest(command: object) -> str:
     return f"{type(command).__name__}:{sorted(data.items())!r}"
 
 
-def _result_digest(result: object) -> str:
-    """Digest simple para results almacenados en IdempotencyStore."""
-    if result is None:
-        return "None"
-    if hasattr(result, "id"):
-        return f"{type(result).__name__}:{result.id}"
-    return f"{type(result).__name__}:{result!r}"
-
-
 def _assert_same_scope(
     *,
     entity_tenant_id: TenantId,
@@ -146,7 +137,7 @@ class CreateResourceTypeHandler(
                 cached = store.get(tid, key)
                 if cached is not None:
                     cached_result = cached[1]
-                    if isinstance(cached_result, ResourceTypeEntity):
+                    if cached[0] == req_digest and isinstance(cached_result, ResourceTypeEntity):
                         return (cached_result, [])
                 raise ApplicationError(f"Idempotency key {key} ya está RESERVED por otro worker.")
             reserved_ok = True
@@ -181,7 +172,10 @@ class CreateResourceTypeHandler(
         if key is None or store is None:
             return None
         tid = input.tenant_id
-        digest = _result_digest(result)
+        # A completed replay did not reserve this key and must not mutate it.
+        if store.get(tid, key) is not None:
+            return None
+        digest = _command_digest(input)
         result_obj = result
 
         def _on_success(_res: ResourceTypeEntity, /) -> None:
@@ -228,7 +222,7 @@ class CreateResourceHandler(
                 cached = store.get(tid, key)
                 if cached is not None:
                     cached_result = cached[1]
-                    if isinstance(cached_result, Resource):
+                    if cached[0] == req_digest and isinstance(cached_result, Resource):
                         return (cached_result, [])
                 raise ApplicationError(f"Idempotency key {key} ya está RESERVED por otro worker.")
             reserved_ok = True
@@ -283,7 +277,10 @@ class CreateResourceHandler(
         if key is None or store is None:
             return None
         tid = input.tenant_id
-        digest = _result_digest(result)
+        # A completed replay did not reserve this key and must not mutate it.
+        if store.get(tid, key) is not None:
+            return None
+        digest = _command_digest(input)
         result_obj = result
 
         def _on_success(_res: Resource, /) -> None:

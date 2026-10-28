@@ -67,11 +67,6 @@ def _command_digest(command: object) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-def _result_digest(result: object) -> str:
-    raw = str(id(result)) + repr(result)
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
-
-
 def _assert_same_scope(
     *,
     entity_tenant_id: TenantId,
@@ -124,7 +119,7 @@ class CreateOfferingHandler(UseCaseHandlerWithExecutionHooks[CreateOffering, Off
                 cached = store.get(tid, id_key)
                 if cached is not None:
                     result_obj = cached[1]
-                    if isinstance(result_obj, Offering):
+                    if cached[0] == _command_digest(command) and isinstance(result_obj, Offering):
                         return (result_obj, [])
                 raise IdempotencyConflictError(f"Idempotency conflict for key {id_key.value}")
             reserved_ok = True
@@ -199,7 +194,10 @@ class CreateOfferingHandler(UseCaseHandlerWithExecutionHooks[CreateOffering, Off
         store = self._idempotency_store
         tid = input.tenant_id
         key = id_key
-        digest = _result_digest(result)
+        # A completed replay did not reserve this key and must not mutate it.
+        if store.get(tid, key) is not None:
+            return None
+        digest = _command_digest(input)
         result_obj = result
 
         def _on_success(_res: Offering, /) -> None:
@@ -372,7 +370,9 @@ class CreateCatalogCategoryHandler(
                 cached = store.get(tid, id_key)
                 if cached is not None:
                     result_obj = cached[1]
-                    if isinstance(result_obj, CatalogCategory):
+                    if cached[0] == _command_digest(command) and isinstance(
+                        result_obj, CatalogCategory
+                    ):
                         return (result_obj, [])
                 raise IdempotencyConflictError(f"Idempotency conflict for key {id_key.value}")
             reserved_ok = True
@@ -440,7 +440,10 @@ class CreateCatalogCategoryHandler(
         store = self._idempotency_store
         tid = input.tenant_id
         key = id_key
-        digest = _result_digest(result)
+        # A completed replay did not reserve this key and must not mutate it.
+        if store.get(tid, key) is not None:
+            return None
+        digest = _command_digest(input)
         result_obj = result
 
         def _on_success(_res: CatalogCategory, /) -> None:
