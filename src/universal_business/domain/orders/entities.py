@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from decimal import ROUND_HALF_EVEN, Context, localcontext
 from uuid import UUID
 
+from universal_business.domain.orders.events import OrderStatusChanged
 from universal_business.domain.orders.lifecycle import validate_order_transition
 from universal_business.domain.orders.line import OrderLine
 from universal_business.domain.orders.value_objects import OrderChannel, OrderStatus
@@ -98,15 +99,26 @@ class Order(BaseEntity[OrderId]):
     def transition_to(self, target: OrderStatus) -> None:
         """Aplicar la matriz; confirmar exige líneas y total coherente.
 
-        No sustituye autorización, idempotencia, persistencia ni eventos.
+        Registra un evento local; no sustituye autorización, idempotencia,
+        persistencia ni publicación durable.
         """
         validate_order_transition(self.status, target)
         if target == OrderStatus.CONFIRMED:
             calculated = _calculate_total(self.lines)
             if calculated is None or self.total != calculated:
                 raise InvariantViolationError("Confirmar requiere líneas y un total coherente")
+        previous = self.status
+        event = OrderStatusChanged(
+            aggregate_id=self.id,
+            tenant_id=self.tenant_id,
+            business_id=self.business_id,
+            location_id=self.location_id,
+            previous_status=previous,
+            new_status=target,
+        )
         object.__setattr__(self, "status", target)
         self.touch()
+        self.add_domain_event(event)
 
 
 def _calculate_total(lines: tuple[OrderLine, ...]) -> Money | None:
