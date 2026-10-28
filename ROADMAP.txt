@@ -352,3 +352,10 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] La frontera debe autorizar al actor incluso en replay; la política de negocio, reglas fiscales y adaptadores reales no están implementados. El guard y repositorios deben compartir UoW; la concurrencia simulada no demuestra aislamiento ni outbox durable. Gate 0.4 sigue abierto.
 
 [INTEGRADO EN MASTER] PR #26: validación y confirmación idempotentes de pedidos, merge e63049a. CI y revisión automática sin hallazgos: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40730207819 . Política de negocio, autorización del actor, infraestructura y aislamiento real siguen pendientes.
+
+45. REGISTRO DE AVANCE — 28-10-2026 (CICLO COMPLETO DE PEDIDOS)
+
+[COMPLETADO EN BORRADOR] Comandos idempotentes protegidos para regresar a DRAFT, cancelar, preparar, marcar READY, pasar a DELIVERING y completar. Aplican matriz, ámbito y política inyectada, registran evento postcommit y permiten cancelar un borrador vacío.
+[COMPLETADO EN BORRADOR] Pruebas de recorridos, replay, estados terminales, rechazo de política y fallos de commit con fakes.
+[COMPATIBILIDAD] OrderStatusResult.total pasa de Money a Money | None para transiciones de pedidos vacíos o legacy; los consumidores tipados deben adaptarse. La cancelación/entrega no realizan reembolso, stock ni envío.
+[EN CURSO] Autenticación/autorización en frontera, políticas de negocio reales, adaptadores compartidos, aislamiento y outbox durable siguen pendientes; no se consideran aprobados Gate 0.4 ni las fases posteriores.

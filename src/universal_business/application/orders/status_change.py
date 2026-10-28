@@ -1,4 +1,4 @@
-"""Validación y confirmación idempotentes de pedidos."""
+"""Transiciones idempotentes del ciclo de vida de pedidos."""
 
 from __future__ import annotations
 
@@ -14,8 +14,14 @@ from universal_business.application.idempotency import (
     scoped_idempotency_key,
 )
 from universal_business.application.orders.commands import (
+    CancelOrder,
+    CompleteOrder,
     ConfirmOrder,
+    DispatchOrder,
+    MarkOrderReady,
     OrderStatusCommand,
+    PrepareOrder,
+    ReturnOrderToDraft,
     ValidateOrder,
 )
 from universal_business.application.request_digest import request_digest
@@ -50,7 +56,7 @@ class OrderStatusResult:
     location_id: LocationId
     order_id: OrderId
     status: OrderStatus
-    total: Money
+    total: Money | None
 
 
 def _key(command: OrderStatusCommand) -> IdempotencyKey:
@@ -131,7 +137,9 @@ class _Handler(Generic[C]):
             ) != (tid, command.business_id, command.location_id, command.order_id):
                 raise ApplicationError("Order no encontrado o fuera del ámbito")
             updated = replace(order)
-            if not updated.lines or updated.total is None:
+            if self.target in {OrderStatus.VALIDATED, OrderStatus.CONFIRMED} and (
+                not updated.lines or updated.total is None
+            ):
                 raise ApplicationError("Se requieren líneas y total coherente")
             if self._policy.approve(order=replace(updated), target=self.target) is not True:
                 raise ApplicationError("Política de transición no aprobada")
@@ -175,3 +183,33 @@ class ValidateOrderHandler(_Handler[ValidateOrder]):
 class ConfirmOrderHandler(_Handler[ConfirmOrder]):
     command_type = ConfirmOrder
     target = OrderStatus.CONFIRMED
+
+
+class ReturnOrderToDraftHandler(_Handler[ReturnOrderToDraft]):
+    command_type = ReturnOrderToDraft
+    target = OrderStatus.DRAFT
+
+
+class CancelOrderHandler(_Handler[CancelOrder]):
+    command_type = CancelOrder
+    target = OrderStatus.CANCELLED
+
+
+class PrepareOrderHandler(_Handler[PrepareOrder]):
+    command_type = PrepareOrder
+    target = OrderStatus.PREPARING
+
+
+class MarkOrderReadyHandler(_Handler[MarkOrderReady]):
+    command_type = MarkOrderReady
+    target = OrderStatus.READY
+
+
+class DispatchOrderHandler(_Handler[DispatchOrder]):
+    command_type = DispatchOrder
+    target = OrderStatus.DELIVERING
+
+
+class CompleteOrderHandler(_Handler[CompleteOrder]):
+    command_type = CompleteOrder
+    target = OrderStatus.COMPLETED

@@ -7,9 +7,15 @@ from universal_business.application.orders.add_line import (
 )
 from universal_business.application.orders.commands import (
     AddOrderLine,
+    CancelOrder,
+    CompleteOrder,
     ConfirmOrder,
     CreateOrder,
+    DispatchOrder,
+    MarkOrderReady,
+    PrepareOrder,
     RemoveOrderLine,
+    ReturnOrderToDraft,
     ValidateOrder,
 )
 from universal_business.application.orders.creation import CreateOrderHandler, OrderDraftCreated
@@ -18,9 +24,15 @@ from universal_business.application.orders.remove_line import (
     RemoveOrderLineHandler,
 )
 from universal_business.application.orders.status_change import (
+    CancelOrderHandler,
+    CompleteOrderHandler,
     ConfirmOrderHandler,
+    DispatchOrderHandler,
+    MarkOrderReadyHandler,
     OrderStatusResult,
     OrderTransitionPolicy,
+    PrepareOrderHandler,
+    ReturnOrderToDraftHandler,
     ValidateOrderHandler,
 )
 
@@ -41,4 +53,16 @@ __all__ = [
     "ConfirmOrderHandler",
     "OrderStatusResult",
     "OrderTransitionPolicy",
+    "ReturnOrderToDraft",
+    "ReturnOrderToDraftHandler",
+    "CancelOrder",
+    "CancelOrderHandler",
+    "PrepareOrder",
+    "PrepareOrderHandler",
+    "MarkOrderReady",
+    "MarkOrderReadyHandler",
+    "DispatchOrder",
+    "DispatchOrderHandler",
+    "CompleteOrder",
+    "CompleteOrderHandler",
 ]

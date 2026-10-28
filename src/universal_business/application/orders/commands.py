@@ -70,3 +70,33 @@ class ValidateOrder(OrderStatusCommand):
 @dataclass(frozen=True, kw_only=True)
 class ConfirmOrder(OrderStatusCommand):
     pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class ReturnOrderToDraft(OrderStatusCommand):
+    pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class CancelOrder(OrderStatusCommand):
+    pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class PrepareOrder(OrderStatusCommand):
+    pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class MarkOrderReady(OrderStatusCommand):
+    pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class DispatchOrder(OrderStatusCommand):
+    pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class CompleteOrder(OrderStatusCommand):
+    pass
