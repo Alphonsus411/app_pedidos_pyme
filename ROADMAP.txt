@@ -252,3 +252,5 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [COMPLETADO EN BORRADOR] CancelReservation idempotente para DRAFT y CONFIRMED, con guard de mutación compatible con adjudicación, validación de scope, relectura bajo protección, transición y evento postcommit. CHECKED_IN y estados terminales se rechazan según la matriz actual.
 [COMPLETADO EN BORRADOR] Pruebas de replay, ocupación tras cancelar, ámbitos, cambios entre lecturas, fallos de commit y carrera simulada confirmación/cancelación.
 [EN CURSO] El guard y el repositorio reales deben compartir UoW, protección y orden de adquisición coherente; los fakes no prueban aislamiento real, ausencia de deadlocks ni entrega durable. Gate 0.4 sigue abierto.
+
+[INTEGRADO EN MASTER] PR #14: cancelación idempotente con guard transaccional, merge 8274d7d. CI y revisión automática aprobadas: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40698075925 . Implementaciones durables, protección compartida real y pruebas de aislamiento siguen pendientes.
