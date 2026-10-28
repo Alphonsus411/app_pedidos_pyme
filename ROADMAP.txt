@@ -176,3 +176,5 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 
 [COMPLETADO EN BORRADOR] T3 parcial: política pura de estados con las transiciones propuestas DRAFT→CONFIRMED/CANCELLED; CONFIRMED→CHECKED_IN/CANCELLED/NO_SHOW; CHECKED_IN→COMPLETED. Los estados finales son terminales. 36 combinaciones y validación de tipos probadas.
 [EN CURSO] La política no modifica Reservation ni confirma recursos. La adjudicación atómica, disponibilidad, eventos y casos de uso siguen pendientes; no existe protección frente a mutaciones directas del agregado actual. La fase 0.4 no está aprobada ni terminada.
+
+[COMPLETADO] CI completa del commit 5feb16f en Python 3.11 y 3.12: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40660767593 .
