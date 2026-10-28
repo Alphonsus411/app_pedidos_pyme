@@ -190,3 +190,5 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 
 [COMPLETADO EN BORRADOR] Política pura de ocupación por estado: CONFIRMED, CHECKED_IN y COMPLETED bloquean el intervalo original; DRAFT, CANCELLED y NO_SHOW no lo bloquean. Se conserva el intervalo original al completar anticipadamente; no se modela liberación anticipada.
 [EN CURSO] La política no está integrada en Reservation ni disponibilidad y no garantiza adjudicación atómica. T3, T4 y Gate 0.4 continúan abiertos.
+
+[INTEGRADO EN MASTER] PR #6: política pura de ocupación, merge d337879; CI completa Python 3.11/3.12 y revisión automática sin hallazgos. CI: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40662578050 . La integración con disponibilidad y la adjudicación atómica continúan pendientes.
