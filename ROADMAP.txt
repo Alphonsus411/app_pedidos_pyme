@@ -230,3 +230,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] No hay adaptador durable ni caso de uso de confirmación; faltan pruebas reales de atomicidad, aislamiento, cambios concurrentes de reglas y recuperación tras commit incierto. Gate 0.4 continúa abierto.
 
 [INTEGRADO EN MASTER] PR #11: contrato de adjudicación y pruebas simuladas, merge a3d3803. CI y revisión automática aprobadas: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40695396788 . El caso de uso, adaptadores y garantías transaccionales reales siguen pendientes.
+
+29. REGISTRO DE AVANCE — 28-10-2026 (CONFIRMACIÓN DE RESERVAS)
+
+[COMPLETADO EN BORRADOR] Comando idempotente de confirmación con scope explícito; exige estado DRAFT, valida intervalos y cliente, adquiere protección mediante ReservationAllocationPort y relee la reserva antes de guardarla. Emite ReservationConfirmed después de commit a través del orquestador existente.
+[COMPLETADO EN BORRADOR] Tests con fakes para replay, conflicto de clave, scope/cliente inválidos, estado terminal, cambios entre lecturas, fallos de commit y dos confirmaciones simultáneas sobre un recurso. Contrato exige que las mutaciones concurrentes de reserva compartan la protección.
+[EN CURSO] El caso de uso depende de que todos los puertos compartan la misma transacción y de un adaptador real que implemente todas las verificaciones y protección. No hay adaptador de producción, outbox durable ni pruebas de integración reales. Gate 0.4 continúa abierto.

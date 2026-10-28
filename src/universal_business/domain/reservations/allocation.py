@@ -31,8 +31,10 @@ class ReservationAllocationPort(Protocol):
     Bajo dicha protección el adaptador debe verificar tenant, negocio,
     ubicación, recurso y estado, capacidad, ventanas, bloqueos y reservas
     ocupantes con semántica semiabierta. Las escrituras concurrentes que
-    alteren esas condiciones deben usar protección compatible o aislamiento
-    equivalente; de otro modo este contrato no se cumple. El recurso sin
+    alteren esas condiciones, incluido cualquier cambio de estado, recurso,
+    intervalo o cliente de la reserva solicitada, deben usar protección
+    compatible o aislamiento equivalente hasta commit; de otro modo este
+    contrato no se cumple. El recurso sin
     ubicación asignada debe rechazarse hasta que exista otra política.
 
     Fallo de disponibilidad produce ReservationUnavailableError; errores de
