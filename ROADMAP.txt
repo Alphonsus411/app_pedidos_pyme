@@ -108,3 +108,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [COMPLETADO EN BORRADOR] Los replays completados transportan una marca por ejecución que evita construir hooks y evita completar/liberar una reserva ajena. La construcción de hooks precede a la transformación de eventos; un error del collector ejecuta el hook de fallo que libera la reserva adquirida.
 [COMPLETADO EN BORRADOR] Pruebas: replay con commit fallido no libera ni completa de nuevo; fallo de collector libera la reserva; dos ejecuciones concurrentes con la misma clave y un almacén fake atómico permiten una sola ejecución. Las pruebas no demuestran garantías de un adaptador de producción.
 [EN CURSO] T1 sigue abierta: ampliar cobertura específica de los cuatro handlers y escenarios de fallo, revisar el contrato de propiedad/atomicidad del almacén real, establecer migración de datos legacy y ejecutar CI completa. Todo el trabajo permanece en el PR #4 en borrador.
+
+12. REGISTRO DE AVANCE — 28-10-2026 (MATRIZ DE CREACIÓN)
+
+[COMPLETADO EN BORRADOR] Matriz común de Offering, CatalogCategory, ResourceType y Resource: replay idéntico, solicitud modificada con la misma clave, identificador ya existente con clave nueva y liberación de clave tras fallo de commit simulado.
+[COMPLETADO EN BORRADOR] Los cuatro handlers rechazan un identificador existente en vez de tratar una clave nueva como replay o sobrescribir el agregado. La comprobación previa no sustituye una restricción de unicidad transaccional en la futura infraestructura.
+[EN CURSO] T1 continúa abierta: faltan pruebas de fallo postcommit, concurrencia y aislamiento para todos los handlers, revisión contractual de propiedad y migración legacy y CI completa. Los fakes no validan rollback ni atomicidad de una base de datos real.

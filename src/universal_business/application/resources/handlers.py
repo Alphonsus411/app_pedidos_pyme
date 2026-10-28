@@ -138,6 +138,20 @@ class CreateResourceTypeHandler(
             reserved_ok = True
 
         try:
+            existing = self.resource_type_repo.get(
+                tenant_id=tid,
+                business_id=command.business_id,
+                resource_type_id=command.resource_type_id,
+            )
+            if existing is not None:
+                _assert_same_scope(
+                    entity_tenant_id=existing.tenant_id,
+                    entity_business_id=existing.business_id,
+                    command_tenant_id=tid,
+                    command_business_id=command.business_id,
+                    entity_label="ResourceType",
+                )
+                raise ApplicationError(f"ResourceType {command.resource_type_id} already exists")
             rt = ResourceTypeEntity(
                 id=command.resource_type_id,
                 tenant_id=tid,
@@ -233,6 +247,20 @@ class CreateResourceHandler(
             reserved_ok = True
 
         try:
+            existing = self.resource_repo.get(
+                tenant_id=tid,
+                business_id=command.business_id,
+                resource_id=command.resource_id,
+            )
+            if existing is not None:
+                _assert_same_scope(
+                    entity_tenant_id=existing.tenant_id,
+                    entity_business_id=existing.business_id,
+                    command_tenant_id=tid,
+                    command_business_id=command.business_id,
+                    entity_label="Resource",
+                )
+                raise ApplicationError(f"Resource {command.resource_id} already exists")
             rt = self.resource_type_repo.get(
                 tenant_id=tid,
                 business_id=command.business_id,

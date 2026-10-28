@@ -141,15 +141,13 @@ class CreateOfferingHandler(UseCaseHandlerWithExecutionHooks[CreateOffering, Off
                 offering_id=command.offering_id,
             )
             if existing is not None:
-                if id_key is not None:
-                    _assert_same_scope(
-                        entity_tenant_id=existing.tenant_id,
-                        entity_business_id=existing.business_id,
-                        command_tenant_id=tid,
-                        command_business_id=command.business_id,
-                        entity_label="Offering",
-                    )
-                    return (existing, [])
+                _assert_same_scope(
+                    entity_tenant_id=existing.tenant_id,
+                    entity_business_id=existing.business_id,
+                    command_tenant_id=tid,
+                    command_business_id=command.business_id,
+                    entity_label="Offering",
+                )
                 raise ApplicationError(f"Offering {command.offering_id} already exists")
 
             base_price_money: Money | None = None
@@ -402,15 +400,13 @@ class CreateCatalogCategoryHandler(
                 category_id=command.category_id,
             )
             if existing is not None:
-                if id_key is not None:
-                    _assert_same_scope(
-                        entity_tenant_id=existing.tenant_id,
-                        entity_business_id=existing.business_id,
-                        command_tenant_id=tid,
-                        command_business_id=command.business_id,
-                        entity_label="CatalogCategory",
-                    )
-                    return (existing, [])
+                _assert_same_scope(
+                    entity_tenant_id=existing.tenant_id,
+                    entity_business_id=existing.business_id,
+                    command_tenant_id=tid,
+                    command_business_id=command.business_id,
+                    entity_label="CatalogCategory",
+                )
                 raise ApplicationError(f"CatalogCategory {command.category_id} already exists")
 
             category = CatalogCategory(
