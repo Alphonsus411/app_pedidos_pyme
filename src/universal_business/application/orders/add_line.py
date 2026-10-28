@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from copy import deepcopy
 from dataclasses import dataclass, replace
 from decimal import Decimal
 from typing import Protocol
@@ -41,7 +42,8 @@ class OrderLinePolicy(Protocol):
 
     No sustituye la autorización del actor en la frontera antes de llamar al
     handler, incluidos replays. El adaptador debe rechazar si no puede decidir.
-    Recibe copias superficiales: no debe mutar valores anidados en metadata.
+    Los metadatos se copian mediante deepcopy: objetos personalizados deben
+    implementar copia correcta; la política sigue siendo un componente confiable.
     """
 
     def approve(self, *, order: Order, offering: Offering, line: OrderLine) -> bool: ...
@@ -159,8 +161,13 @@ class AddOrderLineHandler:
                 discount=command.discount,
                 tax=command.tax,
             )
+            try:
+                policy_metadata = deepcopy(dict(offering.metadata))
+            except Exception as exc:
+                raise ApplicationError("No se pudieron aislar los metadatos de la oferta") from exc
+            policy_offering = replace(offering, metadata=policy_metadata)
             if (
-                self._policy.approve(order=replace(order), offering=replace(offering), line=line)
+                self._policy.approve(order=replace(order), offering=policy_offering, line=line)
                 is not True
             ):
                 raise ApplicationError("Política de línea no aprobada")
