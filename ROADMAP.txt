@@ -326,3 +326,5 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] La unicidad concurrente del ID requiere restricción transaccional; los repositorios deben compartir UnitOfWork. Faltan autorización, adaptadores durables, pruebas reales, creación/edición de líneas y confirmación mediante casos de uso; la publicación no es durable. Gate 0.4 abierto.
 
 [COMPLETADO EN BORRADOR] Pruebas adicionales con fakes de fallo de almacenamiento previo a commit y concurrencia de solicitudes con la misma clave; la segunda se rechaza durante la primera ejecución. La unicidad de IDs con claves distintas sigue siendo responsabilidad del adaptador transaccional.
+
+[INTEGRADO EN MASTER] PR #23: creación idempotente de pedidos DRAFT, merge fc4da5b. CI completa: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40711698259 . Revisión manual de código y pruebas; la revisión automática original continuaba en curso al integrar. Unicidad concurrente real, autorización y outbox durable siguen pendientes.
