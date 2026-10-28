@@ -185,3 +185,8 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [INTEGRADO EN MASTER] PR #4: hardening de idempotencia, digest, scopes, reservas, errores y pruebas, merge ed28cbb. CI y revisión automática aprobadas para la rama. La migración legacy, atomicidad durable y validación de adaptadores reales continúan pendientes.
 [INTEGRADO EN MASTER] PR #5: ReservationInterval, resolución de horas locales y política pura de estados, merge 49d7ecb. CI y revisión automática aprobadas. Las piezas no están conectadas a Reservation, comandos o disponibilidad; T3 y Gate 0.4 siguen en curso.
 [PENDIENTE] T0: precisar decisiones de alcance de Gate 0.4; T1: revisión y validación de la migración por entorno y adaptadores reales; T2–T8: implementación e integración pendientes según este roadmap.
+
+23. REGISTRO DE AVANCE — 28-10-2026 (POLÍTICA DE OCUPACIÓN)
+
+[COMPLETADO EN BORRADOR] Política pura de ocupación por estado: CONFIRMED, CHECKED_IN y COMPLETED bloquean el intervalo original; DRAFT, CANCELLED y NO_SHOW no lo bloquean. Se conserva el intervalo original al completar anticipadamente; no se modela liberación anticipada.
+[EN CURSO] La política no está integrada en Reservation ni disponibilidad y no garantiza adjudicación atómica. T3, T4 y Gate 0.4 continúan abiertos.
