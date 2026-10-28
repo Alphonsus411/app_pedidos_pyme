@@ -36,3 +36,25 @@ Un reintento HTTP, un webhook reenviado o un usuario que pulsa dos veces
 - ✅ Integrable con webhooks y cualquier canal (WhatsApp, API, cliente móvil).
 - ⚠️ Toda API de mutación requiere llave → mitigado: hash determinista como
   valor por defecto en canales que no la proveen; TTL por scope.
+
+## Propuesta de revisión — 28-10-2026 (PR en borrador)
+
+Este apartado está propuesto para el hardening de la rama de trabajo; no modifica
+el estado de aprobación del gate ni afirma que exista un adaptador durable.
+
+- El puerto conserva `tenant_id` explícito. La aplicación deriva una clave de
+  almacenamiento versionada a partir de `business_id`, nombre cualificado de la
+  operación y clave aportada; el tenant permanece en la frontera del puerto.
+- La huella v1 de la solicitud incluye el tipo de comando y sus campos, excepto
+  la clave; usa representación determinista y rechaza valores no soportados.
+  Igual scope, clave y huella permite replay; una huella distinta falla cerrada.
+- La actualización cambia el formato previo de clave y huella: los registros
+  existentes **no se migran automáticamente**. Antes de desplegar con datos
+  durables hay que acordar migración o caducidad, evitando repetir efectos.
+- La reserva, el registro del resultado y el commit del dominio no son atómicos
+  en el contrato actual. Un fallo de complete después del commit conserva la
+  reserva y exige reconciliación; bloqueo duradero y recuperación transaccional
+  requieren diseño y pruebas de integración posteriores.
+- El requisito de idempotencia de pedidos y reservas sigue siendo parte de 0.4;
+  todavía no se han implementado sus handlers. Los hooks y las carreras deben
+  revisarse antes de aprobar este hardening.

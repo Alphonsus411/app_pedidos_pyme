@@ -24,6 +24,7 @@ from universal_business.application.execution import (
 from universal_business.application.idempotency import (
     IdempotencyKey,
     IdempotencyStore,
+    scoped_idempotency_key,
 )
 from universal_business.application.messaging.handlers import (
     CommandHandler,
@@ -114,6 +115,14 @@ class CreateResourceTypeHandler(
         key = command.idempotency_key
         store = self.idempotency_store
         tid = command.tenant_id
+        if key is not None:
+            if store is None:
+                raise ApplicationError("Idempotency key requires an idempotency store")
+            key = scoped_idempotency_key(
+                business_id=command.business_id,
+                operation=f"{type(command).__module__}.{type(command).__qualname__}",
+                key=key,
+            )
         reserved_ok = False
 
         if key is not None and store is not None:
@@ -157,6 +166,11 @@ class CreateResourceTypeHandler(
         if key is None or store is None:
             return None
         tid = input.tenant_id
+        key = scoped_idempotency_key(
+            business_id=input.business_id,
+            operation=f"{type(input).__module__}.{type(input).__qualname__}",
+            key=key,
+        )
         # A completed replay did not reserve this key and must not mutate it.
         if store.get(tid, key) is not None:
             return None
@@ -199,6 +213,14 @@ class CreateResourceHandler(
         key = command.idempotency_key
         store = self.idempotency_store
         tid = command.tenant_id
+        if key is not None:
+            if store is None:
+                raise ApplicationError("Idempotency key requires an idempotency store")
+            key = scoped_idempotency_key(
+                business_id=command.business_id,
+                operation=f"{type(command).__module__}.{type(command).__qualname__}",
+                key=key,
+            )
         reserved_ok = False
 
         if key is not None and store is not None:
@@ -262,6 +284,11 @@ class CreateResourceHandler(
         if key is None or store is None:
             return None
         tid = input.tenant_id
+        key = scoped_idempotency_key(
+            business_id=input.business_id,
+            operation=f"{type(input).__module__}.{type(input).__qualname__}",
+            key=key,
+        )
         # A completed replay did not reserve this key and must not mutate it.
         if store.get(tid, key) is not None:
             return None

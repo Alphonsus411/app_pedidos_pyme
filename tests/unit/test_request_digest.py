@@ -63,3 +63,14 @@ def test_digest_rejects_unsupported_values() -> None:
         request_digest(Unsupported(field=object()))
     with pytest.raises(TypeError, match="Unsupported idempotency"):
         request_digest(Unsupported(field=1.0))
+
+
+def test_scoped_key_uses_business_and_operation() -> None:
+    from universal_business.application.idempotency import scoped_idempotency_key
+
+    key = IdempotencyKey(value="same-key-001")
+    a, b = BusinessId.generate(), BusinessId.generate()
+    first = scoped_idempotency_key(business_id=a, operation="catalog.Create", key=key)
+    assert first == scoped_idempotency_key(business_id=a, operation="catalog.Create", key=key)
+    assert first != scoped_idempotency_key(business_id=b, operation="catalog.Create", key=key)
+    assert first != scoped_idempotency_key(business_id=a, operation="resources.Create", key=key)

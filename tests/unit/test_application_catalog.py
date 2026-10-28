@@ -48,6 +48,7 @@ from universal_business.application.errors import (
 )
 from universal_business.application.idempotency import (
     IdempotencyKey,
+    scoped_idempotency_key,
 )
 from universal_business.domain.catalog.entities import CatalogCategory, Offering
 from universal_business.domain.catalog.events import (
@@ -391,7 +392,12 @@ def test_create_offering_happy_path_idempotency_reserved_then_done() -> None:
     assert uow.rollback_count == 0
 
     # Idempotency: DONE
-    entry = store.get(tid, key)
+    entry = store.get(
+        tid,
+        scoped_idempotency_key(
+            business_id=bid, operation=f"{type(cmd).__module__}.{type(cmd).__qualname__}", key=key
+        ),
+    )
     assert entry is not None, "La key debe estar en estado DONE tras complete()"
     assert entry[1] is result
 
@@ -428,7 +434,8 @@ def test_create_offering_cross_tenant_denied() -> None:
     store = FakeIdempotencyStore()
     key = _new_idempotency_key("cross-tenant-01")
     # Reservamos la key para el tenant B (quien intentará «crear» el offering)
-    store.reserve(tid_b, key, "fake-digest")
+    # Simulate an improperly scoped repository response from a different tenant.
+    repo.get = lambda **kwargs: pre_existing  # type: ignore[method-assign]
 
     handler = CreateOfferingHandler(
         offering_repository=repo,
@@ -442,7 +449,7 @@ def test_create_offering_cross_tenant_denied() -> None:
         idempotency_key=key,
     )
 
-    with pytest.raises(ApplicationError, match="cross-tenant"):
+    with pytest.raises(ApplicationError, match="Cross-scope"):
         handler.handle(cmd)
 
 
@@ -769,7 +776,14 @@ def test_create_category_happy() -> None:
     assert result.status == CatalogItemStatus.DRAFT
     assert uow.commit_count == 1
 
-    entry = store.get(tid, cmd.idempotency_key)
+    entry = store.get(
+        tid,
+        scoped_idempotency_key(
+            business_id=bid,
+            operation=f"{type(cmd).__module__}.{type(cmd).__qualname__}",
+            key=cmd.idempotency_key,
+        ),
+    )
     assert entry is not None
     assert entry[1] is result
 
@@ -1013,3 +1027,54 @@ def test_completed_replay_does_not_complete_or_release_key() -> None:
         )
     assert store.completes == 1
     assert store.releases == 0
+
+
+def test_same_key_is_independent_across_business_and_operation() -> None:
+    """La misma clave no comparte resultados entre businesses ni comandos."""
+    tid, bid_a, bid_b = TenantId.generate(), BusinessId.generate(), BusinessId.generate()
+    key = _new_idempotency_key("scope-isolation-01")
+    store = FakeIdempotencyStore()
+    repo = FakeOfferingRepository()
+    handler = CreateOfferingHandler(offering_repository=repo, idempotency_store=store)
+
+    def run(command):
+        return execute_use_case(
+            handler=handler,
+            input=command,
+            unit_of_work=FakeUnitOfWork(),
+            event_dispatcher=DomainEventDispatcher(),
+            event_publisher=FakeEventPublisher(),
+        )
+
+    a = _build_base_offering_command(
+        tenant_id=tid, business_id=bid_a, offering_id=OfferingId.generate(), idempotency_key=key
+    )
+    b = _build_base_offering_command(
+        tenant_id=tid, business_id=bid_b, offering_id=OfferingId.generate(), idempotency_key=key
+    )
+    result_a, result_b = run(a), run(b)
+    assert result_a.business_id == bid_a
+    assert result_b.business_id == bid_b
+    assert result_a.id != result_b.id
+    assert run(a) is result_a
+    assert run(b) is result_b
+
+    category_handler = CreateCatalogCategoryHandler(
+        category_repository=FakeCatalogCategoryRepository(), idempotency_store=store
+    )
+    category = CreateCatalogCategory(
+        tenant_id=tid,
+        business_id=bid_a,
+        category_id=CatalogCategoryId.generate(),
+        name="Categoría",
+        idempotency_key=key,
+    )
+    result_category = execute_use_case(
+        handler=category_handler,
+        input=category,
+        unit_of_work=FakeUnitOfWork(),
+        event_dispatcher=DomainEventDispatcher(),
+        event_publisher=FakeEventPublisher(),
+    )
+    assert result_category.id == category.category_id
+    assert run(a) is result_a

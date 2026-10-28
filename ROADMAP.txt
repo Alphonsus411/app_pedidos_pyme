@@ -96,3 +96,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [COMPLETADO EN BORRADOR] Huella request v1 compartida por handlers de catálogo y recursos: incluye tipo y datos de la operación, excluye la clave, ordena conjuntos y rechaza valores no soportados. Prueba de estabilidad entre procesos con distintas semillas de hash, cambios de solicitud/negocio y rechazo de float. Cambios aún pendientes de revisión e integración.
 [EN CURSO] T1 no está terminada: sigue pendiente identidad de clave por tenant/business/operación, revisión de los hooks y de escenarios concurrentes y de fallo para los cuatro handlers, cobertura integral y ADR-007.
 [PENDIENTE] Compatibilidad: el formato v1 cambia las huellas anteriores; no se ha implementado migración de entradas persistidas. Antes de introducir un adaptador duradero habrá que definir migración o caducidad explícita y probarla. No interpretar un conflicto por una huella legacy como igualdad.
+
+10. REGISTRO DE AVANCE — 28-10-2026 (ÁMBITO DE CLAVES)
+
+[COMPLETADO EN BORRADOR] Se deriva una clave de almacenamiento v1 por business, nombre cualificado de operación y clave del usuario; tenant sigue siendo argumento explícito del puerto. Prueba funcional de independencia entre dos businesses y dos operaciones con la misma clave. En resources, una clave sin store ahora falla de forma explícita.
+[COMPLETADO EN BORRADOR] Se documenta la propuesta de reconciliación con ADR-007; el ADR y estos cambios aún requieren revisión y no constituyen aprobación de gate.
+[EN CURSO] T1 permanece abierta: comprobar propiedad de reservas, concurrencia y fallos en los cuatro handlers; definir migración/caducidad de claves y huellas legacy; completar suite y CI. Los cambios de formato de clave NO son compatibles automáticamente con registros antiguos.

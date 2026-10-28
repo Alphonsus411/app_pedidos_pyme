@@ -39,7 +39,11 @@ from universal_business.application.execution import (
     ExecutionHooks,
     UseCaseHandlerWithExecutionHooks,
 )
-from universal_business.application.idempotency import IdempotencyKey, IdempotencyStore
+from universal_business.application.idempotency import (
+    IdempotencyKey,
+    IdempotencyStore,
+    scoped_idempotency_key,
+)
 from universal_business.application.request_digest import request_digest as _command_digest
 from universal_business.domain.catalog.entities import CatalogCategory, Offering
 from universal_business.domain.catalog.events import (
@@ -101,6 +105,12 @@ class CreateOfferingHandler(UseCaseHandlerWithExecutionHooks[CreateOffering, Off
         id_key: IdempotencyKey | None = command.idempotency_key
         tid = command.tenant_id
         store = self._idempotency_store
+        if id_key is not None:
+            id_key = scoped_idempotency_key(
+                business_id=command.business_id,
+                operation=f"{type(command).__module__}.{type(command).__qualname__}",
+                key=id_key,
+            )
         reserved_ok = False
 
         if id_key is not None:
@@ -187,7 +197,11 @@ class CreateOfferingHandler(UseCaseHandlerWithExecutionHooks[CreateOffering, Off
             return None
         store = self._idempotency_store
         tid = input.tenant_id
-        key = id_key
+        key = scoped_idempotency_key(
+            business_id=input.business_id,
+            operation=f"{type(input).__module__}.{type(input).__qualname__}",
+            key=id_key,
+        )
         # A completed replay did not reserve this key and must not mutate it.
         if store.get(tid, key) is not None:
             return None
@@ -352,6 +366,12 @@ class CreateCatalogCategoryHandler(
         id_key: IdempotencyKey | None = command.idempotency_key
         tid = command.tenant_id
         store = self._idempotency_store
+        if id_key is not None:
+            id_key = scoped_idempotency_key(
+                business_id=command.business_id,
+                operation=f"{type(command).__module__}.{type(command).__qualname__}",
+                key=id_key,
+            )
         reserved_ok = False
 
         if id_key is not None:
@@ -433,7 +453,11 @@ class CreateCatalogCategoryHandler(
             return None
         store = self._idempotency_store
         tid = input.tenant_id
-        key = id_key
+        key = scoped_idempotency_key(
+            business_id=input.business_id,
+            operation=f"{type(input).__module__}.{type(input).__qualname__}",
+            key=id_key,
+        )
         # A completed replay did not reserve this key and must not mutate it.
         if store.get(tid, key) is not None:
             return None

@@ -55,11 +55,13 @@ Semántica contractual de :meth:`release`:
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
-from universal_business.domain.shared.value_objects.ids import TenantId
+from universal_business.domain.shared.value_objects.ids import BusinessId, TenantId
 
 # Se aceptan caracteres alfanuméricos, guiones y guiones bajos. Longitud 8..128.
 _KEY_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
@@ -93,6 +95,25 @@ class IdempotencyKey:
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return self.value
+
+
+def scoped_idempotency_key(
+    *, business_id: BusinessId, operation: str, key: IdempotencyKey
+) -> IdempotencyKey:
+    """Derive a versioned store key for a business and an explicit operation.
+
+    Tenant remains a separate required store argument. This encoding changes
+    storage identities and must not be deployed over legacy records without
+    an explicit migration or expiry policy.
+    """
+    if not operation or not isinstance(operation, str):
+        raise ValueError("operation must be a non-empty string")
+    payload = json.dumps(
+        ["scope-v1", str(business_id), operation, key.value],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return IdempotencyKey(value="scope-v1-" + hashlib.sha256(payload).hexdigest())
 
 
 @runtime_checkable
@@ -188,5 +209,6 @@ class IdempotencyStore(Protocol):
 __all__ = [
     "IdempotencyKey",
     "IdempotencyStore",
+    "scoped_idempotency_key",
     "InvalidIdempotencyKeyError",
 ]
