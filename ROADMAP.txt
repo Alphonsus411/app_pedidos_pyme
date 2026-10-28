@@ -382,3 +382,5 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 
 [COMPLETADO EN BORRADOR] Prueba integrada con puertos fake: crear borrador, añadir oferta, validar, confirmar, consultar y listar. Cubre reintentos de creación/confirmación y reutilización de la misma clave entre operaciones, sin duplicar eventos ni sustituir el pedido confirmado.
 [EN CURSO] Los dobles no prueban transacciones, unicidad, autorización, políticas reales, aislamiento de base de datos ni outbox durable. Persisten pruebas y adaptadores de infraestructura y el Gate 0.4 sigue abierto.
+
+[INTEGRADO EN MASTER] PR #30: prueba integrada del flujo de pedidos con fakes, merge 250052d. CI y revisión automática sin hallazgos: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40738731440 . No sustituye pruebas con infraestructura real ni autorización.
