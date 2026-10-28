@@ -254,3 +254,8 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] El guard y el repositorio reales deben compartir UoW, protección y orden de adquisición coherente; los fakes no prueban aislamiento real, ausencia de deadlocks ni entrega durable. Gate 0.4 sigue abierto.
 
 [INTEGRADO EN MASTER] PR #14: cancelación idempotente con guard transaccional, merge 8274d7d. CI y revisión automática aprobadas: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40698075925 . Implementaciones durables, protección compartida real y pruebas de aislamiento siguen pendientes.
+
+32. REGISTRO DE AVANCE — 28-10-2026 (LLEGADA, FINALIZACIÓN Y NO PRESENTACIÓN)
+
+[COMPLETADO EN BORRADOR] Casos de uso idempotentes y protegidos de CHECKED_IN, COMPLETED y NO_SHOW, con scope, matriz de transición, relectura bajo guard y evento ReservationStatusChanged postcommit. Tests con fakes cubren replay, estados inválidos, scope, commit incierto, cambios y carrera check-in/no-show.
+[EN CURSO] Los comandos no aplican ventanas temporales, política de no-show ni autorización: deben definirse y aplicarse en la frontera antes de exponerlos. No hay guard/repository durables ni pruebas reales de concurrencia. Gate 0.4 sigue abierto.

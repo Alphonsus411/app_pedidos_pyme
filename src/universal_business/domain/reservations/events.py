@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 
+from universal_business.domain.reservations.value_objects import ReservationStatus
 from universal_business.domain.shared.events import DomainEvent
 from universal_business.domain.shared.value_objects.ids import (
     BusinessId,
@@ -39,4 +40,16 @@ class ReservationCancelled(DomainEvent):
     business_id: BusinessId
     location_id: LocationId
     resource_id: ResourceId
+    aggregate_type: str = "Reservation"
+
+
+@dataclass(frozen=True, kw_only=True)
+class ReservationStatusChanged(DomainEvent):
+    aggregate_id: ReservationId
+    tenant_id: TenantId
+    business_id: BusinessId
+    location_id: LocationId
+    resource_id: ResourceId
+    previous_status: ReservationStatus
+    new_status: ReservationStatus
     aggregate_type: str = "Reservation"

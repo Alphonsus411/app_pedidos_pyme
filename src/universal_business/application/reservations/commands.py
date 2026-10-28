@@ -45,3 +45,27 @@ class CancelReservation(Command):
     location_id: LocationId
     reservation_id: ReservationId
     idempotency_key: IdempotencyKey
+
+
+@dataclass(frozen=True, kw_only=True)
+class ReservationStatusCommand(Command):
+    tenant_id: TenantId
+    business_id: BusinessId
+    location_id: LocationId
+    reservation_id: ReservationId
+    idempotency_key: IdempotencyKey
+
+
+@dataclass(frozen=True, kw_only=True)
+class CheckInReservation(ReservationStatusCommand):
+    pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class CompleteReservation(ReservationStatusCommand):
+    pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class MarkReservationNoShow(ReservationStatusCommand):
+    pass
