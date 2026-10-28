@@ -127,3 +127,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [PENDIENTE] No se ha comprobado existencia de adaptadores externos ni se ha ejecutado migración; el procedimiento real, ownership/TTL, fallos entre commit y complete y pruebas transaccionales dependen de infraestructura. El nombre cualificado de operación no puede renombrarse sin migración.
 
 [COMPLETADO] CI completa del código f44908e en Python 3.11 y 3.12: instalación de extras dev/docs, Ruff, mypy y pytest, todos correctos. Ejecución: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40654251826 . La CI valida ese commit; los cambios documentales posteriores requieren su propia revisión.
+
+15. REGISTRO DE AVANCE — 28-10-2026 (REVISIÓN DE RESULTADOS EN CACHÉ)
+
+[COMPLETADO EN BORRADOR] Los cuatro handlers verifican tenant, business e identificador del resultado recuperado además de la huella antes de devolver un replay. Matriz de 12 pruebas de datos cacheados corruptos, sin devolver el objeto ajeno.
+[COMPLETADO EN BORRADOR] Se corrige la documentación del port: una reserva propia solo se libera ante fallo previo a la confirmación del dominio; complete fallido tras commit exige conservar la reserva. Se especifica que no debe existir expiración o reasignación automática sin contrato de ownership.
+[EN CURSO] T1 requiere todavía revisión, CI del commit más reciente y estrategia concreta de migración para cada entorno y adaptador real. Las validaciones de fakes no equivalen a garantías transaccionales de producción.

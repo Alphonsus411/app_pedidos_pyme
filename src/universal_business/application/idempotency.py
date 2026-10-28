@@ -10,36 +10,25 @@ El diseño es **mínimo y sin infraestructura** (0.2 Foundation):
 
 ### Semántica adoptada
 
-Todo flujo de trabajo típico::
-
-    # 1) Anticipadamente: el cliente genera una key unívoca (UUID o similar).
-    if not store.reserve(tenant_id, key, digest(request)):
-        # O bien está siendo procesado por otro worker, o ya se completó.
-        return store.get(tenant_id, key).cached_result
-
-    try:
-        # 2) Dentro de UnitOfWork: ejecutar comando (orquestación + dominio).
-        result = handler(command)
-
-        # 3) commit() del UoW.
-        # 4) almacenar resultado y marcar como COMPLETADO.
-        store.complete(tenant_id, key, digest(request), result)
-        return result
-    except Exception:
-        # 5) Fallo antes de complete: liberar la reserva para reintentos.
-        store.release(tenant_id, key)
-        raise
+El flujo reserva una clave de almacenamiento con scope y huella de solicitud.
+Si está completada, el replay exige la misma huella y valida el resultado. Si
+está en curso, falla sin repetir la operación. Si la ejecución o el commit
+fallan antes de confirmarse, se libera solo la reserva adquirida por esa
+operación. Si ``complete`` falla después del commit, NO se libera: se conserva
+la reserva y se requiere reconciliación. ``commit`` y ``complete`` no son
+atómicos en el contrato actual; no se garantiza recuperación durable.
 
 - **``tenant_id`` siempre explícito**: las keys son independientes por tenant
   (no hay riesgo de cross-tenant colisiones aunque los UUID coincidan entre
   tenants por error).
-- No asumimos timeouts, TTLs, ni limpieza automática en esta fase. Eso lo
-  implementará el adapter de infraestructura concreta.
+- No se admite expiración, reasignación ni limpieza automática de reservas en
+  este contrato sin ownership verificable. Un adaptador con TTL necesita un
+  contrato de token de propiedad y validación atómica de complete/release.
 
 ### Recuperación tras fallo (``release``)
 
 Una operación que haya reservado una key con :meth:`IdempotencyStore.reserve`
-y falle **antes** de llamar a :meth:`IdempotencyStore.complete` debe invocar
+y falle **antes de confirmar el dominio** debe invocar
 :meth:`IdempotencyStore.release` para devolver la key al estado ``FREE`` y
 permitir reintentos posteriores. Sin :meth:`release` la key permanecería
 ``RESERVED`` indefinidamente (0.2 no asume TTL automático).
@@ -201,8 +190,8 @@ class IdempotencyStore(Protocol):
           deshace una operación terminada; :meth:`release` se convierte en
           silencioso).
 
-        Debe invocarse si el handler o el UnitOfWork fallan **antes** de
-        llamar a :meth:`complete`, para evitar que la key quede
+        Debe invocarse si el handler o el UnitOfWork fallan antes de confirmar
+        el dominio, para evitar que la key quede
         indefinidamente ``RESERVED`` (Gate 0.2 no asume TTL).
         """
         raise NotImplementedError

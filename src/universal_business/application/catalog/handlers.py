@@ -124,7 +124,13 @@ class CreateOfferingHandler(UseCaseHandlerWithExecutionHooks[CreateOffering, Off
                 cached = store.get(tid, id_key)
                 if cached is not None:
                     result_obj = cached[1]
-                    if cached[0] == _command_digest(command) and isinstance(result_obj, Offering):
+                    if (
+                        cached[0] == _command_digest(command)
+                        and isinstance(result_obj, Offering)
+                        and result_obj.tenant_id == tid
+                        and result_obj.business_id == command.business_id
+                        and result_obj.id == command.offering_id
+                    ):
                         return IdempotentReplay(result_obj)
                 raise IdempotencyConflictError(f"Idempotency conflict for key {id_key.value}")
             reserved_ok = True
@@ -380,8 +386,12 @@ class CreateCatalogCategoryHandler(
                 cached = store.get(tid, id_key)
                 if cached is not None:
                     result_obj = cached[1]
-                    if cached[0] == _command_digest(command) and isinstance(
-                        result_obj, CatalogCategory
+                    if (
+                        cached[0] == _command_digest(command)
+                        and isinstance(result_obj, CatalogCategory)
+                        and result_obj.tenant_id == tid
+                        and result_obj.business_id == command.business_id
+                        and result_obj.id == command.category_id
                     ):
                         return IdempotentReplay(result_obj)
                 raise IdempotencyConflictError(f"Idempotency conflict for key {id_key.value}")

@@ -246,3 +246,15 @@ def test_repository_failure_releases_reservation_and_publishes_nothing(kind):
     assert uow.commit_count == 0
     assert publisher.published == []
     assert store.reserve(command.tenant_id, scoped, "retry")
+
+
+@pytest.mark.parametrize("kind", ["offering", "category", "resource_type", "resource"])
+@pytest.mark.parametrize("field", ["tenant_id", "business_id", "id"])
+def test_corrupt_cached_result_is_not_returned(kind, field):
+    """Un store defectuoso no debe hacer que el replay devuelva otro agregado o ámbito."""
+    handler, command, _ = make_case(kind)
+    original = run(handler, command)
+    wrong = type(getattr(original, field)).generate()
+    object.__setattr__(original, field, wrong)
+    with pytest.raises(ApplicationError):
+        run(handler, command)

@@ -16,7 +16,7 @@ Reglas implementadas (no negociables):
 
 from __future__ import annotations
 
-from universal_business.application.errors import ApplicationError
+from universal_business.application.errors import ApplicationError, IdempotencyConflictError
 from universal_business.application.execution import (
     ExecutionHooks,
     IdempotentReplay,
@@ -132,9 +132,15 @@ class CreateResourceTypeHandler(
                 cached = store.get(tid, key)
                 if cached is not None:
                     cached_result = cached[1]
-                    if cached[0] == req_digest and isinstance(cached_result, ResourceTypeEntity):
+                    if (
+                        cached[0] == req_digest
+                        and isinstance(cached_result, ResourceTypeEntity)
+                        and cached_result.tenant_id == tid
+                        and cached_result.business_id == command.business_id
+                        and cached_result.id == command.resource_type_id
+                    ):
                         return IdempotentReplay(cached_result)
-                raise ApplicationError(f"Idempotency key {key} ya está RESERVED por otro worker.")
+                raise IdempotencyConflictError("Idempotency conflict or request in progress")
             reserved_ok = True
 
         try:
@@ -241,9 +247,15 @@ class CreateResourceHandler(
                 cached = store.get(tid, key)
                 if cached is not None:
                     cached_result = cached[1]
-                    if cached[0] == req_digest and isinstance(cached_result, Resource):
+                    if (
+                        cached[0] == req_digest
+                        and isinstance(cached_result, Resource)
+                        and cached_result.tenant_id == tid
+                        and cached_result.business_id == command.business_id
+                        and cached_result.id == command.resource_id
+                    ):
                         return IdempotentReplay(cached_result)
-                raise ApplicationError(f"Idempotency key {key} ya está RESERVED por otro worker.")
+                raise IdempotencyConflictError("Idempotency conflict or request in progress")
             reserved_ok = True
 
         try:
