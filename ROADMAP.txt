@@ -318,3 +318,11 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 
 [INTEGRADO EN MASTER] PR #19: invariantes y transiciones, merge ebabf95. CI correcta: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40709438710 . La revisión automática de código permanecía en curso al integrar; se efectuó revisión manual. La rehidratación sigue siendo frontera confiable.
 [INTEGRADO EN MASTER] PR #20: eventos de transición, merge 416ba31. CI correcta tras resolver conflicto: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40709759240 . Revisión automática sin hallazgos del cambio original de eventos; la reconciliación posterior fue revisada manualmente. Eventos solo en memoria; outbox y casos de uso siguen pendientes.
+
+41. REGISTRO DE AVANCE — 28-10-2026 (CREACIÓN DE PEDIDOS)
+
+[COMPLETADO EN BORRADOR] Caso de uso CreateOrder para crear pedido DRAFT vacío con canal, location abierta y cliente opcional del ámbito. Idempotencia por tenant/business/operación, comprobación de digest y scope de resultado, evento OrderCreated y hooks del orquestador.
+[COMPLETADO EN BORRADOR] Pruebas con fakes de replay, conflicto, ID duplicado, ámbito, location cerrada, cliente opcional, commit fallido o incierto, complete fallido y resultado cacheado fuera de ámbito.
+[EN CURSO] La unicidad concurrente del ID requiere restricción transaccional; los repositorios deben compartir UnitOfWork. Faltan autorización, adaptadores durables, pruebas reales, creación/edición de líneas y confirmación mediante casos de uso; la publicación no es durable. Gate 0.4 abierto.
+
+[COMPLETADO EN BORRADOR] Pruebas adicionales con fakes de fallo de almacenamiento previo a commit y concurrencia de solicitudes con la misma clave; la segunda se rechaza durante la primera ejecución. La unicidad de IDs con claves distintas sigue siendo responsabilidad del adaptador transaccional.
