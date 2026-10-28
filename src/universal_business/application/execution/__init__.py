@@ -132,6 +132,17 @@ class PostRollbackHook(Protocol):
     def post_rollback(self, exc: BaseException, /) -> None: ...
 
 
+class IdempotentReplay(tuple[OutT, list[DomainEvent]], Generic[OutT]):
+    """A completed replay owns no reservation and must not execute hooks.
+
+    Tuple compatibility preserves the existing handler result contract. The
+    marker belongs to this invocation, never to a reusable handler instance.
+    """
+
+    def __new__(cls, result: OutT) -> IdempotentReplay[OutT]:
+        return super().__new__(cls, (result, []))
+
+
 @dataclass(frozen=True)
 class IdempotencyExecutionState:
     """Estado inmutable POR-EJECUCIÓN para idempotencia.
@@ -237,17 +248,22 @@ def execute_use_case(
     events_holder: dict[str, Sequence[DomainEvent]] = {}
     result_holder: dict[str, OutT] = {}
     hooks_holder: dict[str, ExecutionHooks[OutT] | None] = {"h": None}
+    replay_holder = {"is_replay": False}
     try:
         with unit_of_work as uow:
-            result, events = handler.handle(input)
+            outcome = handler.handle(input)
+            result, events = outcome
+            replay_holder["is_replay"] = isinstance(outcome, IdempotentReplay)
             result_holder["r"] = result
+            # Acquire hooks before the collector can fail. A completed replay
+            # did not reserve the key and therefore must not own hooks.
+            if not replay_holder["is_replay"] and isinstance(
+                handler, UseCaseHandlerWithExecutionHooks
+            ):
+                hooks_holder["h"] = handler.build_hooks(input, result)
             if _collector_override is not None:
                 events = list(_collector_override(result, events))
             events_holder["e"] = events
-            # Construir hooks DENTRO de la transacción, ANTES del commit.
-            # Así on_failure queda listo si commit lanza.
-            if isinstance(handler, UseCaseHandlerWithExecutionHooks):
-                hooks_holder["h"] = handler.build_hooks(input, result)
             uow.commit()
     except BaseException as e:  # noqa: BLE001 - rollback semantics
         hooks = hooks_holder["h"]
@@ -256,7 +272,7 @@ def execute_use_case(
                 hooks.on_failure(e)
             except Exception:  # noqa: BLE001 - hook failure never masks original
                 pass
-        if isinstance(handler, PostRollbackHook):
+        if not replay_holder["is_replay"] and isinstance(handler, PostRollbackHook):
             try:
                 handler.post_rollback(e)
             except Exception:  # noqa: BLE001 - hook failure never masks original
@@ -270,7 +286,7 @@ def execute_use_case(
     try:
         if hooks is not None and hooks.on_success is not None:
             hooks.on_success(result_val)
-        if isinstance(handler, PostCommitSuccessHook):
+        if not replay_holder["is_replay"] and isinstance(handler, PostCommitSuccessHook):
             handler.post_commit_success(result_val)
     except Exception as hook_exc:
         # Complete failure semantics: dominio commit OK, hook falló.
@@ -291,6 +307,7 @@ __all__ = [
     "PostCommitSuccessHook",
     "PostRollbackHook",
     "IdempotencyExecutionState",
+    "IdempotentReplay",
     "ExecutionHooks",
     "UseCaseHandlerWithExecutionHooks",
     "execute_use_case",

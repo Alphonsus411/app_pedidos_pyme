@@ -102,3 +102,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [COMPLETADO EN BORRADOR] Se deriva una clave de almacenamiento v1 por business, nombre cualificado de operación y clave del usuario; tenant sigue siendo argumento explícito del puerto. Prueba funcional de independencia entre dos businesses y dos operaciones con la misma clave. En resources, una clave sin store ahora falla de forma explícita.
 [COMPLETADO EN BORRADOR] Se documenta la propuesta de reconciliación con ADR-007; el ADR y estos cambios aún requieren revisión y no constituyen aprobación de gate.
 [EN CURSO] T1 permanece abierta: comprobar propiedad de reservas, concurrencia y fallos en los cuatro handlers; definir migración/caducidad de claves y huellas legacy; completar suite y CI. Los cambios de formato de clave NO son compatibles automáticamente con registros antiguos.
+
+11. REGISTRO DE AVANCE — 28-10-2026 (PROPIEDAD Y FALLOS)
+
+[COMPLETADO EN BORRADOR] Los replays completados transportan una marca por ejecución que evita construir hooks y evita completar/liberar una reserva ajena. La construcción de hooks precede a la transformación de eventos; un error del collector ejecuta el hook de fallo que libera la reserva adquirida.
+[COMPLETADO EN BORRADOR] Pruebas: replay con commit fallido no libera ni completa de nuevo; fallo de collector libera la reserva; dos ejecuciones concurrentes con la misma clave y un almacén fake atómico permiten una sola ejecución. Las pruebas no demuestran garantías de un adaptador de producción.
+[EN CURSO] T1 sigue abierta: ampliar cobertura específica de los cuatro handlers y escenarios de fallo, revisar el contrato de propiedad/atomicidad del almacén real, establecer migración de datos legacy y ejecutar CI completa. Todo el trabajo permanece en el PR #4 en borrador.

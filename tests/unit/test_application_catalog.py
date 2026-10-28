@@ -1027,6 +1027,47 @@ def test_completed_replay_does_not_complete_or_release_key() -> None:
         )
     assert store.completes == 1
     assert store.releases == 0
+    failing_uow = FakeUnitOfWork()
+    failing_uow.fail_on_commit = True
+    with pytest.raises(RuntimeError, match="simulated commit failure"):
+        execute_use_case(
+            handler=handler,
+            input=cmd,
+            unit_of_work=failing_uow,
+            event_dispatcher=DomainEventDispatcher(),
+            event_publisher=FakeEventPublisher(),
+        )
+    assert store.completes == 1
+    assert store.releases == 0
+
+
+def test_collector_failure_releases_owned_reservation() -> None:
+    tid, bid = TenantId.generate(), BusinessId.generate()
+    key = _new_idempotency_key("collector-failure-01")
+    store = FakeIdempotencyStore()
+    handler = CreateOfferingHandler(
+        offering_repository=FakeOfferingRepository(), idempotency_store=store
+    )
+    cmd = _build_base_offering_command(
+        tenant_id=tid, business_id=bid, offering_id=OfferingId.generate(), idempotency_key=key
+    )
+
+    def fail_collector(result, events):
+        raise RuntimeError("collector failed")
+
+    with pytest.raises(RuntimeError, match="collector failed"):
+        execute_use_case(
+            handler=handler,
+            input=cmd,
+            unit_of_work=FakeUnitOfWork(),
+            event_dispatcher=DomainEventDispatcher(),
+            event_publisher=FakeEventPublisher(),
+            _collector_override=fail_collector,
+        )
+    scoped = scoped_idempotency_key(
+        business_id=bid, operation=f"{type(cmd).__module__}.{type(cmd).__qualname__}", key=key
+    )
+    assert store.reserve(tid, scoped, "retry-after-failure")
 
 
 def test_same_key_is_independent_across_business_and_operation() -> None:
@@ -1078,3 +1119,70 @@ def test_same_key_is_independent_across_business_and_operation() -> None:
     )
     assert result_category.id == category.category_id
     assert run(a) is result_a
+
+
+def test_concurrent_same_key_rejects_second_inflight_request() -> None:
+    """Un almacén fake atómico no permite que dos ejecuciones adquieran la misma clave."""
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event, Lock
+
+    class AtomicStore(FakeIdempotencyStore):
+        def __init__(self):
+            super().__init__()
+            self.lock = Lock()
+
+        def reserve(self, tenant_id, key, request_digest):
+            with self.lock:
+                return super().reserve(tenant_id, key, request_digest)
+
+        def get(self, tenant_id, key):
+            with self.lock:
+                return super().get(tenant_id, key)
+
+        def complete(self, tenant_id, key, request_digest, result_object=None):
+            with self.lock:
+                return super().complete(tenant_id, key, request_digest, result_object)
+
+        def release(self, tenant_id, key):
+            with self.lock:
+                return super().release(tenant_id, key)
+
+    entered, resume = Event(), Event()
+
+    class BlockingRepo(FakeOfferingRepository):
+        def save(self, offering):
+            entered.set()
+            if not resume.wait(timeout=5):
+                raise RuntimeError("test synchronization timed out")
+            return super().save(offering)
+
+    tid, bid = TenantId.generate(), BusinessId.generate()
+    key = _new_idempotency_key("concurrent-scope-01")
+    command = _build_base_offering_command(
+        tenant_id=tid, business_id=bid, offering_id=OfferingId.generate(), idempotency_key=key
+    )
+    repo, store = BlockingRepo(), AtomicStore()
+    handler = CreateOfferingHandler(offering_repository=repo, idempotency_store=store)
+
+    def run():
+        return execute_use_case(
+            handler=handler,
+            input=command,
+            unit_of_work=FakeUnitOfWork(),
+            event_dispatcher=DomainEventDispatcher(),
+            event_publisher=FakeEventPublisher(),
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(run)
+        try:
+            assert entered.wait(timeout=5)
+            second = pool.submit(run)
+            with pytest.raises(ApplicationError, match="Idempotency conflict"):
+                second.result(timeout=5)
+        finally:
+            resume.set()
+        first_result = first.result(timeout=5)
+    assert first_result.id == command.offering_id
+    assert len(repo.save_calls) == 1
+    assert run() is first_result

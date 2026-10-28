@@ -37,6 +37,7 @@ from universal_business.application.catalog.queries import (
 from universal_business.application.errors import ApplicationError, IdempotencyConflictError
 from universal_business.application.execution import (
     ExecutionHooks,
+    IdempotentReplay,
     UseCaseHandlerWithExecutionHooks,
 )
 from universal_business.application.idempotency import (
@@ -124,7 +125,7 @@ class CreateOfferingHandler(UseCaseHandlerWithExecutionHooks[CreateOffering, Off
                 if cached is not None:
                     result_obj = cached[1]
                     if cached[0] == _command_digest(command) and isinstance(result_obj, Offering):
-                        return (result_obj, [])
+                        return IdempotentReplay(result_obj)
                 raise IdempotencyConflictError(f"Idempotency conflict for key {id_key.value}")
             reserved_ok = True
 
@@ -202,9 +203,6 @@ class CreateOfferingHandler(UseCaseHandlerWithExecutionHooks[CreateOffering, Off
             operation=f"{type(input).__module__}.{type(input).__qualname__}",
             key=id_key,
         )
-        # A completed replay did not reserve this key and must not mutate it.
-        if store.get(tid, key) is not None:
-            return None
         digest = _command_digest(input)
         result_obj = result
 
@@ -387,7 +385,7 @@ class CreateCatalogCategoryHandler(
                     if cached[0] == _command_digest(command) and isinstance(
                         result_obj, CatalogCategory
                     ):
-                        return (result_obj, [])
+                        return IdempotentReplay(result_obj)
                 raise IdempotencyConflictError(f"Idempotency conflict for key {id_key.value}")
             reserved_ok = True
 
@@ -458,9 +456,6 @@ class CreateCatalogCategoryHandler(
             operation=f"{type(input).__module__}.{type(input).__qualname__}",
             key=id_key,
         )
-        # A completed replay did not reserve this key and must not mutate it.
-        if store.get(tid, key) is not None:
-            return None
         digest = _command_digest(input)
         result_obj = result
 

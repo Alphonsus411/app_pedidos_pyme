@@ -19,6 +19,7 @@ from __future__ import annotations
 from universal_business.application.errors import ApplicationError
 from universal_business.application.execution import (
     ExecutionHooks,
+    IdempotentReplay,
     UseCaseHandlerWithExecutionHooks,
 )
 from universal_business.application.idempotency import (
@@ -132,7 +133,7 @@ class CreateResourceTypeHandler(
                 if cached is not None:
                     cached_result = cached[1]
                     if cached[0] == req_digest and isinstance(cached_result, ResourceTypeEntity):
-                        return (cached_result, [])
+                        return IdempotentReplay(cached_result)
                 raise ApplicationError(f"Idempotency key {key} ya está RESERVED por otro worker.")
             reserved_ok = True
 
@@ -171,9 +172,6 @@ class CreateResourceTypeHandler(
             operation=f"{type(input).__module__}.{type(input).__qualname__}",
             key=key,
         )
-        # A completed replay did not reserve this key and must not mutate it.
-        if store.get(tid, key) is not None:
-            return None
         digest = _command_digest(input)
         result_obj = result
 
@@ -230,7 +228,7 @@ class CreateResourceHandler(
                 if cached is not None:
                     cached_result = cached[1]
                     if cached[0] == req_digest and isinstance(cached_result, Resource):
-                        return (cached_result, [])
+                        return IdempotentReplay(cached_result)
                 raise ApplicationError(f"Idempotency key {key} ya está RESERVED por otro worker.")
             reserved_ok = True
 
@@ -289,9 +287,6 @@ class CreateResourceHandler(
             operation=f"{type(input).__module__}.{type(input).__qualname__}",
             key=key,
         )
-        # A completed replay did not reserve this key and must not mutate it.
-        if store.get(tid, key) is not None:
-            return None
         digest = _command_digest(input)
         result_obj = result
 

@@ -158,6 +158,8 @@ class IdempotencyStore(Protocol):
 
         Returns
         -------
+        La operación debe ser atómica para el par (tenant_id, key).
+
         ``True``  → reserva OK (procesamiento puede empezar).
         ``False`` → la key ya estaba RESERVED o DONE (devolver caché desde
         :meth:`get` o lanzar :class:`IdempotencyConflictError` según
