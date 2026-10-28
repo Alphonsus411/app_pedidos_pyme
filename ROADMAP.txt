@@ -342,3 +342,5 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [COMPLETADO EN BORRADOR] RemoveOrderLine idempotente relee el pedido bajo guard, comprueba ámbito, elimina solo en DRAFT sobre una copia y emite OrderLineRemoved mediante el orquestador; total None al eliminar última línea.
 [COMPLETADO EN BORRADOR] Pruebas con fakes: replay/conflicto, ámbito, estado, línea inexistente y fallos de commit/complete; sin mutación del agregado original antes del commit.
 [EN CURSO] La frontera debe autorizar al actor en cada solicitud y replay. Guard y repositorio requieren misma UoW y adaptadores reales; no se demuestra aislamiento real ni publicación durable. Falta confirmación por caso de uso y Gate 0.4 sigue abierto.
+
+[INTEGRADO EN MASTER] PR #25: retirada idempotente de líneas bajo guard, merge 7c4ee01. CI completa: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40713538088 . Revisión manual; la revisión automática seguía en curso al integrar. Autorización, adaptadores y aislamiento real continúan pendientes.
