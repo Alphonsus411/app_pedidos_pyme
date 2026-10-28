@@ -298,3 +298,5 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [COMPLETADO EN BORRADOR] Contrato OrderMutationGuard: protección por tenant/business/location/pedido dentro de la misma UnitOfWork, releer y validar bajo protección, conservar hasta commit o rollback y coordinar todas las mutaciones. La creación requiere unicidad transaccional separada.
 [COMPLETADO EN BORRADOR] Test de dos ediciones coordinadas con fake, que conserva ambas líneas; solo demuestra el comportamiento del fake.
 [EN CURSO] No hay adaptador real ni handlers de pedidos que utilicen el guard; no se han demostrado aislamiento, rollback, deadlocks ni atomicidad de base de datos. Gate 0.4 sigue abierto.
+
+[INTEGRADO EN MASTER] PR #22: contrato de protección de mutaciones de pedidos, merge 567ddf7. CI Python 3.11/3.12 y revisión automática sin hallazgos: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40709081099 . Adaptador y validación de aislamiento real siguen pendientes.
