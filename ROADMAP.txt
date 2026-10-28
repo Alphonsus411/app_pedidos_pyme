@@ -82,3 +82,76 @@ Informe hardening: https://github.com/Alphonsus411/app_pedidos_pyme/blob/master/
 ADR-007: https://github.com/Alphonsus411/app_pedidos_pyme/blob/master/docs/adr/ADR-007-idempotencia-pedidos-reservas.md
 
 Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos futuros. La existencia de la etiqueta v0.3.0 no se ha verificado. Este documento resume el estado observado y no modifica el repositorio.
+
+8. REGISTRO DE AVANCE — 28-10-2026
+
+[COMPLETADO] Documento ROADMAP.txt incorporado a la rama del PR #3, commit ef94acb. Todavía pendiente de integración en master.
+[COMPLETADO] Reproducidos en ejecución directa dos replays inseguros en CreateOffering: solicitud distinta y business distinto con la misma clave y tenant. Se incorporaron pruebas de regresión al PR #4.
+[EN CURSO] Hardening parcial en PR #4: comparación del digest de solicitud en los cuatro handlers de creación y ausencia de hooks al reproducir un resultado completado. La clave existente por tenant se rechaza ante solicitud distinta; esto todavía no implementa namespaces independientes por business y operación.
+[PENDIENTE] Diseño estable y canónico del digest, revisión de la atomicidad y propiedad de reservas en hooks, trazabilidad del port y ADR-007, escenarios de fallo/concurrencia y cobertura de los cuatro handlers. Verificar compatibilidad con registros persistidos existentes antes de migrar.
+[PENDIENTE] Suite completa incluyendo generador PDF y CI Python 3.11/3.12. En la comprobación local de esta revisión se ejecutó la suite salvo test_docs_pdf_generator.py (falta fpdf), además de Ruff y mypy. No se declara completada T1 ni aprobado el gate.
+
+9. REGISTRO DE AVANCE — 28-10-2026 (HUELLA DE SOLICITUD)
+
+[COMPLETADO EN BORRADOR] Huella request v1 compartida por handlers de catálogo y recursos: incluye tipo y datos de la operación, excluye la clave, ordena conjuntos y rechaza valores no soportados. Prueba de estabilidad entre procesos con distintas semillas de hash, cambios de solicitud/negocio y rechazo de float. Cambios aún pendientes de revisión e integración.
+[EN CURSO] T1 no está terminada: sigue pendiente identidad de clave por tenant/business/operación, revisión de los hooks y de escenarios concurrentes y de fallo para los cuatro handlers, cobertura integral y ADR-007.
+[PENDIENTE] Compatibilidad: el formato v1 cambia las huellas anteriores; no se ha implementado migración de entradas persistidas. Antes de introducir un adaptador duradero habrá que definir migración o caducidad explícita y probarla. No interpretar un conflicto por una huella legacy como igualdad.
+
+10. REGISTRO DE AVANCE — 28-10-2026 (ÁMBITO DE CLAVES)
+
+[COMPLETADO EN BORRADOR] Se deriva una clave de almacenamiento v1 por business, nombre cualificado de operación y clave del usuario; tenant sigue siendo argumento explícito del puerto. Prueba funcional de independencia entre dos businesses y dos operaciones con la misma clave. En resources, una clave sin store ahora falla de forma explícita.
+[COMPLETADO EN BORRADOR] Se documenta la propuesta de reconciliación con ADR-007; el ADR y estos cambios aún requieren revisión y no constituyen aprobación de gate.
+[EN CURSO] T1 permanece abierta: comprobar propiedad de reservas, concurrencia y fallos en los cuatro handlers; definir migración/caducidad de claves y huellas legacy; completar suite y CI. Los cambios de formato de clave NO son compatibles automáticamente con registros antiguos.
+
+11. REGISTRO DE AVANCE — 28-10-2026 (PROPIEDAD Y FALLOS)
+
+[COMPLETADO EN BORRADOR] Los replays completados transportan una marca por ejecución que evita construir hooks y evita completar/liberar una reserva ajena. La construcción de hooks precede a la transformación de eventos; un error del collector ejecuta el hook de fallo que libera la reserva adquirida.
+[COMPLETADO EN BORRADOR] Pruebas: replay con commit fallido no libera ni completa de nuevo; fallo de collector libera la reserva; dos ejecuciones concurrentes con la misma clave y un almacén fake atómico permiten una sola ejecución. Las pruebas no demuestran garantías de un adaptador de producción.
+[EN CURSO] T1 sigue abierta: ampliar cobertura específica de los cuatro handlers y escenarios de fallo, revisar el contrato de propiedad/atomicidad del almacén real, establecer migración de datos legacy y ejecutar CI completa. Todo el trabajo permanece en el PR #4 en borrador.
+
+12. REGISTRO DE AVANCE — 28-10-2026 (MATRIZ DE CREACIÓN)
+
+[COMPLETADO EN BORRADOR] Matriz común de Offering, CatalogCategory, ResourceType y Resource: replay idéntico, solicitud modificada con la misma clave, identificador ya existente con clave nueva y liberación de clave tras fallo de commit simulado.
+[COMPLETADO EN BORRADOR] Los cuatro handlers rechazan un identificador existente en vez de tratar una clave nueva como replay o sobrescribir el agregado. La comprobación previa no sustituye una restricción de unicidad transaccional en la futura infraestructura.
+[EN CURSO] T1 continúa abierta: faltan pruebas de fallo postcommit, concurrencia y aislamiento para todos los handlers, revisión contractual de propiedad y migración legacy y CI completa. Los fakes no validan rollback ni atomicidad de una base de datos real.
+
+13. REGISTRO DE AVANCE — 28-10-2026 (FALLOS Y CONCURRENCIA)
+
+[COMPLETADO EN BORRADOR] Para los cuatro handlers, pruebas de fallo de repositorio antes del commit (sin publicación y con liberación de la clave), fallo de commit y fallo de complete después del commit (reserva conservada y eventos publicados en el fake).
+[COMPLETADO EN BORRADOR] Para los cuatro handlers, pruebas de dos solicitudes concurrentes con una misma clave usando un almacén fake con reserve atómico; se rechaza la segunda mientras se procesa la primera.
+[EN CURSO] T1 sigue abierta: revisar la propiedad de reserva en adaptadores reales, la migración de entradas legacy y el ADR; completar CI con los extras de documentación. Estas pruebas no demuestran atomicidad de una base de datos ni entrega durable de eventos.
+
+14. REGISTRO DE AVANCE — 28-10-2026 (TRANSICIÓN DE FORMATO)
+
+[COMPLETADO EN BORRADOR] Plan operativo propuesto para inventario, drenaje, reconciliación, migración verificable y vuelta atrás; vinculado a ADR-007. Establece que v1 no se activa sobre datos legacy o reintentos anteriores sin conciliación y evidencia.
+[PENDIENTE] No se ha comprobado existencia de adaptadores externos ni se ha ejecutado migración; el procedimiento real, ownership/TTL, fallos entre commit y complete y pruebas transaccionales dependen de infraestructura. El nombre cualificado de operación no puede renombrarse sin migración.
+
+[COMPLETADO] CI completa del código f44908e en Python 3.11 y 3.12: instalación de extras dev/docs, Ruff, mypy y pytest, todos correctos. Ejecución: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40654251826 . La CI valida ese commit; los cambios documentales posteriores requieren su propia revisión.
+
+15. REGISTRO DE AVANCE — 28-10-2026 (REVISIÓN DE RESULTADOS EN CACHÉ)
+
+[COMPLETADO EN BORRADOR] Los cuatro handlers verifican tenant, business e identificador del resultado recuperado además de la huella antes de devolver un replay. Matriz de 12 pruebas de datos cacheados corruptos, sin devolver el objeto ajeno.
+[COMPLETADO EN BORRADOR] Se corrige la documentación del port: una reserva propia solo se libera ante fallo previo a la confirmación del dominio; complete fallido tras commit exige conservar la reserva. Se especifica que no debe existir expiración o reasignación automática sin contrato de ownership.
+[EN CURSO] T1 requiere todavía revisión, CI del commit más reciente y estrategia concreta de migración para cada entorno y adaptador real. Las validaciones de fakes no equivalen a garantías transaccionales de producción.
+
+[COMPLETADO] CI completa del commit 4d8aa86 en Python 3.11 y 3.12: extras dev/docs, pytest, Ruff y mypy, todos correctos. Evidencia: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40654644311 .
+
+16. REGISTRO DE AVANCE — 28-10-2026 (REVISIÓN DE ADR)
+
+[COMPLETADO EN BORRADOR] ADR-007 distingue la decisión histórica aceptada de la revisión propuesta y describe el comportamiento real, la incompatibilidad de formatos, la política de fallo postcommit y las limitaciones de ownership/TTL. Retira la sugerencia de generar claves automáticamente a partir del payload.
+[COMPLETADO EN BORRADOR] ADR-008 aclara que publicar después de commit no garantiza entrega atómica ni durable y corrige los casos de replay y liberación de claves.
+[EN CURSO] No hay aprobación o integración de estos ADR revisados; la conciliación de entornos reales y las pruebas con infraestructura persisten como tareas futuras.
+
+17. REGISTRO DE AVANCE — 28-10-2026 (RESULTADO INCIERTO DE COMMIT)
+
+[COMPLETADO EN BORRADOR] Se introduce CommitNotAppliedError para que un adaptador declare explícitamente que el commit no tuvo efecto. El orquestador solo libera la reserva si el fallo ocurrió antes del intento o se recibió esa garantía; ante otro fallo de commit o de salida posterior conserva la clave para reconciliación.
+[COMPLETADO EN BORRADOR] Pruebas para los cuatro handlers: resultado de commit incierto y fallo de salida tras commit conservan la reserva; no se vuelve a ejecutar un reintento. Tests con fakes, no validan un adaptador real ni garantizan publicación durable.
+[EN CURSO] La nueva excepción cambia el contrato de los adaptadores: antes de integrar debe revisarse, validarse en CI y documentarse su adopción. El diseño de persistencia debe reconciliar commits inciertos, garantizar ownership y resolver eventos mediante un mecanismo durable.
+[COMPLETADO] CI completa del commit 7d98915 en Python 3.11 y 3.12, con extras dev/docs, pytest, Ruff y mypy: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40655709244 . El contrato de adaptadores y la revisión humana del PR permanecen pendientes.
+
+18. REGISTRO DE AVANCE — 28-10-2026 (ERROR DOBLE POSTCOMMIT)
+
+[COMPLETADO EN BORRADOR] Si complete falla después del commit y también falla dispatch o publish, el error de complete se preserva como error principal y el de eventos se conserva como causa. Se mantiene la reserva; si dispatch falla, publish no se invoca según ADR-009. Matriz para los cuatro handlers y ambos fallos.
+[COMPLETADO EN BORRADOR] ADR-009 aclara que la validación previa de eventos no evita efectos parciales de handlers anteriores si uno posterior falla.
+[EN CURSO] Las pruebas usan fakes; no proporcionan outbox, recuperación de eventos ni entrega durable. T1 y la revisión del PR siguen abiertas.
+[COMPLETADO] CI completa del commit b9f7de3 en Python 3.11 y 3.12: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40656041948 .

@@ -18,6 +18,7 @@ from universal_business.application import (
 )
 from universal_business.application.idempotency import (
     IdempotencyKey,
+    scoped_idempotency_key,
 )
 from universal_business.application.resources.commands import (
     ActivateResource,
@@ -433,7 +434,14 @@ def test_create_resource_type_happy_idempotency_done() -> None:
     assert any(isinstance(e, ResourceTypeCreated) for e in events)
     assert rtrepo.save_count == 1
 
-    cached = store.get(tenant, IdempotencyKey(value="rt-create-00001"))
+    cached = store.get(
+        tenant,
+        scoped_idempotency_key(
+            business_id=biz,
+            operation=f"{type(cmd).__module__}.{type(cmd).__qualname__}",
+            key=IdempotencyKey(value="rt-create-00001"),
+        ),
+    )
     assert cached is not None
     assert cached[1] is result
 
@@ -881,6 +889,13 @@ def test_rollback_on_repository_error() -> None:
 
     # release fue llamado AUTOMÁTICAMENTE dentro de handle() vía
     # try/except interno STATLESS (no es necesaria llamada manual)
-    assert (tenant, key) in store.release_calls
+    assert (
+        tenant,
+        scoped_idempotency_key(
+            business_id=biz,
+            operation=f"{type(cmd).__module__}.{type(cmd).__qualname__}",
+            key=key,
+        ),
+    ) in store.release_calls
     # La key no está en estado DONE
     assert store.get(tenant, key) is None

@@ -48,7 +48,9 @@ from universal_business.application.errors import (
 )
 from universal_business.application.idempotency import (
     IdempotencyKey,
+    scoped_idempotency_key,
 )
+from universal_business.application.unit_of_work import CommitNotAppliedError
 from universal_business.domain.catalog.entities import CatalogCategory, Offering
 from universal_business.domain.catalog.events import (
     OfferingActivated,
@@ -214,7 +216,7 @@ class FakeUnitOfWork:
         if self._rolledback:
             return
         if self.fail_on_commit:
-            raise RuntimeError("simulated commit failure")
+            raise CommitNotAppliedError("simulated commit failure")
         self._committed = True
         self.commit_count += 1
 
@@ -391,7 +393,12 @@ def test_create_offering_happy_path_idempotency_reserved_then_done() -> None:
     assert uow.rollback_count == 0
 
     # Idempotency: DONE
-    entry = store.get(tid, key)
+    entry = store.get(
+        tid,
+        scoped_idempotency_key(
+            business_id=bid, operation=f"{type(cmd).__module__}.{type(cmd).__qualname__}", key=key
+        ),
+    )
     assert entry is not None, "La key debe estar en estado DONE tras complete()"
     assert entry[1] is result
 
@@ -428,7 +435,8 @@ def test_create_offering_cross_tenant_denied() -> None:
     store = FakeIdempotencyStore()
     key = _new_idempotency_key("cross-tenant-01")
     # Reservamos la key para el tenant B (quien intentará «crear» el offering)
-    store.reserve(tid_b, key, "fake-digest")
+    # Simulate an improperly scoped repository response from a different tenant.
+    repo.get = lambda **kwargs: pre_existing  # type: ignore[method-assign]
 
     handler = CreateOfferingHandler(
         offering_repository=repo,
@@ -442,7 +450,7 @@ def test_create_offering_cross_tenant_denied() -> None:
         idempotency_key=key,
     )
 
-    with pytest.raises(ApplicationError, match="cross-tenant"):
+    with pytest.raises(ApplicationError, match="Cross-scope"):
         handler.handle(cmd)
 
 
@@ -769,7 +777,14 @@ def test_create_category_happy() -> None:
     assert result.status == CatalogItemStatus.DRAFT
     assert uow.commit_count == 1
 
-    entry = store.get(tid, cmd.idempotency_key)
+    entry = store.get(
+        tid,
+        scoped_idempotency_key(
+            business_id=bid,
+            operation=f"{type(cmd).__module__}.{type(cmd).__qualname__}",
+            key=cmd.idempotency_key,
+        ),
+    )
     assert entry is not None
     assert entry[1] is result
 
@@ -934,3 +949,241 @@ def test_create_offering_idempotency_duplicate_key_after_complete_is_noop() -> N
     assert len(repo.save_calls) == saves_after_first, (
         "Las llamadas idempotentes duplicadas no deben disparar save adicionales"
     )
+
+
+@pytest.mark.parametrize("change_business", [False, True], ids=["payload", "business"])
+def test_create_offering_reused_key_with_different_request_is_rejected(
+    change_business: bool,
+) -> None:
+    """Una clave completada no puede devolver datos de otra petición o negocio."""
+    from dataclasses import replace
+
+    tid = TenantId.generate()
+    bid = BusinessId.generate()
+    oid = OfferingId.generate()
+    key = _new_idempotency_key("different-request-01")
+    repo = FakeOfferingRepository()
+    store = FakeIdempotencyStore()
+    handler = CreateOfferingHandler(offering_repository=repo, idempotency_store=store)
+    original = _build_base_offering_command(
+        tenant_id=tid, business_id=bid, offering_id=oid, idempotency_key=key
+    )
+    execute_use_case(
+        handler=handler,
+        input=original,
+        unit_of_work=FakeUnitOfWork(),
+        event_dispatcher=DomainEventDispatcher(),
+        event_publisher=FakeEventPublisher(),
+    )
+    altered = (
+        replace(original, business_id=BusinessId.generate())
+        if change_business
+        else replace(original, name="Otra solicitud")
+    )
+    with pytest.raises(ApplicationError):
+        execute_use_case(
+            handler=handler,
+            input=altered,
+            unit_of_work=FakeUnitOfWork(),
+            event_dispatcher=DomainEventDispatcher(),
+            event_publisher=FakeEventPublisher(),
+        )
+
+
+def test_completed_replay_does_not_complete_or_release_key() -> None:
+    """El replay no debe modificar la clave ni tras commit ni tras fallo de commit."""
+
+    class TrackingStore(FakeIdempotencyStore):
+        def __init__(self) -> None:
+            super().__init__()
+            self.completes = 0
+            self.releases = 0
+
+        def complete(self, tenant_id, key, result_digest, result_object=None):
+            self.completes += 1
+            return super().complete(tenant_id, key, result_digest, result_object)
+
+        def release(self, tenant_id, key):
+            self.releases += 1
+            return super().release(tenant_id, key)
+
+    tid, bid = TenantId.generate(), BusinessId.generate()
+    store = TrackingStore()
+    handler = CreateOfferingHandler(
+        offering_repository=FakeOfferingRepository(), idempotency_store=store
+    )
+    cmd = _build_base_offering_command(
+        tenant_id=tid,
+        business_id=bid,
+        offering_id=OfferingId.generate(),
+        idempotency_key=_new_idempotency_key("replay-ownership-01"),
+    )
+    for _ in range(2):
+        execute_use_case(
+            handler=handler,
+            input=cmd,
+            unit_of_work=FakeUnitOfWork(),
+            event_dispatcher=DomainEventDispatcher(),
+            event_publisher=FakeEventPublisher(),
+        )
+    assert store.completes == 1
+    assert store.releases == 0
+    failing_uow = FakeUnitOfWork()
+    failing_uow.fail_on_commit = True
+    with pytest.raises(RuntimeError, match="simulated commit failure"):
+        execute_use_case(
+            handler=handler,
+            input=cmd,
+            unit_of_work=failing_uow,
+            event_dispatcher=DomainEventDispatcher(),
+            event_publisher=FakeEventPublisher(),
+        )
+    assert store.completes == 1
+    assert store.releases == 0
+
+
+def test_collector_failure_releases_owned_reservation() -> None:
+    tid, bid = TenantId.generate(), BusinessId.generate()
+    key = _new_idempotency_key("collector-failure-01")
+    store = FakeIdempotencyStore()
+    handler = CreateOfferingHandler(
+        offering_repository=FakeOfferingRepository(), idempotency_store=store
+    )
+    cmd = _build_base_offering_command(
+        tenant_id=tid, business_id=bid, offering_id=OfferingId.generate(), idempotency_key=key
+    )
+
+    def fail_collector(result, events):
+        raise RuntimeError("collector failed")
+
+    with pytest.raises(RuntimeError, match="collector failed"):
+        execute_use_case(
+            handler=handler,
+            input=cmd,
+            unit_of_work=FakeUnitOfWork(),
+            event_dispatcher=DomainEventDispatcher(),
+            event_publisher=FakeEventPublisher(),
+            _collector_override=fail_collector,
+        )
+    scoped = scoped_idempotency_key(
+        business_id=bid, operation=f"{type(cmd).__module__}.{type(cmd).__qualname__}", key=key
+    )
+    assert store.reserve(tid, scoped, "retry-after-failure")
+
+
+def test_same_key_is_independent_across_business_and_operation() -> None:
+    """La misma clave no comparte resultados entre businesses ni comandos."""
+    tid, bid_a, bid_b = TenantId.generate(), BusinessId.generate(), BusinessId.generate()
+    key = _new_idempotency_key("scope-isolation-01")
+    store = FakeIdempotencyStore()
+    repo = FakeOfferingRepository()
+    handler = CreateOfferingHandler(offering_repository=repo, idempotency_store=store)
+
+    def run(command):
+        return execute_use_case(
+            handler=handler,
+            input=command,
+            unit_of_work=FakeUnitOfWork(),
+            event_dispatcher=DomainEventDispatcher(),
+            event_publisher=FakeEventPublisher(),
+        )
+
+    a = _build_base_offering_command(
+        tenant_id=tid, business_id=bid_a, offering_id=OfferingId.generate(), idempotency_key=key
+    )
+    b = _build_base_offering_command(
+        tenant_id=tid, business_id=bid_b, offering_id=OfferingId.generate(), idempotency_key=key
+    )
+    result_a, result_b = run(a), run(b)
+    assert result_a.business_id == bid_a
+    assert result_b.business_id == bid_b
+    assert result_a.id != result_b.id
+    assert run(a) is result_a
+    assert run(b) is result_b
+
+    category_handler = CreateCatalogCategoryHandler(
+        category_repository=FakeCatalogCategoryRepository(), idempotency_store=store
+    )
+    category = CreateCatalogCategory(
+        tenant_id=tid,
+        business_id=bid_a,
+        category_id=CatalogCategoryId.generate(),
+        name="Categoría",
+        idempotency_key=key,
+    )
+    result_category = execute_use_case(
+        handler=category_handler,
+        input=category,
+        unit_of_work=FakeUnitOfWork(),
+        event_dispatcher=DomainEventDispatcher(),
+        event_publisher=FakeEventPublisher(),
+    )
+    assert result_category.id == category.category_id
+    assert run(a) is result_a
+
+
+def test_concurrent_same_key_rejects_second_inflight_request() -> None:
+    """Un almacén fake atómico no permite que dos ejecuciones adquieran la misma clave."""
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event, Lock
+
+    class AtomicStore(FakeIdempotencyStore):
+        def __init__(self):
+            super().__init__()
+            self.lock = Lock()
+
+        def reserve(self, tenant_id, key, request_digest):
+            with self.lock:
+                return super().reserve(tenant_id, key, request_digest)
+
+        def get(self, tenant_id, key):
+            with self.lock:
+                return super().get(tenant_id, key)
+
+        def complete(self, tenant_id, key, request_digest, result_object=None):
+            with self.lock:
+                return super().complete(tenant_id, key, request_digest, result_object)
+
+        def release(self, tenant_id, key):
+            with self.lock:
+                return super().release(tenant_id, key)
+
+    entered, resume = Event(), Event()
+
+    class BlockingRepo(FakeOfferingRepository):
+        def save(self, offering):
+            entered.set()
+            if not resume.wait(timeout=5):
+                raise RuntimeError("test synchronization timed out")
+            return super().save(offering)
+
+    tid, bid = TenantId.generate(), BusinessId.generate()
+    key = _new_idempotency_key("concurrent-scope-01")
+    command = _build_base_offering_command(
+        tenant_id=tid, business_id=bid, offering_id=OfferingId.generate(), idempotency_key=key
+    )
+    repo, store = BlockingRepo(), AtomicStore()
+    handler = CreateOfferingHandler(offering_repository=repo, idempotency_store=store)
+
+    def run():
+        return execute_use_case(
+            handler=handler,
+            input=command,
+            unit_of_work=FakeUnitOfWork(),
+            event_dispatcher=DomainEventDispatcher(),
+            event_publisher=FakeEventPublisher(),
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(run)
+        try:
+            assert entered.wait(timeout=5)
+            second = pool.submit(run)
+            with pytest.raises(ApplicationError, match="Idempotency conflict"):
+                second.result(timeout=5)
+        finally:
+            resume.set()
+        first_result = first.result(timeout=5)
+    assert first_result.id == command.offering_id
+    assert len(repo.save_calls) == 1
+    assert run() is first_result

@@ -16,21 +16,22 @@ Reglas implementadas (no negociables):
 
 from __future__ import annotations
 
-from dataclasses import asdict
-
-from universal_business.application.errors import ApplicationError
+from universal_business.application.errors import ApplicationError, IdempotencyConflictError
 from universal_business.application.execution import (
     ExecutionHooks,
+    IdempotentReplay,
     UseCaseHandlerWithExecutionHooks,
 )
 from universal_business.application.idempotency import (
     IdempotencyKey,
     IdempotencyStore,
+    scoped_idempotency_key,
 )
 from universal_business.application.messaging.handlers import (
     CommandHandler,
     QueryHandler,
 )
+from universal_business.application.request_digest import request_digest as _command_digest
 from universal_business.application.resources.commands import (
     ActivateResource,
     ArchiveResource,
@@ -65,29 +66,6 @@ from universal_business.domain.shared.value_objects.ids import (
 # ---------------------------------------------------------------------------
 # Helpers internos
 # ---------------------------------------------------------------------------
-
-
-def _command_digest(command: object) -> str:
-    """Genera un digest determinista (simple) para una request idempotente.
-
-    En producción el adapter real usaría hash criptográfico; aquí basta con
-    una representación textual estable (suficiente para tests y semántica).
-    """
-    try:
-        data = asdict(command)  # type: ignore[call-overload]
-    except Exception:  # noqa: BLE001 - fallback por seguridad
-        data = {"cmd": type(command).__name__}
-    data.pop("idempotency_key", None)
-    return f"{type(command).__name__}:{sorted(data.items())!r}"
-
-
-def _result_digest(result: object) -> str:
-    """Digest simple para results almacenados en IdempotencyStore."""
-    if result is None:
-        return "None"
-    if hasattr(result, "id"):
-        return f"{type(result).__name__}:{result.id}"
-    return f"{type(result).__name__}:{result!r}"
 
 
 def _assert_same_scope(
@@ -138,6 +116,14 @@ class CreateResourceTypeHandler(
         key = command.idempotency_key
         store = self.idempotency_store
         tid = command.tenant_id
+        if key is not None:
+            if store is None:
+                raise ApplicationError("Idempotency key requires an idempotency store")
+            key = scoped_idempotency_key(
+                business_id=command.business_id,
+                operation=f"{type(command).__module__}.{type(command).__qualname__}",
+                key=key,
+            )
         reserved_ok = False
 
         if key is not None and store is not None:
@@ -146,12 +132,32 @@ class CreateResourceTypeHandler(
                 cached = store.get(tid, key)
                 if cached is not None:
                     cached_result = cached[1]
-                    if isinstance(cached_result, ResourceTypeEntity):
-                        return (cached_result, [])
-                raise ApplicationError(f"Idempotency key {key} ya está RESERVED por otro worker.")
+                    if (
+                        cached[0] == req_digest
+                        and isinstance(cached_result, ResourceTypeEntity)
+                        and cached_result.tenant_id == tid
+                        and cached_result.business_id == command.business_id
+                        and cached_result.id == command.resource_type_id
+                    ):
+                        return IdempotentReplay(cached_result)
+                raise IdempotencyConflictError("Idempotency conflict or request in progress")
             reserved_ok = True
 
         try:
+            existing = self.resource_type_repo.get(
+                tenant_id=tid,
+                business_id=command.business_id,
+                resource_type_id=command.resource_type_id,
+            )
+            if existing is not None:
+                _assert_same_scope(
+                    entity_tenant_id=existing.tenant_id,
+                    entity_business_id=existing.business_id,
+                    command_tenant_id=tid,
+                    command_business_id=command.business_id,
+                    entity_label="ResourceType",
+                )
+                raise ApplicationError(f"ResourceType {command.resource_type_id} already exists")
             rt = ResourceTypeEntity(
                 id=command.resource_type_id,
                 tenant_id=tid,
@@ -181,7 +187,12 @@ class CreateResourceTypeHandler(
         if key is None or store is None:
             return None
         tid = input.tenant_id
-        digest = _result_digest(result)
+        key = scoped_idempotency_key(
+            business_id=input.business_id,
+            operation=f"{type(input).__module__}.{type(input).__qualname__}",
+            key=key,
+        )
+        digest = _command_digest(input)
         result_obj = result
 
         def _on_success(_res: ResourceTypeEntity, /) -> None:
@@ -220,6 +231,14 @@ class CreateResourceHandler(
         key = command.idempotency_key
         store = self.idempotency_store
         tid = command.tenant_id
+        if key is not None:
+            if store is None:
+                raise ApplicationError("Idempotency key requires an idempotency store")
+            key = scoped_idempotency_key(
+                business_id=command.business_id,
+                operation=f"{type(command).__module__}.{type(command).__qualname__}",
+                key=key,
+            )
         reserved_ok = False
 
         if key is not None and store is not None:
@@ -228,12 +247,32 @@ class CreateResourceHandler(
                 cached = store.get(tid, key)
                 if cached is not None:
                     cached_result = cached[1]
-                    if isinstance(cached_result, Resource):
-                        return (cached_result, [])
-                raise ApplicationError(f"Idempotency key {key} ya está RESERVED por otro worker.")
+                    if (
+                        cached[0] == req_digest
+                        and isinstance(cached_result, Resource)
+                        and cached_result.tenant_id == tid
+                        and cached_result.business_id == command.business_id
+                        and cached_result.id == command.resource_id
+                    ):
+                        return IdempotentReplay(cached_result)
+                raise IdempotencyConflictError("Idempotency conflict or request in progress")
             reserved_ok = True
 
         try:
+            existing = self.resource_repo.get(
+                tenant_id=tid,
+                business_id=command.business_id,
+                resource_id=command.resource_id,
+            )
+            if existing is not None:
+                _assert_same_scope(
+                    entity_tenant_id=existing.tenant_id,
+                    entity_business_id=existing.business_id,
+                    command_tenant_id=tid,
+                    command_business_id=command.business_id,
+                    entity_label="Resource",
+                )
+                raise ApplicationError(f"Resource {command.resource_id} already exists")
             rt = self.resource_type_repo.get(
                 tenant_id=tid,
                 business_id=command.business_id,
@@ -283,7 +322,12 @@ class CreateResourceHandler(
         if key is None or store is None:
             return None
         tid = input.tenant_id
-        digest = _result_digest(result)
+        key = scoped_idempotency_key(
+            business_id=input.business_id,
+            operation=f"{type(input).__module__}.{type(input).__qualname__}",
+            key=key,
+        )
+        digest = _command_digest(input)
         result_obj = result
 
         def _on_success(_res: Resource, /) -> None:

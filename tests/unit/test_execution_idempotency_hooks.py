@@ -43,9 +43,10 @@ from universal_business.application.execution import (
 from universal_business.application.idempotency import (
     IdempotencyKey,
     IdempotencyStore,
+    scoped_idempotency_key,
 )
 from universal_business.application.resources.commands import CreateResource
-from universal_business.application.unit_of_work import UnitOfWork
+from universal_business.application.unit_of_work import CommitNotAppliedError, UnitOfWork
 from universal_business.domain.catalog.entities import CatalogCategory, Offering
 from universal_business.domain.catalog.events import (
     OfferingCreated,
@@ -945,7 +946,7 @@ def test_idempotency_commit_fail_triggers_release_not_complete(
     clean_offering_repo: FakeOfferingRepository,
 ) -> None:
     uow_fail = FakeUnitOfWork()
-    uow_fail.commit_raises = RuntimeError("db down")
+    uow_fail.commit_raises = CommitNotAppliedError("db down")
 
     handler = HookedCreateOfferingHandler(
         offering_repository=clean_offering_repo,
@@ -1432,10 +1433,17 @@ def test_stateless_handler_two_concurrent_executions_independent_keys(
     assert isinstance(result_a, Offering) and result_a.id == oid_a
     assert isinstance(result_b, Offering) and result_b.id == oid_b
 
-    ka, kb = key_a.value, key_b.value
+    ka, kb = (
+        scoped_idempotency_key(
+            business_id=business_a,
+            operation=f"{CreateOffering.__module__}.{CreateOffering.__qualname__}",
+            key=k,
+        ).value
+        for k in (key_a, key_b)
+    )
 
-    ops_a = [(op, v) for (op, v) in global_timeline if v == ka]
-    ops_b = [(op, v) for (op, v) in global_timeline if v == kb]
+    ops_a = [(op, v) for (op, v) in global_timeline if v == ka and op != "get"]
+    ops_b = [(op, v) for (op, v) in global_timeline if v == kb and op != "get"]
 
     assert [op for op, _ in ops_a] == ["reserve", "complete"], (
         f"Ops A deben ser reserve+complete, got {ops_a}"
@@ -1494,7 +1502,7 @@ def test_stateless_handler_rollback_a_no_release_b(
     )
 
     uow_a = FakeUnitOfWork()
-    uow_a.commit_raises = RuntimeError("boom-A")
+    uow_a.commit_raises = CommitNotAppliedError("boom-A")
     with pytest.raises(RuntimeError, match="boom-A"):
         execute_use_case(
             handler=handler,
@@ -1514,9 +1522,16 @@ def test_stateless_handler_rollback_a_no_release_b(
         event_publisher=pub_b,
     )
 
-    ka, kb = key_a.value, key_b.value
-    ops_a = [op for (op, v) in idem_store.timeline if v == ka]
-    ops_b = [op for (op, v) in idem_store.timeline if v == kb]
+    ka, kb = (
+        scoped_idempotency_key(
+            business_id=business_a,
+            operation=f"{CreateOffering.__module__}.{CreateOffering.__qualname__}",
+            key=k,
+        ).value
+        for k in (key_a, key_b)
+    )
+    ops_a = [op for (op, v) in idem_store.timeline if v == ka and op != "get"]
+    ops_b = [op for (op, v) in idem_store.timeline if v == kb and op != "get"]
 
     assert ops_a == ["reserve", "release"], f"esperado reserve+release A, got {ops_a}"
     assert ops_b == ["reserve", "complete"], f"esperado reserve+complete B, got {ops_b}"
@@ -1572,7 +1587,14 @@ def test_stateless_handler_commit_a_no_complete_b(
         event_publisher=FakeEventPublisher(),
     )
 
-    ka, kb = key_a.value, key_b.value
+    ka, kb = (
+        scoped_idempotency_key(
+            business_id=business_a,
+            operation=f"{CreateOffering.__module__}.{CreateOffering.__qualname__}",
+            key=k,
+        ).value
+        for k in (key_a, key_b)
+    )
     completes = [(op, v) for (op, v) in idem_store.timeline if op == "complete"]
     assert completes == [("complete", ka), ("complete", kb)], (
         f"completes deben ser A luego B: {completes}"
@@ -1641,7 +1663,14 @@ def test_stateless_reuse_handler_no_pending_state(
     assert r2.base_price is None
 
     completes = [v for (op, v) in idem_store.timeline if op == "complete"]
-    assert set(completes) == {key_1.value, key_2.value}
+    assert set(completes) == {
+        scoped_idempotency_key(
+            business_id=business_a,
+            operation=f"{CreateOffering.__module__}.{CreateOffering.__qualname__}",
+            key=k,
+        ).value
+        for k in (key_1, key_2)
+    }
     assert len(completes) == 2
 
 
@@ -1749,7 +1778,11 @@ def test_complete_failure_after_commit_no_release(
 
     assert uow.commit_called is True, "uow.commit se llamó antes del fallo"
     assert uow.rollback_called is False, "commit OK → no hay rollback (imposible post-commit)"
-    kf = key_fail.value
+    kf = scoped_idempotency_key(
+        business_id=business_a,
+        operation=f"{CreateOffering.__module__}.{CreateOffering.__qualname__}",
+        key=key_fail,
+    ).value
     ops = [op for (op, v) in idem_store.timeline if v == kf]
     assert "reserve" in ops
     assert "complete" in ops, "complete() se intentó llamar y falló"

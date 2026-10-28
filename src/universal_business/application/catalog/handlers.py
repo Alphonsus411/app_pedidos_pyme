@@ -16,7 +16,6 @@ STATLESS: ``build_hooks`` devuelve un :class:`ExecutionHooks` con closures
 
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
@@ -38,9 +37,15 @@ from universal_business.application.catalog.queries import (
 from universal_business.application.errors import ApplicationError, IdempotencyConflictError
 from universal_business.application.execution import (
     ExecutionHooks,
+    IdempotentReplay,
     UseCaseHandlerWithExecutionHooks,
 )
-from universal_business.application.idempotency import IdempotencyKey, IdempotencyStore
+from universal_business.application.idempotency import (
+    IdempotencyKey,
+    IdempotencyStore,
+    scoped_idempotency_key,
+)
+from universal_business.application.request_digest import request_digest as _command_digest
 from universal_business.domain.catalog.entities import CatalogCategory, Offering
 from universal_business.domain.catalog.events import (
     CatalogCategoryCreated,
@@ -59,17 +64,6 @@ if TYPE_CHECKING:
 
 
 _CROSS_SCOPE_MSG = "cross-tenant/business mutation denied"
-
-
-def _command_digest(command: object) -> str:
-    """Helper simple para generar un request_digest de un command frozen."""
-    raw = repr(command)
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
-
-
-def _result_digest(result: object) -> str:
-    raw = str(id(result)) + repr(result)
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 def _assert_same_scope(
@@ -112,6 +106,12 @@ class CreateOfferingHandler(UseCaseHandlerWithExecutionHooks[CreateOffering, Off
         id_key: IdempotencyKey | None = command.idempotency_key
         tid = command.tenant_id
         store = self._idempotency_store
+        if id_key is not None:
+            id_key = scoped_idempotency_key(
+                business_id=command.business_id,
+                operation=f"{type(command).__module__}.{type(command).__qualname__}",
+                key=id_key,
+            )
         reserved_ok = False
 
         if id_key is not None:
@@ -124,8 +124,14 @@ class CreateOfferingHandler(UseCaseHandlerWithExecutionHooks[CreateOffering, Off
                 cached = store.get(tid, id_key)
                 if cached is not None:
                     result_obj = cached[1]
-                    if isinstance(result_obj, Offering):
-                        return (result_obj, [])
+                    if (
+                        cached[0] == _command_digest(command)
+                        and isinstance(result_obj, Offering)
+                        and result_obj.tenant_id == tid
+                        and result_obj.business_id == command.business_id
+                        and result_obj.id == command.offering_id
+                    ):
+                        return IdempotentReplay(result_obj)
                 raise IdempotencyConflictError(f"Idempotency conflict for key {id_key.value}")
             reserved_ok = True
 
@@ -141,15 +147,13 @@ class CreateOfferingHandler(UseCaseHandlerWithExecutionHooks[CreateOffering, Off
                 offering_id=command.offering_id,
             )
             if existing is not None:
-                if id_key is not None:
-                    _assert_same_scope(
-                        entity_tenant_id=existing.tenant_id,
-                        entity_business_id=existing.business_id,
-                        command_tenant_id=tid,
-                        command_business_id=command.business_id,
-                        entity_label="Offering",
-                    )
-                    return (existing, [])
+                _assert_same_scope(
+                    entity_tenant_id=existing.tenant_id,
+                    entity_business_id=existing.business_id,
+                    command_tenant_id=tid,
+                    command_business_id=command.business_id,
+                    entity_label="Offering",
+                )
                 raise ApplicationError(f"Offering {command.offering_id} already exists")
 
             base_price_money: Money | None = None
@@ -198,8 +202,12 @@ class CreateOfferingHandler(UseCaseHandlerWithExecutionHooks[CreateOffering, Off
             return None
         store = self._idempotency_store
         tid = input.tenant_id
-        key = id_key
-        digest = _result_digest(result)
+        key = scoped_idempotency_key(
+            business_id=input.business_id,
+            operation=f"{type(input).__module__}.{type(input).__qualname__}",
+            key=id_key,
+        )
+        digest = _command_digest(input)
         result_obj = result
 
         def _on_success(_res: Offering, /) -> None:
@@ -360,6 +368,12 @@ class CreateCatalogCategoryHandler(
         id_key: IdempotencyKey | None = command.idempotency_key
         tid = command.tenant_id
         store = self._idempotency_store
+        if id_key is not None:
+            id_key = scoped_idempotency_key(
+                business_id=command.business_id,
+                operation=f"{type(command).__module__}.{type(command).__qualname__}",
+                key=id_key,
+            )
         reserved_ok = False
 
         if id_key is not None:
@@ -372,8 +386,14 @@ class CreateCatalogCategoryHandler(
                 cached = store.get(tid, id_key)
                 if cached is not None:
                     result_obj = cached[1]
-                    if isinstance(result_obj, CatalogCategory):
-                        return (result_obj, [])
+                    if (
+                        cached[0] == _command_digest(command)
+                        and isinstance(result_obj, CatalogCategory)
+                        and result_obj.tenant_id == tid
+                        and result_obj.business_id == command.business_id
+                        and result_obj.id == command.category_id
+                    ):
+                        return IdempotentReplay(result_obj)
                 raise IdempotencyConflictError(f"Idempotency conflict for key {id_key.value}")
             reserved_ok = True
 
@@ -390,15 +410,13 @@ class CreateCatalogCategoryHandler(
                 category_id=command.category_id,
             )
             if existing is not None:
-                if id_key is not None:
-                    _assert_same_scope(
-                        entity_tenant_id=existing.tenant_id,
-                        entity_business_id=existing.business_id,
-                        command_tenant_id=tid,
-                        command_business_id=command.business_id,
-                        entity_label="CatalogCategory",
-                    )
-                    return (existing, [])
+                _assert_same_scope(
+                    entity_tenant_id=existing.tenant_id,
+                    entity_business_id=existing.business_id,
+                    command_tenant_id=tid,
+                    command_business_id=command.business_id,
+                    entity_label="CatalogCategory",
+                )
                 raise ApplicationError(f"CatalogCategory {command.category_id} already exists")
 
             category = CatalogCategory(
@@ -439,8 +457,12 @@ class CreateCatalogCategoryHandler(
             return None
         store = self._idempotency_store
         tid = input.tenant_id
-        key = id_key
-        digest = _result_digest(result)
+        key = scoped_idempotency_key(
+            business_id=input.business_id,
+            operation=f"{type(input).__module__}.{type(input).__qualname__}",
+            key=id_key,
+        )
+        digest = _command_digest(input)
         result_obj = result
 
         def _on_success(_res: CatalogCategory, /) -> None:

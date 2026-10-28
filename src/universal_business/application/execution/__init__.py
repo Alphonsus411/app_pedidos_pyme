@@ -30,9 +30,10 @@ Sea un ``UseCaseHandler[InT, OutT]`` que toma input y devuelve una tupla
   hooks legacy ``PostRollbackHook``; los STATLESS handlers usan ``on_failure``
   que ya capturaron en el mismo ``handle()`` (ver más abajo). NO se
   despacha/publica nada.
-- Si commit() lanza error → excepción propagada; rollback automático; se
-  invocan ``ExecutionHooks.on_failure`` (si existen) y/o legacy
-  ``PostRollbackHook``; NO se despacha/publica nada.
+- Si commit() lanza CommitNotAppliedError, el adapter garantiza que no se
+  confirmó y se invocan hooks de fallo. Para cualquier otro error de commit,
+  el resultado puede ser incierto: se conserva la reserva para reconciliación.
+  En ambos casos la excepción se propaga y no se despachan eventos aquí.
 - Si un hook on_success lanza error después de commit:
   Ver :ref:`complete-failure-semantics` más abajo.
 
@@ -63,8 +64,9 @@ que ``uow.commit()`` haya retornado OK:
     misma key y crear un duplicado del aggregate.
   - El error de ``complete()`` se PROPAGA hacia arriba. El sistema queda en
     estado indeterminado post-commit que requiere reconciliación manual.
-  - Los ``DomainEvent`` **SÍ** se despachan y publican antes de propagar el
-    error: el dominio fue committeado y los eventos deben fluir.
+  - Se intenta despachar y publicar eventos antes de propagar el error; si
+    dispatch falla, aborta la publicación. Si falla dispatch o publish, su
+    excepción queda como causa del fallo de complete. No se garantiza entrega.
   - Importante: ``commit() + complete()`` **NO** son atómicos. Este diseño
     elige *consistencia eventual con seguridad sobre duplicados* en lugar de
     intentar una atomicidad imposible entre dos sistemas separados.
@@ -79,7 +81,7 @@ from typing import Generic, Protocol, TypeVar, runtime_checkable
 from universal_business.application.events.dispatcher import DomainEventDispatcher
 from universal_business.application.events.publisher import EventPublisher
 from universal_business.application.idempotency import IdempotencyKey, IdempotencyStore
-from universal_business.application.unit_of_work import UnitOfWork
+from universal_business.application.unit_of_work import CommitNotAppliedError, UnitOfWork
 from universal_business.domain.shared.events import DomainEvent
 from universal_business.domain.shared.value_objects.ids import TenantId
 
@@ -130,6 +132,17 @@ class PostRollbackHook(Protocol):
     """
 
     def post_rollback(self, exc: BaseException, /) -> None: ...
+
+
+class IdempotentReplay(tuple[OutT, list[DomainEvent]], Generic[OutT]):
+    """A completed replay owns no reservation and must not execute hooks.
+
+    Tuple compatibility preserves the existing handler result contract. The
+    marker belongs to this invocation, never to a reusable handler instance.
+    """
+
+    def __new__(cls, result: OutT) -> IdempotentReplay[OutT]:
+        return super().__new__(cls, (result, []))
 
 
 @dataclass(frozen=True)
@@ -237,26 +250,45 @@ def execute_use_case(
     events_holder: dict[str, Sequence[DomainEvent]] = {}
     result_holder: dict[str, OutT] = {}
     hooks_holder: dict[str, ExecutionHooks[OutT] | None] = {"h": None}
+    replay_holder = {"is_replay": False}
+    commit_started = False
+    commit_succeeded = False
     try:
         with unit_of_work as uow:
-            result, events = handler.handle(input)
+            outcome = handler.handle(input)
+            result, events = outcome
+            replay_holder["is_replay"] = isinstance(outcome, IdempotentReplay)
             result_holder["r"] = result
+            # Acquire hooks before the collector can fail. A completed replay
+            # did not reserve the key and therefore must not own hooks.
+            if not replay_holder["is_replay"] and isinstance(
+                handler, UseCaseHandlerWithExecutionHooks
+            ):
+                hooks_holder["h"] = handler.build_hooks(input, result)
             if _collector_override is not None:
                 events = list(_collector_override(result, events))
             events_holder["e"] = events
-            # Construir hooks DENTRO de la transacción, ANTES del commit.
-            # Así on_failure queda listo si commit lanza.
-            if isinstance(handler, UseCaseHandlerWithExecutionHooks):
-                hooks_holder["h"] = handler.build_hooks(input, result)
+            commit_started = True
             uow.commit()
+            commit_succeeded = True
     except BaseException as e:  # noqa: BLE001 - rollback semantics
         hooks = hooks_holder["h"]
-        if hooks is not None and hooks.on_failure is not None:
+        # A failed commit may have reached durable storage. Do not release a
+        # reservation or invoke rollback hooks unless no commit was attempted
+        # or the adapter explicitly guarantees that it was not applied.
+        definitely_uncommitted = not commit_started or (
+            not commit_succeeded and isinstance(e, CommitNotAppliedError)
+        )
+        if definitely_uncommitted and hooks is not None and hooks.on_failure is not None:
             try:
                 hooks.on_failure(e)
             except Exception:  # noqa: BLE001 - hook failure never masks original
                 pass
-        if isinstance(handler, PostRollbackHook):
+        if (
+            definitely_uncommitted
+            and not replay_holder["is_replay"]
+            and isinstance(handler, PostRollbackHook)
+        ):
             try:
                 handler.post_rollback(e)
             except Exception:  # noqa: BLE001 - hook failure never masks original
@@ -270,7 +302,7 @@ def execute_use_case(
     try:
         if hooks is not None and hooks.on_success is not None:
             hooks.on_success(result_val)
-        if isinstance(handler, PostCommitSuccessHook):
+        if not replay_holder["is_replay"] and isinstance(handler, PostCommitSuccessHook):
             handler.post_commit_success(result_val)
     except Exception as hook_exc:
         # Complete failure semantics: dominio commit OK, hook falló.
@@ -278,8 +310,13 @@ def execute_use_case(
         # - NO release (la key debe quedar RESERVED para evitar duplicados).
         # - SÍ dispatch + publish (los eventos son parte del dominio confirmado).
         # - Finalmente propagar hook_exc.
-        _dispatch_and_publish_safe(events_list, event_dispatcher, event_publisher)
-        raise hook_exc
+        try:
+            _dispatch_and_publish_safe(events_list, event_dispatcher, event_publisher)
+        except Exception as event_exc:
+            # Preserve the idempotency failure as the primary error and retain
+            # the event failure as an explicit cause for reconciliation.
+            raise hook_exc from event_exc
+        raise
     _dispatch_and_publish_safe(events_list, event_dispatcher, event_publisher)
     return result_val
 
@@ -291,6 +328,7 @@ __all__ = [
     "PostCommitSuccessHook",
     "PostRollbackHook",
     "IdempotencyExecutionState",
+    "IdempotentReplay",
     "ExecutionHooks",
     "UseCaseHandlerWithExecutionHooks",
     "execute_use_case",

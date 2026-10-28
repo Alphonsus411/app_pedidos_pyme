@@ -10,36 +10,28 @@ El diseño es **mínimo y sin infraestructura** (0.2 Foundation):
 
 ### Semántica adoptada
 
-Todo flujo de trabajo típico::
-
-    # 1) Anticipadamente: el cliente genera una key unívoca (UUID o similar).
-    if not store.reserve(tenant_id, key, digest(request)):
-        # O bien está siendo procesado por otro worker, o ya se completó.
-        return store.get(tenant_id, key).cached_result
-
-    try:
-        # 2) Dentro de UnitOfWork: ejecutar comando (orquestación + dominio).
-        result = handler(command)
-
-        # 3) commit() del UoW.
-        # 4) almacenar resultado y marcar como COMPLETADO.
-        store.complete(tenant_id, key, digest(result), result)
-        return result
-    except Exception:
-        # 5) Fallo antes de complete: liberar la reserva para reintentos.
-        store.release(tenant_id, key)
-        raise
+El flujo reserva una clave de almacenamiento con scope y huella de solicitud.
+Si está completada, el replay exige la misma huella y valida el resultado. Si
+está en curso, falla sin repetir la operación. Si la ejecución o el commit
+fallan antes de confirmarse, se libera solo la reserva adquirida por esa
+operación y el fallo es anterior al intento de commit, o el adaptador garantiza
+que el commit no se aplicó. Si el resultado del commit es incierto o ``complete``
+falla después del commit, NO se libera: se conserva
+la reserva y se requiere reconciliación. ``commit`` y ``complete`` no son
+atómicos en el contrato actual; no se garantiza recuperación durable.
 
 - **``tenant_id`` siempre explícito**: las keys son independientes por tenant
   (no hay riesgo de cross-tenant colisiones aunque los UUID coincidan entre
   tenants por error).
-- No asumimos timeouts, TTLs, ni limpieza automática en esta fase. Eso lo
-  implementará el adapter de infraestructura concreta.
+- No se admite expiración, reasignación ni limpieza automática de reservas en
+  este contrato sin ownership verificable. Un adaptador con TTL necesita un
+  contrato de token de propiedad y validación atómica de complete/release.
 
 ### Recuperación tras fallo (``release``)
 
 Una operación que haya reservado una key con :meth:`IdempotencyStore.reserve`
-y falle **antes** de llamar a :meth:`IdempotencyStore.complete` debe invocar
+y falle antes de intentar commit, o reciba del adaptador una garantía explícita
+de que el commit no se aplicó, debe invocar
 :meth:`IdempotencyStore.release` para devolver la key al estado ``FREE`` y
 permitir reintentos posteriores. Sin :meth:`release` la key permanecería
 ``RESERVED`` indefinidamente (0.2 no asume TTL automático).
@@ -55,11 +47,13 @@ Semántica contractual de :meth:`release`:
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
-from universal_business.domain.shared.value_objects.ids import TenantId
+from universal_business.domain.shared.value_objects.ids import BusinessId, TenantId
 
 # Se aceptan caracteres alfanuméricos, guiones y guiones bajos. Longitud 8..128.
 _KEY_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
@@ -93,6 +87,25 @@ class IdempotencyKey:
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return self.value
+
+
+def scoped_idempotency_key(
+    *, business_id: BusinessId, operation: str, key: IdempotencyKey
+) -> IdempotencyKey:
+    """Derive a versioned store key for a business and an explicit operation.
+
+    Tenant remains a separate required store argument. This encoding changes
+    storage identities and must not be deployed over legacy records without
+    an explicit migration or expiry policy.
+    """
+    if not operation or not isinstance(operation, str):
+        raise ValueError("operation must be a non-empty string")
+    payload = json.dumps(
+        ["scope-v1", str(business_id), operation, key.value],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return IdempotencyKey(value="scope-v1-" + hashlib.sha256(payload).hexdigest())
 
 
 @runtime_checkable
@@ -137,6 +150,8 @@ class IdempotencyStore(Protocol):
 
         Returns
         -------
+        La operación debe ser atómica para el par (tenant_id, key).
+
         ``True``  → reserva OK (procesamiento puede empezar).
         ``False`` → la key ya estaba RESERVED o DONE (devolver caché desde
         :meth:`get` o lanzar :class:`IdempotencyConflictError` según
@@ -148,11 +163,14 @@ class IdempotencyStore(Protocol):
         self,
         tenant_id: TenantId,
         key: IdempotencyKey,
-        result_digest: str,
+        request_digest: str,
         result_object: object = None,
         /,
     ) -> None:
-        """Marca key como DONE y almacena (digest, result_object).
+        """Marca key como DONE y conserva el digest de la solicitud y el resultado.
+
+        El digest debe ser el mismo suministrado a reserve, para detectar
+        reintentos con una solicitud diferente.
 
         Después de ``complete``, :meth:`reserve` sobre la misma
         ``(tenant_id, key)`` devolverá ``False``.
@@ -175,8 +193,9 @@ class IdempotencyStore(Protocol):
           deshace una operación terminada; :meth:`release` se convierte en
           silencioso).
 
-        Debe invocarse si el handler o el UnitOfWork fallan **antes** de
-        llamar a :meth:`complete`, para evitar que la key quede
+        Debe invocarse si el handler falla antes de intentar commit o si el
+        adaptador garantiza que el commit no se aplicó. Ante resultado de
+        commit incierto no debe liberarse. Evita que la key quede
         indefinidamente ``RESERVED`` (Gate 0.2 no asume TTL).
         """
         raise NotImplementedError
@@ -185,5 +204,6 @@ class IdempotencyStore(Protocol):
 __all__ = [
     "IdempotencyKey",
     "IdempotencyStore",
+    "scoped_idempotency_key",
     "InvalidIdempotencyKeyError",
 ]

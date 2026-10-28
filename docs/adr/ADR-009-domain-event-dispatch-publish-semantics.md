@@ -99,8 +99,9 @@ Definiciones Gate 0.2:
   grep/IDE, sin service locator.
 - ✅ MRO subtipo: un auditor genérico (handler de `DomainEvent`) recibe todos
   los eventos sin necesidad de registrar N veces.
-- ✅ Dispatch_many eager validate: no se dejan "eventos a medio procesar"
-  (consistencia determinista para los handlers síncronos).
+- ✅ Dispatch_many valida todos los tipos antes de iniciar el despacho. Si un
+  handler falla durante el despacho, handlers anteriores pueden haber actuado;
+  no existe rollback de sus efectos postcommit.
 - ⚠️ Excepción propagada en handler síncrono: como el commit YA ocurrió
   (post-commit), la excepción NO deshace el dominio. El diseñador del caso de
   uso debe ser consciente (para casos críticos usar handler que no falle o
@@ -108,3 +109,12 @@ Definiciones Gate 0.2:
 - ⚠️ El publisher NO tiene `unit_of_work` en el signature (post-commit), por
   diseño. El futuro adapter de Outbox físico (Gate 0.5) necesitará su propia
   TX / retry.
+
+## Aclaración propuesta — error doble postcommit
+
+Si falla el hook de finalización de idempotencia después del commit, se intenta
+despachar y publicar. Si también falla el dispatch o el publisher, se propaga
+el error de idempotencia y se conserva el error de eventos como causa explícita.
+Según el flujo existente, un fallo de dispatch impide invocar el publisher. La
+reserva sigue conservada; no se garantiza recuperación o entrega durable.
+Esta aclaración está en el PR de hardening y pendiente de integración.

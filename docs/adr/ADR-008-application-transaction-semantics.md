@@ -24,7 +24,7 @@ Para eventos post-commit:
 | # | Estrategia |
 |---|---|
 | 1 | Publicar eventos **dentro** del UnitOfWork antes de commit. | Muy peligroso (evento enviado pero rollback después). |
-| 2 | Commit OK → zona post-commit: dispatcher interno síncrono + EventPublisher externo (ADR-009). | Consistencia fuerte; el dominio queda persistido antes de notificar. |
+| 2 | Commit OK → zona post-commit: dispatcher interno síncrono + EventPublisher externo (ADR-009). | La publicación ocurre tras commit; no es atómica ni durable por sí misma. |
 | 3 | Commit OK → solo escribir en tabla Outbox dentro del UoW. | Requiere infraestructura (Gate 0.5), en 0.2 es prematuro. |
 
 ## Decisión
@@ -50,7 +50,9 @@ Convención canónica de caso de uso:
 Reglas inviolables:
 - **NUNCA se publica/dispacha eventos antes de commit.**
 - **NUNCA commit implícito en `__exit__`** (commit es decisión de código cliente).
-- **Si commit falla → 0 eventos publicados/dispachados.**
+- **Si commit falla → 0 eventos publicados/dispachados por este flujo.** Si
+  el resultado es incierto, la reserva se conserva y se requiere reconciliación;
+  no hay garantía de entrega durable sin outbox.
 - **Si handler falla → rollback + 0 eventos.**
 - **Si post-commit falla (dispatcher/publisher): el resultado ya fue committeado,
   no se hace rollback.** El código cliente es responsable de reintentar o
@@ -58,11 +60,11 @@ Reglas inviolables:
 
 Para idempotencia (Gate 0.2):
 - `IdempotencyStore.reserve()` debe ocurrir **dentro** del UnitOfWork antes del
-  commit. Si reserve() devuelve False → lanzar IdempotencyConflictError
-  (rollback).
+  commit. Si reserve() devuelve False, un resultado completado con digest y ámbito válidos
+  puede devolverse como replay; una reserva en curso o una solicitud distinta falla.
 
 ## Consecuencias
-- ✅ Consistencia fuerte entre estado de dominio y publicación de eventos.
+- ✅ No se publica antes del commit; la entrega puede fallar después y no es atómica.
 - ✅ Error rápido si alguien olvida `commit()` (rollback automático, no hay
   "commit accidental").
 - ✅ El helper `execute_use_case` encapsula la semántica canónica (una única
@@ -82,6 +84,9 @@ Para idempotencia (Gate 0.2):
   Si un handler necesita modificar estado → debe lanzar un comando nuevo o ser
   un caso de uso separado.
 - ⚠️ **Idempotency: liberar reservas en fallo.** Si ``reserve()`` tuvo éxito
-  pero el handler/UoW falla antes de ``complete()``, es obligatorio llamar a
-  ``release()`` para devolver la key a ``FREE``. Gate 0.2 no asume TTL; sin
+  pero el handler falla antes de intentar commit, o el adaptador lanza
+  ``CommitNotAppliedError`` garantizando que no se aplicó, se llama a
+  ``release()``. Ante cualquier otro error de commit o un fallo de salida
+  posterior al commit, el resultado puede ser incierto y no se libera. Si
+  ``complete()`` falla tras commit tampoco se libera; se requiere reconciliación. Gate 0.2 no asume TTL; sin
   ``release()`` la key permanece ``RESERVED`` indefinidamente.
