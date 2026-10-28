@@ -266,3 +266,5 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 
 [COMPLETADO EN BORRADOR] Política pura de transiciones para los ocho estados, incluido CONFIRMED → COMPLETED y los estados terminales. Matriz completa de 64 combinaciones y rechazo de tipos incorrectos; plan alineado con el recorrido directo propuesto.
 [EN CURSO] La política no modifica Order ni valida líneas, totales, autorización o idempotencia y no emite eventos. La política y los demás criterios del Gate 0.4 requieren integración y revisión.
+
+[INTEGRADO EN MASTER] PR #16: matriz pura de transiciones de pedidos, merge 82a6694. CI Python 3.11/3.12 y revisión automática sin hallazgos: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40699557273 . La integración con el agregado y los casos de uso sigue pendiente.
