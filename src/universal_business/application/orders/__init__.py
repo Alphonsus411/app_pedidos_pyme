@@ -19,6 +19,8 @@ from universal_business.application.orders.commands import (
     ValidateOrder,
 )
 from universal_business.application.orders.creation import CreateOrderHandler, OrderDraftCreated
+from universal_business.application.orders.queries import GetOrder
+from universal_business.application.orders.query_handlers import GetOrderHandler, OrderView
 from universal_business.application.orders.remove_line import (
     OrderLineRemoval,
     RemoveOrderLineHandler,
@@ -53,6 +55,9 @@ __all__ = [
     "ConfirmOrderHandler",
     "OrderStatusResult",
     "OrderTransitionPolicy",
+    "GetOrder",
+    "GetOrderHandler",
+    "OrderView",
     "ReturnOrderToDraft",
     "ReturnOrderToDraftHandler",
     "CancelOrder",
