@@ -21,6 +21,13 @@ from universal_business.domain.shared.value_objects.temporal import TimeRange
 
 
 class IReservationRepository(Protocol):
+    """Return complete candidate sets without silent pagination or truncation.
+
+    list_for_resource_in_range with status=None includes every status and all
+    ranges that might overlap; boundary-touching ranges may be included and
+    are filtered by the caller's half-open policy. The reader checks scope.
+    """
+
     def get(
         self,
         *,
