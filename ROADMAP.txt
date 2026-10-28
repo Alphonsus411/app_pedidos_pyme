@@ -261,3 +261,8 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] Los comandos no aplican ventanas temporales, política de no-show ni autorización: deben definirse y aplicarse en la frontera antes de exponerlos. No hay guard/repository durables ni pruebas reales de concurrencia. Gate 0.4 sigue abierto.
 
 [INTEGRADO EN MASTER] PR #15: llegada, finalización y no presentación con protección e idempotencia; merge 30077ad. CI en Python 3.11/3.12 y revisión automática sin hallazgos: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40698886952 . Política temporal y autorización, adaptadores durables y pruebas de concurrencia real permanecen pendientes.
+
+33. REGISTRO DE AVANCE — 28-10-2026 (MATRIZ DE PEDIDOS)
+
+[COMPLETADO EN BORRADOR] Política pura de transiciones para los ocho estados, incluido CONFIRMED → COMPLETED y los estados terminales. Matriz completa de 64 combinaciones y rechazo de tipos incorrectos; plan alineado con el recorrido directo propuesto.
+[EN CURSO] La política no modifica Order ni valida líneas, totales, autorización o idempotencia y no emite eventos. La política y los demás criterios del Gate 0.4 requieren integración y revisión.
