@@ -155,3 +155,26 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [COMPLETADO EN BORRADOR] ADR-009 aclara que la validación previa de eventos no evita efectos parciales de handlers anteriores si uno posterior falla.
 [EN CURSO] Las pruebas usan fakes; no proporcionan outbox, recuperación de eventos ni entrega durable. T1 y la revisión del PR siguen abiertas.
 [COMPLETADO] CI completa del commit b9f7de3 en Python 3.11 y 3.12: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40656041948 .
+
+19. REGISTRO DE AVANCE — 28-10-2026 (INTERVALO DE RESERVAS)
+
+[COMPLETADO EN BORRADOR] T3 parcial: ReservationInterval separado, aware y normalizado a UTC, con duración positiva, intervalos semiabiertos y pruebas de contigüidad, solape, zonas equivalentes y cambio horario con fold. TimeRange conserva sus extremos inclusivos.
+[EN CURSO] ReservationInterval aún no está conectado al agregado Reservation, handlers ni disponibilidad; no valida por sí mismo si una hora local introducida en una agenda existe o es ambigua. Queda pendiente una política explícita de entrada local y DST.
+[EN CURSO] El trabajo se basa en el PR #4 aún en borrador; el plan 0.4 y sus gates no se consideran aprobados o completados por esta pieza. Validación local: 700 pruebas sin test del generador PDF (fpdf no instalado), Ruff y mypy correctos.
+
+[COMPLETADO] CI completa del commit ac4e327 en Python 3.11 y 3.12: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40656335816 . La integración de reservas y la revisión de los PR dependientes siguen pendientes.
+
+20. REGISTRO DE AVANCE — 28-10-2026 (HORAS LOCALES Y DST)
+
+[COMPLETADO EN BORRADOR] T3 parcial: resolución de fechas locales con zona IANA explícita; se rechazan horas inexistentes y se exige seleccionar fold en horas ambiguas. ReservationInterval.from_local convierte los extremos a instantes UTC y conserva la semántica semiabierta.
+[COMPLETADO EN BORRADOR] Pruebas: cambios horarios de Madrid, transición de media hora en Lord Howe, día omitido en Apia, extremos invertidos y validación de zona/fold. Las pruebas dependen de la base de zonas instalada; el despliegue deberá disponer de datos IANA actualizados.
+[EN CURSO] Esta función aún no está conectada a los comandos ni a Location o al motor de disponibilidad. El constructor directo de ReservationInterval recibe instantes ya interpretados y no detecta por sí mismo una hora local inexistente.
+
+[COMPLETADO] CI completa del commit ea74a1a en Python 3.11 y 3.12: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40656702306 . Los PR #4 y #5 siguen en borrador y la fase 0.4 continúa abierta.
+
+21. REGISTRO DE AVANCE — 28-10-2026 (MATRIZ DE RESERVAS)
+
+[COMPLETADO EN BORRADOR] T3 parcial: política pura de estados con las transiciones propuestas DRAFT→CONFIRMED/CANCELLED; CONFIRMED→CHECKED_IN/CANCELLED/NO_SHOW; CHECKED_IN→COMPLETED. Los estados finales son terminales. 36 combinaciones y validación de tipos probadas.
+[EN CURSO] La política no modifica Reservation ni confirma recursos. La adjudicación atómica, disponibilidad, eventos y casos de uso siguen pendientes; no existe protección frente a mutaciones directas del agregado actual. La fase 0.4 no está aprobada ni terminada.
+
+[COMPLETADO] CI completa del commit 5feb16f en Python 3.11 y 3.12: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40660767593 .
