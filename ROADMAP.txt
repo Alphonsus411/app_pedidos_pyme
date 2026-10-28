@@ -268,3 +268,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] La política no modifica Order ni valida líneas, totales, autorización o idempotencia y no emite eventos. La política y los demás criterios del Gate 0.4 requieren integración y revisión.
 
 [INTEGRADO EN MASTER] PR #16: matriz pura de transiciones de pedidos, merge 82a6694. CI Python 3.11/3.12 y revisión automática sin hallazgos: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40699557273 . La integración con el agregado y los casos de uso sigue pendiente.
+
+34. REGISTRO DE AVANCE — 28-10-2026 (LÍNEAS DE PEDIDO)
+
+[COMPLETADO EN BORRADOR] OrderLine inmutable con identificadores, nombre y precio capturados; cantidad Decimal positiva de hasta un millón y cuatro decimales; descuentos e impuestos explícitos por línea en moneda única. Se calcula el subtotal redondeado con Money y después se resta el descuento y se añade el impuesto. Importes de entrada inferiores a 10²¹ unidades; cálculo en contexto decimal independiente.
+[COMPLETADO EN BORRADOR] Pruebas de snapshot, redondeo, importes y cantidades inválidas, límites, monedas, precio cero y descuento completo.
+[EN CURSO] No se ha integrado la línea en Order ni implementado totales del pedido, validación de Offering/scope, autorización de precios, impuestos legales, eventos o persistencia. Los límites y política de cálculo deben revisarse en el gate; no constituyen facturación fiscal.
