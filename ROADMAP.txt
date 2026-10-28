@@ -389,3 +389,5 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 
 [COMPLETADO EN BORRADOR] AddOrderLine entrega copias superficiales del pedido y oferta a la política inyectada, evitando que cambios de atributos principales de esas copias alteren las entidades del repositorio. Pruebas para aprobación y rechazo.
 [EN CURSO] Offering.metadata admite valores anidados mutables: la copia es superficial y la política es un componente de confianza que no debe mutarlos. Falta diseñar inmutabilidad profunda o un DTO limitado con estrategia de compatibilidad. Siguen pendientes autorización, adaptadores reales, aislamiento y outbox durable.
+
+[INTEGRADO EN MASTER] PR #31: aislamiento superficial de entidades ante la política de línea, merge c4c8fff. CI: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40739352299 . Revisión manual; revisión automática en curso al integrar. El aislamiento profundo de metadata sigue pendiente.
