@@ -195,3 +195,191 @@ def test_uncertain_commit_replay_without_duplicate(context):
     assert service.create(command).order_id == scope["order_id"]
     assert connection.execute("SELECT count(*) FROM transactional_outbox").fetchone() == (1,)
     assert connection.execute("SELECT state FROM idempotency").fetchone() == ("done",)
+
+
+def test_real_offering_add_replay_and_complete_cycle(context):
+    from universal_business.application.orders.commands import AddOrderLine
+    from universal_business.domain.catalog.entities import Offering
+    from universal_business.domain.catalog.value_objects import CatalogItemStatus
+    from universal_business.infrastructure.sqlite_offerings import SqliteOfferingRepository
+
+    connection, service, scope, _ = context
+    _create(service, scope)
+    offering = Offering(
+        id=OfferingId.generate(),
+        tenant_id=scope["tenant_id"],
+        business_id=scope["business_id"],
+        name="Producto",
+        status=CatalogItemStatus.ACTIVE,
+        base_price=Money("12.50", "EUR"),
+        location_ids=frozenset({scope["location_id"]}),
+    )
+    with SqliteUnitOfWork(connection) as uow:
+        SqliteOfferingRepository(connection).save(offering)
+        uow.commit()
+    command = AddOrderLine(
+        **scope,
+        offering_id=offering.id,
+        line_id=uuid4(),
+        quantity=Decimal("2"),
+        discount=Money("1", "EUR"),
+        tax=Money("2", "EUR"),
+        idempotency_key=IdempotencyKey(value="add-line-real"),
+    )
+    policy = Mock()
+    policy.approve.return_value = True
+    first = service.add_line(command, policy=policy)
+    assert first.total == Money("26", "EUR")
+    assert service.add_line(command, policy=policy) == first
+    assert policy.approve.call_count == 1
+    for i, cls in enumerate(
+        (ValidateOrder, ConfirmOrder, PrepareOrder, MarkOrderReady, CompleteOrder)
+    ):
+        service.change_status(
+            cls(**scope, idempotency_key=IdempotencyKey(value=f"cycle-state-{i}"))
+        )
+    saved = SqliteOrderRepository(connection).get(
+        tenant_id=scope["tenant_id"], order_id=scope["order_id"]
+    )
+    assert saved.status == OrderStatus.COMPLETED and saved.lines[0].offering_id == offering.id
+    assert connection.execute("SELECT count(*) FROM transactional_outbox").fetchone() == (7,)
+    assert connection.execute("SELECT count(*) FROM idempotency WHERE state='done'").fetchone() == (
+        7,
+    )
+
+
+def test_add_line_rejects_inactive_and_policy_without_writes(context):
+    from universal_business.application.orders.commands import AddOrderLine
+    from universal_business.domain.catalog.entities import Offering
+    from universal_business.domain.catalog.value_objects import CatalogItemStatus
+    from universal_business.domain.shared.errors import InvariantViolationError
+    from universal_business.infrastructure.sqlite_offerings import SqliteOfferingRepository
+
+    connection, service, scope, _ = context
+    _create(service, scope)
+    offering = Offering(
+        id=OfferingId.generate(),
+        tenant_id=scope["tenant_id"],
+        business_id=scope["business_id"],
+        name="Oferta",
+        status=CatalogItemStatus.INACTIVE,
+        base_price=Money("10", "EUR"),
+    )
+    with SqliteUnitOfWork(connection) as uow:
+        SqliteOfferingRepository(connection).save(offering)
+        uow.commit()
+    command = AddOrderLine(
+        **scope,
+        offering_id=offering.id,
+        line_id=uuid4(),
+        quantity=Decimal("1"),
+        discount=Money("0", "EUR"),
+        tax=Money("0", "EUR"),
+        idempotency_key=IdempotencyKey(value="add-denied-01"),
+    )
+    policy = Mock()
+    policy.approve.return_value = True
+    with pytest.raises(InvariantViolationError):
+        service.add_line(command, policy=policy)
+    offering.activate()
+    with SqliteUnitOfWork(connection) as uow:
+        SqliteOfferingRepository(connection).save(offering)
+        uow.commit()
+    policy.approve.return_value = False
+    with pytest.raises(ApplicationError):
+        service.add_line(command, policy=policy)
+    order = SqliteOrderRepository(connection).get(
+        tenant_id=scope["tenant_id"], order_id=scope["order_id"]
+    )
+    assert order.lines == ()
+    assert connection.execute("SELECT count(*) FROM transactional_outbox").fetchone() == (1,)
+    assert connection.execute("SELECT count(*) FROM idempotency").fetchone() == (1,)
+
+
+def test_add_line_outbox_failure_rolls_back(context):
+    from universal_business.application.orders.commands import AddOrderLine
+    from universal_business.domain.catalog.entities import Offering
+    from universal_business.domain.catalog.value_objects import CatalogItemStatus
+    from universal_business.infrastructure.sqlite_offerings import SqliteOfferingRepository
+
+    connection, service, scope, _ = context
+    _create(service, scope)
+    offering = Offering(
+        id=OfferingId.generate(),
+        tenant_id=scope["tenant_id"],
+        business_id=scope["business_id"],
+        name="Oferta",
+        status=CatalogItemStatus.ACTIVE,
+        base_price=Money("10", "EUR"),
+    )
+    with SqliteUnitOfWork(connection) as uow:
+        SqliteOfferingRepository(connection).save(offering)
+        uow.commit()
+    command = AddOrderLine(
+        **scope,
+        offering_id=offering.id,
+        line_id=uuid4(),
+        quantity=Decimal("1"),
+        discount=Money("0", "EUR"),
+        tax=Money("0", "EUR"),
+        idempotency_key=IdempotencyKey(value="add-fail-001"),
+    )
+    policy = Mock()
+    policy.approve.return_value = True
+    connection.execute(
+        "CREATE TRIGGER reject_line BEFORE INSERT ON transactional_outbox BEGIN SELECT RAISE(ABORT, 'outbox failure'); END"
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="outbox failure"):
+        service.add_line(command, policy=policy)
+    assert (
+        SqliteOrderRepository(connection)
+        .get(tenant_id=scope["tenant_id"], order_id=scope["order_id"])
+        .lines
+        == ()
+    )
+    assert connection.execute("SELECT count(*) FROM idempotency").fetchone() == (1,)
+    connection.execute("DROP TRIGGER reject_line")
+    assert service.add_line(command, policy=policy).line_id == command.line_id
+
+
+def test_add_line_locks_catalog_until_commit(context):
+    from universal_business.application.orders.commands import AddOrderLine
+    from universal_business.domain.catalog.entities import Offering
+    from universal_business.domain.catalog.value_objects import CatalogItemStatus
+    from universal_business.infrastructure.sqlite_offerings import SqliteOfferingRepository
+
+    connection, service, scope, _ = context
+    _create(service, scope)
+    offering = Offering(
+        id=OfferingId.generate(),
+        tenant_id=scope["tenant_id"],
+        business_id=scope["business_id"],
+        name="Oferta",
+        status=CatalogItemStatus.ACTIVE,
+        base_price=Money("10", "EUR"),
+    )
+    with SqliteUnitOfWork(connection) as uow:
+        SqliteOfferingRepository(connection).save(offering)
+        uow.commit()
+    command = AddOrderLine(
+        **scope,
+        offering_id=offering.id,
+        line_id=uuid4(),
+        quantity=Decimal("1"),
+        discount=Money("0", "EUR"),
+        tax=Money("0", "EUR"),
+        idempotency_key=IdempotencyKey(value="add-lock-001"),
+    )
+    path = connection.execute("PRAGMA database_list").fetchone()[2]
+
+    def approve(**kwargs):
+        with sqlite3.connect(path, timeout=0) as other:
+            with pytest.raises(sqlite3.OperationalError, match="locked"):
+                with SqliteUnitOfWork(other):
+                    pass
+        return True
+
+    policy = Mock()
+    policy.approve.side_effect = approve
+    assert service.add_line(command, policy=policy).total == Money("10", "EUR")
+    assert policy.approve.call_count == 1

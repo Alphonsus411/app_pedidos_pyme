@@ -1,4 +1,4 @@
-"""Ensamblaje SQLite para creación, eliminación y estados de pedidos."""
+"""Ensamblaje SQLite del ciclo de pedidos."""
 
 import sqlite3
 from collections.abc import Sequence
@@ -13,7 +13,13 @@ from universal_business.application.execution import (
     execute_use_case,
 )
 from universal_business.application.idempotency import IdempotencyKey, scoped_idempotency_key
+from universal_business.application.orders.add_line import (
+    AddOrderLineHandler,
+    OrderLinePolicy,
+    OrderLineResult,
+)
 from universal_business.application.orders.commands import (
+    AddOrderLine,
     CancelOrder,
     CompleteOrder,
     ConfirmOrder,
@@ -48,6 +54,7 @@ from universal_business.domain.shared.events import DomainEvent
 from universal_business.domain.shared.value_objects.ids import BusinessId, TenantId
 from universal_business.infrastructure.sqlite_customers import SqliteCustomerRepository
 from universal_business.infrastructure.sqlite_locations import SqliteLocationRepository
+from universal_business.infrastructure.sqlite_offerings import SqliteOfferingRepository
 from universal_business.infrastructure.sqlite_order_idempotency import SqliteOrderIdempotencyStore
 from universal_business.infrastructure.sqlite_orders import (
     SqliteOrderMutationGuard,
@@ -73,8 +80,9 @@ OutputT = TypeVar("OutputT")
 class SqliteOrderExecution:
     """UoW y conexión compartidas; no es frontera autenticada ni autorizada.
 
-    Exige política explícita de transición. Añadir líneas queda pendiente de
-    catálogo transaccional. La entrega outbox requiere un worker independiente.
+    Exige políticas explícitas de transición y de línea. Las ofertas y pedidos
+    usan la misma conexión y bloqueo. No protege escrituras que eludan la UoW.
+    La entrega outbox requiere un worker independiente.
     """
 
     def __init__(
@@ -131,6 +139,22 @@ class SqliteOrderExecution:
             orders=SqliteOrderRepository(self._connection),
             locations=SqliteLocationRepository(self._connection),
             customers=SqliteCustomerRepository(self._connection),
+            idempotency=store,
+        )
+        return self._run(command, handler, uow, store)
+
+    def add_line(self, command: AddOrderLine, *, policy: OrderLinePolicy) -> OrderLineResult:
+        if policy is None:
+            raise ValueError("Se requiere política de línea")
+        uow, store = (
+            SqliteUnitOfWork(self._connection),
+            SqliteOrderIdempotencyStore(self._connection),
+        )
+        handler = AddOrderLineHandler(
+            orders=SqliteOrderRepository(self._connection),
+            offerings=SqliteOfferingRepository(self._connection),
+            guard=SqliteOrderMutationGuard(uow),
+            policy=policy,
             idempotency=store,
         )
         return self._run(command, handler, uow, store)
