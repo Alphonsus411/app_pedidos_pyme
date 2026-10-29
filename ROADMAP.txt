@@ -399,3 +399,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] Autorización, políticas de negocio reales, persistencia y aislamiento siguen pendientes; el Gate 0.4 continúa abierto.
 
 [INTEGRADO EN MASTER] PR #32: copia de metadata para políticas, merge b4bb0d1. CI y revisión automática sin hallazgos: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40740087511 . Los objetos personalizados requieren copia correcta; DTO inmutable pendiente.
+
+51. REGISTRO DE AVANCE — 29-10-2026 (CONSULTA DE RESERVA)
+
+[COMPLETADO EN BORRADOR] GetReservation devuelve vista inmutable y valida tenant/business/location/ID; las reservas fuera de ámbito y ausentes se devuelven como None. Datos temporales y estado inválidos se rechazan.
+[COMPLETADO EN BORRADOR] Pruebas de ámbito, ausencia, parámetros inválidos y estabilidad de la vista con repositorio fake.
+[EN CURSO] La frontera debe autenticar y autorizar al actor; el repositorio real debe aislar tenant y garantizar lectura coherente. La consulta no garantiza snapshot transaccional ni adjudica disponibilidad. Gate 0.4 sigue abierto.

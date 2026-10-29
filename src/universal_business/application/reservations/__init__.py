@@ -20,6 +20,11 @@ from universal_business.application.reservations.handlers import (
     ConfirmReservationHandler,
     ReservationConfirmation,
 )
+from universal_business.application.reservations.queries import GetReservation
+from universal_business.application.reservations.query_handlers import (
+    GetReservationHandler,
+    ReservationView,
+)
 from universal_business.application.reservations.status_change import (
     CheckInReservationHandler,
     CompleteReservationHandler,
@@ -28,6 +33,9 @@ from universal_business.application.reservations.status_change import (
 )
 
 __all__ = [
+    "GetReservation",
+    "GetReservationHandler",
+    "ReservationView",
     "CheckInReservation",
     "CheckInReservationHandler",
     "CompleteReservation",
