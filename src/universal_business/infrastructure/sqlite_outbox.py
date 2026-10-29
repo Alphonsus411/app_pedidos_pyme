@@ -78,6 +78,13 @@ def create_sqlite_delivery_schema(connection: sqlite3.Connection) -> None:
             FOREIGN KEY (event_id) REFERENCES transactional_outbox(event_id)
         )"""
     )
+    connection.execute(
+        """CREATE TABLE IF NOT EXISTS outbox_quarantine (
+            event_id TEXT PRIMARY KEY NOT NULL,
+            reason TEXT NOT NULL,
+            FOREIGN KEY (event_id) REFERENCES transactional_outbox(event_id)
+        )"""
+    )
 
 
 class LostOutboxClaimError(RuntimeError):
@@ -88,7 +95,9 @@ class SqliteOutboxDeliveryStore:
     """Adjudicación SQLite experimental: una conexión nueva por operación.
 
     No es un adaptador de producción: no aporta aislamiento de tenants,
-    migraciones, cuarentena de eventos inválidos ni planificación. El reloj
+    migraciones, aislamiento multitenant ni planificación. La cuarentena es
+    manual, no verifica el contenido y su historial no es durable tras la
+    recuperación. El reloj
     debe ser consistente entre procesos que compartan la base. Los bloqueos
     y contención de SQLite no representan el comportamiento de PostgreSQL.
     """
@@ -124,7 +133,9 @@ class SqliteOutboxDeliveryStore:
             row = connection.execute(
                 """SELECT o.event_id, o.payload FROM transactional_outbox AS o
                    LEFT JOIN outbox_delivery AS d ON d.event_id = o.event_id
-                   WHERE d.event_id IS NULL OR (d.delivered = 0 AND d.expires_at <= ?)
+                   LEFT JOIN outbox_quarantine AS q ON q.event_id = o.event_id
+                   WHERE q.event_id IS NULL AND
+                     (d.event_id IS NULL OR (d.delivered = 0 AND d.expires_at <= ?))
                    ORDER BY o.rowid LIMIT 1""",
                 (now,),
             ).fetchone()
@@ -145,6 +156,64 @@ class SqliteOutboxDeliveryStore:
             )
             connection.commit()
             return ClaimedOutboxEvent(event=event, claim_token=token)
+        except BaseException:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+
+    def quarantine(self, event_id: DomainEventId, reason: str, /) -> None:
+        """Aparta manualmente un evento pendiente sin borrar su payload.
+
+        Rechaza eventos ausentes, ya entregados o con adjudicación vigente.
+        Un operador debe investigar el evento; no se cuarentensan fallos de
+        decoder automáticamente porque podrían ser errores de configuración.
+        """
+        if not isinstance(event_id, DomainEventId):
+            raise ValueError("Se requiere un identificador de evento")
+        if not isinstance(reason, str) or not reason.strip() or len(reason) > 500:
+            raise ValueError("El motivo debe contener entre 1 y 500 caracteres")
+        connection = self._connect()
+        try:
+            if connection.in_transaction:
+                raise RuntimeError("Se requiere una conexión nueva sin transacción")
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                """SELECT d.delivered, d.expires_at FROM transactional_outbox o
+                   LEFT JOIN outbox_delivery d ON d.event_id = o.event_id
+                   WHERE o.event_id = ?""",
+                (str(event_id),),
+            ).fetchone()
+            if row is None:
+                raise ValueError("Evento no encontrado")
+            if row[0] == 1 or (row[1] is not None and row[1] > self._now()):
+                raise ValueError("Evento entregado o con adjudicación vigente")
+            connection.execute(
+                "INSERT INTO outbox_quarantine (event_id, reason) VALUES (?, ?)",
+                (str(event_id), reason),
+            )
+            connection.commit()
+        except BaseException:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+
+    def requeue(self, event_id: DomainEventId, /) -> None:
+        """Devuelve una entrada en cuarentena a la cola, sin cambiar el payload."""
+        if not isinstance(event_id, DomainEventId):
+            raise ValueError("Se requiere un identificador de evento")
+        connection = self._connect()
+        try:
+            if connection.in_transaction:
+                raise RuntimeError("Se requiere una conexión nueva sin transacción")
+            connection.execute("BEGIN IMMEDIATE")
+            result = connection.execute(
+                "DELETE FROM outbox_quarantine WHERE event_id = ?", (str(event_id),)
+            )
+            if result.rowcount != 1:
+                raise ValueError("Evento no está en cuarentena")
+            connection.commit()
         except BaseException:
             connection.rollback()
             raise
