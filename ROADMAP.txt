@@ -651,4 +651,6 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 80. REGISTRO 2026-10-29 — inicialización SQLite del prototipo
   [COMPLETADO] Inicializador transaccional para base dedicada vacía, esquema versión 1 de reservas, disponibilidad, idempotencia y outbox; reapertura verifica todos los objetos. Activa claves foráneas en la conexión actual. Rechaza esquemas legacy o alterados sin migrar.
   [VALIDADO LOCALMENTE] Inicialización repetida, integridad referencial existente, rechazo no destructivo, rollback de creación fallida, dos inicializadores concurrentes y ciclo de reservas sobre esquema inicializado. 1092 pruebas (sin generador PDF por dependencia local), Ruff y mypy correctos.
-  [PENDIENTE] CI e integración. Migración de bases existentes, integridad referencial de todas las entidades, autorización, reconciliación de idempotencia, pedidos y validación del prototipo completo. Mantener SQLite.
+  [PENDIENTE] Migración de bases existentes, integridad referencial de todas las entidades, autorización, reconciliación de idempotencia, pedidos y validación del prototipo completo. Mantener SQLite.
+
+  [INTEGRADO 2026-10-29] PR #62 fusionada en master (4c0aa17); CI completada correctamente, ejecución 40884229595. Sin comentarios de revisión al integrar.
