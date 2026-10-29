@@ -631,3 +631,5 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
   [COMPLETADO] Repositorio SQLite de reglas y bloqueos: consultas por ámbito y fechas, inclusión de reglas generales, persistencia transaccional y rechazo de intervalos corruptos.
   [VALIDADO LOCALMENTE] 1071 pruebas (sin generador PDF por dependencia local), Ruff y mypy. La consulta de disponibilidad utiliza reglas y bloqueos persistidos.
   [PENDIENTE] Integración tras CI; adjudicación de reservas completa y atómica con comprobación de disponibilidad, conflictos, capacidad y ámbito. Mantener SQLite para el prototipo.
+
+  [INTEGRADO 2026-10-29] PR #59 fusionada en master; CI de GitHub completada correctamente (ejecución 40881851919).
