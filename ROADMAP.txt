@@ -1,7 +1,7 @@
 UNIVERSAL BUSINESS CORE — ROADMAP Y TRAZABILIDAD
 Repositorio: https://github.com/Alphonsus411/app_pedidos_pyme
-Fecha de corte: 28-10-2026 (Europe/Madrid)
-Estado: documento de seguimiento; las propuestas pendientes no están aprobadas.
+Fecha de corte: 29-10-2026 (Europe/Madrid)
+Estado: seguimiento del trabajo integrado y de las decisiones y tareas aún pendientes.
 
 1. OBJETIVO Y ALCANCE
 
@@ -20,6 +20,15 @@ Núcleo backend en Python, modular, multitenant y agnóstico de sector, para reu
 28-10-2026 — Plan 0.4 creado en la rama feat/fase-3-orders-reservations, commit 5bc5b6d; PR #3 abierto como borrador. El plan aún no está fusionado ni aprobado. La revisión posterior identificó los ajustes de las secciones 4 y 5; son propuestas y hallazgos por verificar, no cambios ya implementados.
 
 3. ESTADO POR FASE
+
+Actualización 29-10-2026: el resumen original de esta sección es histórico. Prevalece el estado actual siguiente y el registro detallado de las secciones 8–58.
+
+[INTEGRADO] Hardening de idempotencia y partes del dominio y aplicación de pedidos y reservas, incluyendo consultas y pruebas con fakes (PR #4–#39; ver registros de integración).
+[EN CURSO] 0.4 — Hay funcionalidad integrada, pero el gate no está cerrado: faltan autorización, decisiones de negocio, validación de contratos y garantías con infraestructura real. Las políticas temporales coordinadas son optativas.
+[PENDIENTE] 0.5 — Diseño e implementación de persistencia, atomicidad, outbox y recuperación; el plan de la sección 58 es una propuesta, no una garantía implementada.
+[PENDIENTE] 0.6 y 0.7+ — Vertical, canales y automatización sin alcance ni fechas comprometidas.
+
+Resumen original (28-10-2026):
 
 [INTEGRADO] 0.1 — Baseline arquitectónica y contratos de dominio.
 [INTEGRADO] 0.2 — Foundation y contratos de aplicación.
@@ -52,6 +61,8 @@ P1 — Pedidos y dinero:
 
 5. SECUENCIA PROPUESTA
 
+La secuencia de abajo conserva la planificación original del 28-10-2026; sus etiquetas no reflejan por sí solas el estado actual. Véanse las secciones 3 y 8–58 para el avance y los pendientes.
+
 T0. Aprobar o ajustar D1–D6, decisiones de los apartados anteriores, ADR-006/007 y contratos. Actualizar el plan del PR #3. Estado: pendiente.
 T1. Reproducir, corregir y probar idempotencia compartida, incluyendo ámbito, digest, concurrencia y fallos de transacción. Estado: pendiente.
 T2. Especificar matrices de estados, cálculos monetarios, snapshots, disponibilidad y reglas temporales. Estado: pendiente.
@@ -81,7 +92,7 @@ Estado de desarrollo: https://github.com/Alphonsus411/app_pedidos_pyme/blob/mast
 Informe hardening: https://github.com/Alphonsus411/app_pedidos_pyme/blob/master/docs/informe_hardening_0.3_execution_hooks_stateless_20260906.md
 ADR-007: https://github.com/Alphonsus411/app_pedidos_pyme/blob/master/docs/adr/ADR-007-idempotencia-pedidos-reservas.md
 
-Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos futuros. La existencia de la etiqueta v0.3.0 no se ha verificado. Este documento resume el estado observado y no modifica el repositorio.
+Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos futuros. La existencia de la etiqueta v0.3.0 no se ha verificado. Esta nota es histórica: el documento se incorporó después al repositorio; véanse los registros de integración.
 
 8. REGISTRO DE AVANCE — 28-10-2026
 
@@ -456,3 +467,14 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] La política temporal coordinada sigue siendo optativa. Los fakes no prueban adjudicación, disponibilidad completa, rollback ni concurrencia de base real, autorización o entrega durable. Gate 0.4 sigue abierto.
 
 [INTEGRADO EN MASTER] PR #39: flujos integrados de reservas con fakes, merge 7c37289. CI y revisión automática sin hallazgos: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40846753183 . No sustituye pruebas con infraestructura real ni autorización.
+
+58. REGISTRO DE AVANCE — 29-10-2026 (ESTADO Y PLAN DE INFRAESTRUCTURA)
+
+[COMPLETADO] Se aclara qué resúmenes son históricos y se incorpora el estado actual por fase, sin eliminar la trazabilidad previa. Se identifica el siguiente bloque de trabajo de persistencia y recuperación.
+[PROPUESTO] 0.5a — Diseñar el esquema multitenant y las migraciones, repositorios y UnitOfWork en PostgreSQL/SQLAlchemy; definir restricciones de unicidad y el alcance tenant/business/location. No activar sobre datos legacy sin inventario, conciliación y plan de migración de claves y huellas.
+[PROPUESTO] 0.5b — Diseñar adjudicación y guard transaccionales en la misma conexión/UoW que la escritura; garantizar ausencia de solapes mediante una estrategia respaldada por la base de datos, y probar dos conexiones reales, rollback y ámbito cruzado.
+[PROPUESTO] 0.5c — Revisar el contrato de idempotencia antes de un adaptador durable: reserva atómica, resultado serializable versionado, propiedad verificable para liberar/completar y recuperación de commits inciertos. No introducir TTL ni reasignación automática con el contrato actual. Definir cómo hacer atómicos el resultado de dominio, el registro de idempotencia y los eventos; el complete postcommit actual deja una ventana de fallo.
+[PROPUESTO] 0.5d — Introducir escritura de outbox dentro de la misma transacción de dominio y un publicador recuperable; probar fallo antes/después de commit y publicación duplicada, con consumidores idempotentes. El publisher actual postcommit no equivale a outbox.
+[PROPUESTO] 0.5e — Añadir pruebas de integración reproducibles con PostgreSQL real y migraciones, CI, observabilidad y procedimientos de recuperación; incluir fallos de conexión, concurrencia, reintentos y aislamiento entre tenants. Documentar decisiones y límites antes de cerrar el gate.
+[PENDIENTE] Autenticación/autorización por actor incluso en replays, selección de políticas del negocio y configuración coordinada de llegada/no presentación; no se asumen decisiones ni plazos por defecto.
+[EN CURSO] Ninguna de las propuestas de 0.5 constituye implementación ni aprobación del gate. Las pruebas anteriores con fakes no sustituyen las garantías de base de datos real. Las fases y tareas del proyecto no están terminadas.
