@@ -512,3 +512,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] Es un adaptador de desarrollo/pruebas; no incluye codec real, lectura, adjudicación, entrega, migración de esquema, PostgreSQL ni protección multitenant en el almacenamiento. No activar outbox en producción. Quedan pendientes pruebas reales de concurrencia y fases 0.4/0.5.
 
 [INTEGRADO EN MASTER] PR #44: escritor outbox SQLite experimental, merge 695d2bc. CI completa: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40852528624 . Revisión manual; no había revisión automática finalizada al integrar. Codec, lectura, worker durable, aislamiento y PostgreSQL siguen pendientes.
+
+63. REGISTRO DE AVANCE — 29-10-2026 (ADJUDICACIÓN SQLITE EXPERIMENTAL)
+
+[COMPLETADO EN BORRADOR] Adaptador SQLite experimental de entrega: adjudicación en transacción independiente con BEGIN IMMEDIATE, token impredecible y plazo explícito; marcado condicional por ID, token y vigencia. La caducidad permite volver a adjudicar; el evento decodificado debe conservar el ID. El worker se conecta mediante el contrato ya existente.
+[COMPLETADO EN BORRADOR] Pruebas SQLite con conexiones independientes: dos solicitudes concurrentes sobre un evento producen una adjudicación; se rechazan tokens antiguos/caducados; se prueba recuperación tras fallo de publicación, éxito del worker y rechazo de payload inconsistente. Suite local en worktree anterior a master: 994 pruebas, excepto generador PDF; Ruff y mypy correctos.
+[EN CURSO] Experimental: el decodificador se inyecta, no hay codec versionado real, migraciones, aislamiento multitenant, cuarentena de eventos inválidos ni scheduler. Un evento que no se decodifica puede bloquear el procesamiento; el reloj debe ser consistente. No hay garantía exactamente una vez: pueden darse duplicados y los consumidores deben deduplicar. No usar en producción ni extrapolar pruebas SQLite a PostgreSQL; gates 0.4 y 0.5 abiertos.
