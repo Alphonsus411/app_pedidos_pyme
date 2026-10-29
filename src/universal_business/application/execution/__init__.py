@@ -247,7 +247,7 @@ def execute_use_case(
          propagar exc).
       5. dispatch + publish events.
     """
-    events_holder: dict[str, Sequence[DomainEvent]] = {}
+    events_holder: dict[str, list[DomainEvent]] = {}
     result_holder: dict[str, OutT] = {}
     hooks_holder: dict[str, ExecutionHooks[OutT] | None] = {"h": None}
     replay_holder = {"is_replay": False}
@@ -266,8 +266,10 @@ def execute_use_case(
             ):
                 hooks_holder["h"] = handler.build_hooks(input, result)
             if _collector_override is not None:
-                events = list(_collector_override(result, events))
-            events_holder["e"] = events
+                events = _collector_override(result, events)
+            # Materialize while rollback and the failure hook are still safe.
+            # Also freeze the sequence against mutation during commit/exit.
+            events_holder["e"] = list(events)
             commit_started = True
             uow.commit()
             commit_succeeded = True
@@ -297,7 +299,7 @@ def execute_use_case(
 
     # ---- Post-commit: uow.__exit__ ya corrió sin error ----
     result_val = result_holder["r"]
-    events_list = list(events_holder.get("e", []))
+    events_list = events_holder.get("e", [])
     hooks = hooks_holder["h"]
     try:
         if hooks is not None and hooks.on_success is not None:
