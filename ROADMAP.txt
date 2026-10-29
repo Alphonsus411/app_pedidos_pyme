@@ -700,4 +700,6 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 87. REGISTRO 2026-10-29 — ofertas SQLite para pedidos
   [COMPLETADO] Repositorio SQLite de ofertas con aislamiento tenant/negocio, filtros de estado y ubicación, precio Decimal, metadata JSON restringida y escritura transaccional. Esquema independiente del inicializador v2; no cambia user_version.
   [VALIDADO LOCALMENTE] Reapertura, ámbito, ubicaciones generales/específicas, rollback, datos inválidos y exclusión de escritores. Adición de línea con oferta, pedido, guard, idempotencia y outbox SQLite reales en una UoW ensamblada explícitamente. Suite parcial 1158 pruebas sin generador PDF por dependencia local; Ruff y mypy correctos.
-  [PENDIENTE] CI e integración; migración versionada para incluir ofertas en la base gestionada, conexión al ensamblaje de pedidos y prueba de ciclo íntegro, autorización y entrega de eventos. Mantener SQLite.
+  [PENDIENTE] Migración versionada para incluir ofertas en la base gestionada, conexión al ensamblaje de pedidos y prueba de ciclo íntegro, autorización y entrega de eventos. Mantener SQLite.
+
+  [INTEGRADO 2026-10-29] PR #69 fusionada en master (adffd9b); CI completa, ejecución 40898996763. Sin comentarios de revisión al integrar.
