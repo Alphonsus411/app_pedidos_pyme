@@ -1,5 +1,6 @@
 """Propiedad y recuperación conservadora de claves SQLite."""
 
+import json
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -7,7 +8,11 @@ from pathlib import Path
 import pytest
 
 from universal_business.application.idempotency import IdempotencyKey
+from universal_business.application.reservations.cancellation import ReservationCancellation
 from universal_business.application.reservations.creation import ReservationDraftCreated
+from universal_business.application.reservations.handlers import ReservationConfirmation
+from universal_business.application.reservations.status_change import ReservationStatusResult
+from universal_business.domain.reservations.value_objects import ReservationStatus
 from universal_business.domain.shared.value_objects.ids import (
     BusinessId,
     LocationId,
@@ -81,6 +86,50 @@ def test_complete_failure_keeps_reservation(db: Path) -> None:
         with pytest.raises(ValueError, match="Resultado no soportado"):
             store.complete(tenant, key, "digest", object())
         assert connection.execute("SELECT state FROM idempotency").fetchone() == ("reserved",)
+
+
+@pytest.mark.parametrize(
+    "result_type",
+    [
+        ReservationDraftCreated,
+        ReservationConfirmation,
+        ReservationCancellation,
+        ReservationStatusResult,
+    ],
+)
+def test_reservation_result_types_roundtrip_after_reopen(db: Path, result_type: type) -> None:
+    tenant, key = TenantId.generate(), IdempotencyKey(value="test-key-123")
+    fields = dict(
+        tenant_id=tenant,
+        business_id=BusinessId.generate(),
+        location_id=LocationId.generate(),
+        reservation_id=ReservationId.generate(),
+        resource_id=ResourceId.generate(),
+    )
+    if result_type is ReservationStatusResult:
+        fields["status"] = ReservationStatus.CHECKED_IN
+    result = result_type(**fields)
+    with sqlite3.connect(db) as connection:
+        store = SqliteReservationIdempotencyStore(connection)
+        with SqliteUnitOfWork(connection) as uow:
+            assert store.reserve(tenant, key, "digest")
+            uow.commit()
+        store.complete(tenant, key, "digest", result)
+        payload = json.loads(connection.execute("SELECT result FROM idempotency").fetchone()[0])
+        assert payload["version"] == (1 if result_type is ReservationDraftCreated else 2)
+    with sqlite3.connect(db) as connection:
+        assert SqliteReservationIdempotencyStore(connection).get(tenant, key) == ("digest", result)
+
+
+def test_unknown_version_rejected(db: Path) -> None:
+    tenant, key = TenantId.generate(), IdempotencyKey(value="test-key-123")
+    with sqlite3.connect(db) as connection:
+        connection.execute(
+            "INSERT INTO idempotency VALUES (?, ?, ?, ?, ?, ?)",
+            (str(tenant), key.value, "digest", "token", "done", '{"version":3}'),
+        )
+        with pytest.raises(ValueError, match="inválido"):
+            SqliteReservationIdempotencyStore(connection).get(tenant, key)
 
 
 def test_rollback_and_foreign_release_cannot_delete_new_owner(db: Path) -> None:
