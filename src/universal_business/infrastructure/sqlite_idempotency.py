@@ -126,12 +126,18 @@ class SqliteReservationIdempotencyStore:
         self._connection = connection
         self._owned: dict[tuple[str, str], str] = {}
 
+    def _encode_result(self, value: object) -> str:
+        return _encode(value)
+
+    def _decode_result(self, payload: str) -> object:
+        return _decode(payload)
+
     def get(self, tenant_id: TenantId, key: IdempotencyKey, /) -> tuple[str, object] | None:
         row = self._connection.execute(
             "SELECT digest, result FROM idempotency WHERE tenant_id=? AND key=? AND state='done'",
             (str(tenant_id), key.value),
         ).fetchone()
-        return (str(row[0]), _decode(row[1])) if row else None
+        return (str(row[0]), self._decode_result(row[1])) if row else None
 
     def reserve(self, tenant_id: TenantId, key: IdempotencyKey, request_digest: str, /) -> bool:
         if (
@@ -165,7 +171,7 @@ class SqliteReservationIdempotencyStore:
             raise RuntimeError("Complete requiere reserva propia y transacción postcommit nueva")
         if getattr(self._connection, "autocommit", None) is True:
             raise RuntimeError("autocommit=True no es compatible")
-        encoded = _encode(result_object)
+        encoded = self._encode_result(result_object)
         try:
             self._connection.execute("BEGIN IMMEDIATE")
             updated = self._connection.execute(
@@ -197,7 +203,7 @@ class SqliteReservationIdempotencyStore:
         token = self._owned.get(identity)
         if token is None:
             raise RuntimeError("Complete requiere reserva propia")
-        encoded = _encode(result_object)
+        encoded = self._encode_result(result_object)
         updated = self._connection.execute(
             "UPDATE idempotency SET state='done', result=? "
             "WHERE tenant_id=? AND key=? AND token=? AND digest=? AND state='reserved'",

@@ -682,3 +682,8 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
   [PENDIENTE] Idempotencia, outbox y ensamblaje real del ciclo de pedidos, control del catálogo, autorización y validación funcional integral. Mantener SQLite.
 
   [INTEGRADO 2026-10-29] PR #66 fusionada en master (2279e68); CI completa, ejecución 40891912983. Sin comentarios de revisión al integrar.
+
+85. REGISTRO 2026-10-29 — idempotencia SQLite para pedidos
+  [COMPLETADO] Almacén SQLite de resultados de creación, adición/eliminación de línea y cambio de estado de pedido, con codec explícito versionado y opción de completar en la misma UoW. El codec existente de reservas conserva su formato y comportamiento.
+  [VALIDADO LOCALMENTE] Reapertura y replay de los cuatro resultados, aislamiento, propiedad de reserva, rollback, payload inválido y creación de pedido con repositorio, idempotencia y outbox reales en una transacción ensamblada explícitamente. 1148 pruebas en copia parcial, sin generador PDF por dependencia local; Ruff y mypy correctos.
+  [PENDIENTE] CI e integración; ensamblaje automático del ciclo completo de pedidos, pruebas de todos los comandos con outbox e idempotencia reales, catálogo transaccional, autorización y validación integral. Complete postcommit genérico aún puede dejar RESERVED. Mantener SQLite.
