@@ -151,3 +151,26 @@ class SqliteReservationRepository:
             sql += " AND status=?"
             params.append(status.value)
         return [_from_row(row) for row in self._connection.execute(sql, params).fetchall()]
+
+    def list_by_location(
+        self,
+        *,
+        tenant_id: TenantId,
+        business_id: BusinessId,
+        location_id: LocationId,
+        status: ReservationStatus | None,
+        limit: int,
+    ) -> list[Reservation]:
+        """Lista acotada dentro del ámbito completo, sin prometer orden ni paginación."""
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise ValueError("El límite debe estar entre 1 y 100")
+        if status is not None and not isinstance(status, ReservationStatus):
+            raise ValueError("Estado de reserva inválido")
+        sql = "SELECT * FROM reservations WHERE tenant_id=? AND business_id=? AND location_id=?"
+        params: list[object] = [str(tenant_id), str(business_id), str(location_id)]
+        if status is not None:
+            sql += " AND status=?"
+            params.append(status.value)
+        sql += " ORDER BY id LIMIT ?"
+        params.append(limit)
+        return [_from_row(row) for row in self._connection.execute(sql, params).fetchall()]
