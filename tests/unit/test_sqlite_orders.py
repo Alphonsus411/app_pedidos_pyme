@@ -187,3 +187,154 @@ def test_create_order_handler_uses_sqlite_repository(case):
         assert saved is not None and saved.status == OrderStatus.DRAFT and saved.lines == ()
         assert result.order_id == command.order_id
         assert len(events) == 1
+
+
+def test_order_guard_requires_active_uow_and_exact_scope(case):
+    from universal_business.application.errors import ApplicationError
+    from universal_business.infrastructure.sqlite_orders import SqliteOrderMutationGuard
+    from universal_business.infrastructure.sqlite_unit_of_work import SqliteUnitOfWork
+
+    _, connection, repo, order = case
+    connection.execute("BEGIN IMMEDIATE")
+    repo.save(order)
+    connection.commit()
+    uow = SqliteUnitOfWork(connection)
+    guard = SqliteOrderMutationGuard(uow)
+    scope = dict(
+        tenant_id=order.tenant_id,
+        business_id=order.business_id,
+        location_id=order.location_id,
+        order_id=order.id,
+    )
+    with pytest.raises(RuntimeError, match="activa"):
+        guard.protect(**scope)
+    with uow:
+        guard.protect(**scope)
+        for changed in (
+            dict(tenant_id=TenantId.generate()),
+            dict(business_id=BusinessId.generate()),
+            dict(location_id=LocationId.generate()),
+            dict(order_id=OrderId.generate()),
+        ):
+            with pytest.raises(ApplicationError, match="no encontrado o fuera del ámbito"):
+                guard.protect(**(scope | changed))
+    with pytest.raises(RuntimeError, match="activa"):
+        guard.protect(**scope)
+
+
+def test_order_guard_serializes_writers_until_rollback(case):
+    from universal_business.infrastructure.sqlite_orders import SqliteOrderMutationGuard
+    from universal_business.infrastructure.sqlite_unit_of_work import SqliteUnitOfWork
+
+    path, connection, repo, order = case
+    connection.execute("BEGIN IMMEDIATE")
+    repo.save(order)
+    connection.commit()
+    scope = dict(
+        tenant_id=order.tenant_id,
+        business_id=order.business_id,
+        location_id=order.location_id,
+        order_id=order.id,
+    )
+    with sqlite3.connect(path, timeout=0) as second:
+        uow = SqliteUnitOfWork(connection)
+        with uow:
+            SqliteOrderMutationGuard(uow).protect(**scope)
+            with pytest.raises(sqlite3.OperationalError, match="locked"):
+                with SqliteUnitOfWork(second):
+                    pass
+        with SqliteUnitOfWork(second) as next_uow:
+            SqliteOrderMutationGuard(next_uow).protect(**scope)
+            next_uow.commit()
+
+
+def test_validate_and_confirm_order_using_real_sqlite_guard(case):
+    from unittest.mock import Mock
+
+    from tests.unit.test_application_reservation_confirm import LockedStore
+    from universal_business.application.events.dispatcher import DomainEventDispatcher
+    from universal_business.application.execution import execute_use_case
+    from universal_business.application.idempotency import IdempotencyKey
+    from universal_business.application.orders.commands import ConfirmOrder, ValidateOrder
+    from universal_business.application.orders.status_change import (
+        ConfirmOrderHandler,
+        ValidateOrderHandler,
+    )
+    from universal_business.infrastructure.sqlite_orders import SqliteOrderMutationGuard
+    from universal_business.infrastructure.sqlite_unit_of_work import SqliteUnitOfWork
+
+    path, connection, repo, order = case
+    connection.execute("BEGIN IMMEDIATE")
+    repo.save(order)
+    connection.commit()
+    policy = Mock()
+    policy.approve.return_value = True
+    store = LockedStore()
+    scope = dict(
+        tenant_id=order.tenant_id,
+        business_id=order.business_id,
+        location_id=order.location_id,
+        order_id=order.id,
+    )
+    for command, handler_type in (
+        (
+            ValidateOrder(**scope, idempotency_key=IdempotencyKey(value="order-validate-sqlite")),
+            ValidateOrderHandler,
+        ),
+        (
+            ConfirmOrder(**scope, idempotency_key=IdempotencyKey(value="order-confirm-sqlite")),
+            ConfirmOrderHandler,
+        ),
+    ):
+        uow = SqliteUnitOfWork(connection)
+        handler = handler_type(
+            orders=repo, guard=SqliteOrderMutationGuard(uow), policy=policy, idempotency=store
+        )
+        execute_use_case(
+            handler=handler,
+            input=command,
+            unit_of_work=uow,
+            event_dispatcher=DomainEventDispatcher(),
+            event_publisher=Mock(),
+        )
+    with sqlite3.connect(path) as reader:
+        saved = SqliteOrderRepository(reader).get(tenant_id=order.tenant_id, order_id=order.id)
+        assert saved.status == OrderStatus.CONFIRMED
+        assert saved.lines == order.lines
+
+
+def test_concurrent_order_edits_keep_both_lines(case):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    from universal_business.infrastructure.sqlite_orders import SqliteOrderMutationGuard
+    from universal_business.infrastructure.sqlite_unit_of_work import SqliteUnitOfWork
+
+    path, connection, repo, order = case
+    connection.execute("BEGIN IMMEDIATE")
+    repo.save(order)
+    connection.commit()
+    barrier = Barrier(2)
+    new_ids = [uuid4(), uuid4()]
+    scope = dict(
+        tenant_id=order.tenant_id,
+        business_id=order.business_id,
+        location_id=order.location_id,
+        order_id=order.id,
+    )
+
+    def edit(line_id):
+        with sqlite3.connect(path, timeout=5) as conn:
+            barrier.wait(timeout=5)
+            with SqliteUnitOfWork(conn) as uow:
+                SqliteOrderMutationGuard(uow).protect(**scope)
+                store = SqliteOrderRepository(conn)
+                current = store.get(tenant_id=order.tenant_id, order_id=order.id)
+                current.add_line(replace(order.lines[0], line_id=line_id))
+                store.save(current)
+                uow.commit()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        list(executor.map(edit, new_ids))
+    actual = repo.get(tenant_id=order.tenant_id, order_id=order.id)
+    assert {line.line_id for line in actual.lines} == {order.lines[0].line_id, *new_ids}

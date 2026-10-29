@@ -675,3 +675,8 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
   [PENDIENTE] La migración requiere copia de seguridad verificada y no cubre bases legacy o esquemas alterados. Persisten guard, idempotencia y outbox reales para pedidos, autorización y validación funcional completa. Mantener SQLite.
 
   [INTEGRADO 2026-10-29] PR #65 fusionada en master (5c54044); CI completa, ejecución 40887015457. Sin comentarios de revisión al integrar.
+
+84. REGISTRO 2026-10-29 — protección SQLite de mutaciones de pedidos
+  [COMPLETADO] Guard asociado a UoW SQLite BEGIN IMMEDIATE, que comprueba tenant, negocio, ubicación y pedido bajo el bloqueo; no autoriza ni protege el catálogo. El caller debe compartir conexión y usar protección compatible en todas las mutaciones.
+  [VALIDADO LOCALMENTE] Rechazo sin UoW y de ámbito incorrecto, bloqueo y liberación tras rollback, dos ediciones concurrentes sin pérdida de líneas y validación/confirmación con repositorio y guard reales. La prueba de aplicación usa idempotencia simulada. Suite parcial 1152 pruebas salvo generador PDF por dependencia local; Ruff y mypy correctos.
+  [PENDIENTE] CI e integración; idempotencia, outbox y ensamblaje real del ciclo de pedidos, control del catálogo, autorización y validación funcional integral. Mantener SQLite.
