@@ -439,3 +439,5 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [COMPLETADO EN BORRADOR] Pruebas de política ausente, bordes, rechazo, replay, reloj inválido y cambio horario fold. Los plazos y reloj usados en pruebas no establecen valores por defecto.
 [COMPATIBILIDAD] Los consumidores de CheckInReservationHandler deben inyectar política. El negocio debe definir y coordinar ventanas de llegada/no presentación; la frontera debe autorizar al actor también en replay. No existe garantía de que ambas configuraciones sean coherentes.
 [EN CURSO] Adaptadores durables, pruebas transaccionales reales, autorización y Gate 0.4 siguen pendientes.
+
+[INTEGRADO EN MASTER] PR #37: ventana configurable obligatoria para llegada, merge 5843c72. CI y revisión automática sin hallazgos: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40841325873 . Configuración conjunta con no-show, autorización y adaptadores siguen pendientes.
