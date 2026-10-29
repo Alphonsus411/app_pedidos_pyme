@@ -679,4 +679,6 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 84. REGISTRO 2026-10-29 — protección SQLite de mutaciones de pedidos
   [COMPLETADO] Guard asociado a UoW SQLite BEGIN IMMEDIATE, que comprueba tenant, negocio, ubicación y pedido bajo el bloqueo; no autoriza ni protege el catálogo. El caller debe compartir conexión y usar protección compatible en todas las mutaciones.
   [VALIDADO LOCALMENTE] Rechazo sin UoW y de ámbito incorrecto, bloqueo y liberación tras rollback, dos ediciones concurrentes sin pérdida de líneas y validación/confirmación con repositorio y guard reales. La prueba de aplicación usa idempotencia simulada. Suite parcial 1152 pruebas salvo generador PDF por dependencia local; Ruff y mypy correctos.
-  [PENDIENTE] CI e integración; idempotencia, outbox y ensamblaje real del ciclo de pedidos, control del catálogo, autorización y validación funcional integral. Mantener SQLite.
+  [PENDIENTE] Idempotencia, outbox y ensamblaje real del ciclo de pedidos, control del catálogo, autorización y validación funcional integral. Mantener SQLite.
+
+  [INTEGRADO 2026-10-29] PR #66 fusionada en master (2279e68); CI completa, ejecución 40891912983. Sin comentarios de revisión al integrar.
