@@ -76,7 +76,11 @@ def run(ledger, store, command, handler_cls, publisher=None):
             return True
 
     handler = handler_cls(
-        reservations=tx, guard=tx, idempotency=store, no_show_policy=AllowNoShow()
+        reservations=tx,
+        guard=tx,
+        idempotency=store,
+        no_show_policy=AllowNoShow(),
+        check_in_policy=AllowNoShow(),
     )
     return execute_use_case(
         handler=handler,
