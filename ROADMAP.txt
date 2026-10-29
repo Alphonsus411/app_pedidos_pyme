@@ -689,3 +689,8 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
   [PENDIENTE] Ensamblaje automático del ciclo completo de pedidos, pruebas de todos los comandos con outbox e idempotencia reales, catálogo transaccional, autorización y validación integral. Complete postcommit genérico aún puede dejar RESERVED. Mantener SQLite.
 
   [INTEGRADO 2026-10-29] PR #67 fusionada en master (8927e72); CI completa, ejecución 40892693750. Sin comentarios de revisión al integrar.
+
+86. REGISTRO 2026-10-29 — ensamblaje parcial SQLite de pedidos
+  [COMPLETADO] Ensamblaje transaccional de creación, eliminación de líneas y ocho comandos de estado con repositorios, guard, idempotencia y outbox SQLite en una misma UoW. Política de transición inyectada; no autentica ni autoriza.
+  [VALIDADO LOCALMENTE] Replay, estados, cancelación, rechazo de política, rollback por fallo de outbox y commit aplicado con respuesta incierta. Para ensayar estados se insertan líneas mediante el repositorio: no se prueba adición real. Suite parcial 1153 pruebas sin generador PDF por dependencia local; Ruff y mypy correctos.
+  [PENDIENTE] CI e integración; añadir líneas requiere catálogo SQLite transaccional y política explícita. Faltan validación integral, autorización, reconciliación de claves antiguas y entrega real de eventos. Mantener SQLite.
