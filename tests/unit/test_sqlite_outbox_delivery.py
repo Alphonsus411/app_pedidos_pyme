@@ -184,3 +184,23 @@ def test_quarantine_and_requeue_validate_requests(db_path: Path, event: DomainEv
         store.quarantine(event.event_id, "motivo")
     with pytest.raises(ValueError, match="no está en cuarentena"):
         store.requeue(event.event_id)
+
+
+def test_existing_delivery_schema_can_add_quarantine_without_losing_events(tmp_path: Path) -> None:
+    path = tmp_path / "legacy.db"
+    with sqlite3.connect(path) as connection:
+        create_sqlite_outbox_schema(connection)
+        connection.execute(
+            "CREATE TABLE outbox_delivery (event_id TEXT PRIMARY KEY, token TEXT, "
+            "expires_at REAL, delivered INTEGER NOT NULL DEFAULT 0)"
+        )
+        connection.execute(
+            "INSERT INTO transactional_outbox (event_id, payload) VALUES (?, ?)",
+            ("existing", b"original"),
+        )
+        create_sqlite_delivery_schema(connection)
+        create_sqlite_delivery_schema(connection)
+        assert connection.execute(
+            "SELECT event_id, payload FROM transactional_outbox"
+        ).fetchall() == [("existing", b"original")]
+        assert connection.execute("SELECT * FROM outbox_quarantine").fetchall() == []
