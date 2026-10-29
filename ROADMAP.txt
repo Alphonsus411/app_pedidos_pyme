@@ -736,4 +736,6 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
   [COMPLETADO] La demo local aplica reglas ficticias acotadas: validar y confirmar en orden, ofertas activas y líneas sin descuentos ni impuestos. Son ejemplos, no política fiscal ni autorización real.
   [VALIDADO LOCALMENTE] Demo ejecutada y pruebas de rechazo por transición, oferta, descuento e impuesto. Suite parcial 1170 pruebas sin generador PDF por dependencia local; Ruff y mypy correctos.
   [SIGUIENTE HITO] Ya es viable diseñar un ejemplo de aplicación empresarial ficticia local con SQLite, datos sintéticos y recorrido de pedidos y reservas; decidir el sector y la interfaz antes de implementarla. Sin publicación ni datos reales hasta validar autenticación/autorización, políticas reales, integridad y operación.
-  [PENDIENTE] CI e integración; seguridad, entrega externa y validación funcional integral del prototipo. Mantener SQLite.
+  [PENDIENTE] Seguridad, entrega externa y validación funcional integral del prototipo. Mantener SQLite.
+
+  [INTEGRADO 2026-10-29] PR #74 fusionada en master (d16f6fd); CI completa, ejecución 40939078468. Sin comentarios de revisión al integrar.
