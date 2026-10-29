@@ -111,3 +111,21 @@ def test_worker_retries_after_publication_failure(db_path: Path, event: DomainEv
     clock.return_value = 110.0
     assert worker.process_one()
     assert publisher.publish.call_count == 2
+
+
+def test_lease_starts_after_slow_decoding(db_path: Path, event: DomainEvent) -> None:
+    insert_event(db_path, event)
+    clock = Mock(return_value=100.0)
+    decoder = Mock()
+
+    def decode(payload: bytes) -> DomainEvent:
+        clock.return_value = 120.0
+        return event
+
+    decoder.decode.side_effect = decode
+    store = SqliteOutboxDeliveryStore(
+        connect=lambda: sqlite3.connect(db_path), decoder=decoder, lease_seconds=10, clock=clock
+    )
+    claim = store.claim_one()
+    assert claim is not None
+    store.mark_delivered(event.event_id, claim.claim_token)
