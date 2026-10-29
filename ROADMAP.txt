@@ -535,3 +535,5 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [COMPLETADO EN BORRADOR] Corregida observación de revisión del PR #46: la comparación de ida y vuelta normaliza fechas a UTC antes de comparar eventos, evitando rechazar horas ambiguas con ZoneInfo. El formato conserva el instante y offset, pero no el identificador de zona IANA; el registro anterior de reconstrucción sin pérdida se entiende con esta limitación.
 [COMPLETADO EN BORRADOR] Pruebas para ambas ocurrencias de la hora repetida en Europe/Madrid; suite local en worktree anterior a master: 1006 pruebas, excepto generador PDF; Ruff y mypy correctos.
 [EN CURSO] La validación no cubre todavía los eventos de pedidos, aislamiento por tenant ni recuperación de mensajes inválidos en SQLite. Fases 0.4/0.5 abiertas; PostgreSQL aplazado según decisión del usuario.
+
+[INTEGRADO EN MASTER] PR #47: corrección del codec para cambio horario, merge 1331adf. CI completa: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40857905963 . Resuelve el hallazgo posterior de PR #46; revisión manual del cambio, revisión automática sin finalizar al integrar.
