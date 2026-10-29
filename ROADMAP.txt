@@ -728,4 +728,6 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 91. REGISTRO 2026-10-29 — demostración local SQLite
   [COMPLETADO] Ejemplo ejecutable con base temporal y datos ficticios: crea y confirma pedido y reserva, reabre la base y procesa seis eventos con publicador simulado. Incluye instrucciones y cierre de conexiones para eliminar la base temporal.
   [VALIDADO LOCALMENTE] Ejecución en proceso independiente y limpieza de archivos temporales. Suite parcial 1169 pruebas sin generador PDF por dependencia local; Ruff y mypy correctos.
-  [PENDIENTE] CI e integración; políticas del ejemplo son simuladas, sin autenticación ni autorización, entrega externa ni interfaz de usuario. Validación funcional integral sigue pendiente. Mantener SQLite.
+  [PENDIENTE] Las políticas del ejemplo son simuladas, sin autenticación ni autorización, entrega externa ni interfaz de usuario. Validación funcional integral sigue pendiente. Mantener SQLite.
+
+  [INTEGRADO 2026-10-29] PR #73 fusionada en master (551d1ea); CI completa, ejecución 40938489906. Sin comentarios de revisión al integrar.
