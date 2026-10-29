@@ -6,6 +6,7 @@ from universal_business.infrastructure.sqlite_availability import create_sqlite_
 from universal_business.infrastructure.sqlite_customers import create_sqlite_customers_schema
 from universal_business.infrastructure.sqlite_idempotency import create_sqlite_idempotency_schema
 from universal_business.infrastructure.sqlite_locations import create_sqlite_locations_schema
+from universal_business.infrastructure.sqlite_orders import create_sqlite_orders_schema
 from universal_business.infrastructure.sqlite_outbox import (
     create_sqlite_delivery_schema,
     create_sqlite_outbox_schema,
@@ -14,7 +15,7 @@ from universal_business.infrastructure.sqlite_reservations import create_sqlite_
 from universal_business.infrastructure.sqlite_resources import create_sqlite_resources_schema
 from universal_business.infrastructure.sqlite_unit_of_work import SqliteUnitOfWork
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 class IncompatibleSqliteSchemaError(RuntimeError):
@@ -40,14 +41,18 @@ def _objects(connection: sqlite3.Connection) -> tuple[tuple[object, ...], ...]:
     return tuple(tuple(row) for row in rows)
 
 
-def _expected_objects() -> tuple[tuple[object, ...], ...]:
+def _expected_objects(version: int = SCHEMA_VERSION) -> tuple[tuple[object, ...], ...]:
     with sqlite3.connect(":memory:") as connection:
         _create_schema(connection)
+        if version == 2:
+            create_sqlite_orders_schema(connection)
+        elif version != 1:
+            raise ValueError("Versión de esquema desconocida")
         return _objects(connection)
 
 
 def initialize_sqlite_schema(connection: sqlite3.Connection) -> None:
-    """Inicializar una base vacía o validar una base gestionada versión 1.
+    """Inicializar una base vacía o validar una base gestionada versión 2.
 
     Se exige propiedad exclusiva del esquema: tablas, índices, vistas y triggers
     adicionales se rechazan. No migra ni adopta bases legacy, no cierra la
@@ -68,9 +73,40 @@ def initialize_sqlite_schema(connection: sqlite3.Connection) -> None:
         actual = _objects(connection)
         if version == 0 and not actual:
             _create_schema(connection)
+            create_sqlite_orders_schema(connection)
             if _objects(connection) != expected:
                 raise IncompatibleSqliteSchemaError("Esquema inicial incoherente")
             connection.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
         elif version != SCHEMA_VERSION or actual != expected:
             raise IncompatibleSqliteSchemaError("Esquema SQLite no compatible; no se ha migrado")
+        uow.commit()
+
+
+def migrate_sqlite_v1_to_v2(connection: sqlite3.Connection) -> None:
+    """Migrar solo esquema v1 íntegro a v2, en una transacción explícita.
+
+    El llamador debe hacer una copia de seguridad verificable previamente.
+    Nunca adopta un esquema modificado ni tablas de pedidos preexistentes.
+    Ejecutar con conexión sin transacción y sin otros cambios manuales.
+    """
+    if connection.in_transaction:
+        raise RuntimeError("Se requiere una conexión sin transacción activa")
+    if getattr(connection, "autocommit", None) is True:
+        raise RuntimeError("autocommit=True no es compatible con esta UoW")
+    connection.execute("PRAGMA foreign_keys=ON")
+    if connection.execute("PRAGMA foreign_keys").fetchone()[0] != 1:
+        raise RuntimeError("No se pudieron activar las claves foráneas")
+    v1, v2 = _expected_objects(1), _expected_objects(2)
+    with SqliteUnitOfWork(connection) as uow:
+        version = connection.execute("PRAGMA user_version").fetchone()[0]
+        current = _objects(connection)
+        if version == 2 and current == v2:
+            uow.commit()
+            return
+        if version != 1 or current != v1:
+            raise IncompatibleSqliteSchemaError("Esquema v1 no compatible; no se ha migrado")
+        create_sqlite_orders_schema(connection)
+        if _objects(connection) != v2:
+            raise IncompatibleSqliteSchemaError("Esquema v2 incoherente; no se ha migrado")
+        connection.execute("PRAGMA user_version=2")
         uow.commit()

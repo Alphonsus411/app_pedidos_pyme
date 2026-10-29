@@ -668,3 +668,8 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
   [PENDIENTE] Migración versionada que incorpore pedidos al inicializador, guard, idempotencia y outbox reales para el ciclo completo, autorización y validación integral. SQLite sigue siendo la base del prototipo.
 
   [INTEGRADO 2026-10-29] PR #64 fusionada en master (cd1b1a1); CI completa, ejecución 40885798557. Sin comentarios de revisión al integrar.
+
+83. REGISTRO 2026-10-29 — esquema SQLite v2 y migración v1
+  [COMPLETADO] Inicialización de bases dedicadas nuevas en versión 2 con pedidos y migración explícita de v1 íntegra a v2 bajo BEGIN IMMEDIATE. La validación rechaza esquemas modificados y no adopta tablas preexistentes; v2 íntegra puede repetir la migración sin cambios.
+  [VALIDADO LOCALMENTE] Conservación de reservas, idempotencia y outbox; rechazo sin pérdida, rollback ante fallo durante DDL, reapertura y migraciones concurrentes. Suite parcial 1113 pruebas sin generador PDF por dependencia local; Ruff y mypy correctos.
+  [PENDIENTE] CI e integración; la migración requiere copia de seguridad verificada y no cubre bases legacy o esquemas alterados. Persisten guard, idempotencia y outbox reales para pedidos, autorización y validación funcional completa. Mantener SQLite.
