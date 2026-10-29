@@ -447,3 +447,5 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [COMPLETADO EN BORRADOR] ReservationTimingPolicies construye políticas de llegada y no presentación con reloj compartido y plazos explícitos. Exige gracia estrictamente mayor que el retraso de llegada porque ambos extremos son inclusivos; puede existir un intervalo sin transición permitida.
 [COMPLETADO EN BORRADOR] Pruebas de extremos, hueco, solapamiento y duraciones inválidas.
 [EN CURSO] La validación solo se aplica a quienes construyan ambas políticas mediante esta configuración; las políticas individuales pueden configurarse de forma contradictoria. Faltan integración obligatoria, autorización, persistencia y pruebas reales. Gate 0.4 abierto.
+
+[INTEGRADO EN MASTER] PR #38: configuración coordinada de políticas temporales, merge 9f71da7. CI: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40841741589 . Revisión manual; revisión automática en curso al integrar. El uso de esta configuración es opcional y la integración obligatoria queda pendiente.
