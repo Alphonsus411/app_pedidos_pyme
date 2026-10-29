@@ -707,4 +707,6 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 88. REGISTRO 2026-10-29 — esquema SQLite v3 con ofertas
   [COMPLETADO] Inicialización de base nueva en v3 y migración explícita v2 íntegra a v3 bajo BEGIN IMMEDIATE; v1 requiere primero migrar a v2. Rechaza esquemas alterados y ofertas instaladas por separado, sin adoptar datos.
   [VALIDADO LOCALMENTE] Conservación de pedidos, idempotencia y outbox, rollback de DDL, migraciones concurrentes, reapertura y persistencia de una oferta en base migrada. Suite parcial 1163 pruebas sin generador PDF por dependencia local; Ruff y mypy correctos.
-  [PENDIENTE] CI e integración; migrar requiere copia de seguridad verificada. Conectar adición de líneas al ensamblaje, validar ciclo integral, autorización y entrega de eventos. Mantener SQLite.
+  [PENDIENTE] Migrar requiere copia de seguridad verificada. Conectar adición de líneas al ensamblaje, validar ciclo integral, autorización y entrega de eventos. Mantener SQLite.
+
+  [INTEGRADO 2026-10-29] PR #70 fusionada en master (c35f71c); CI completa, ejecución 40900082721. Sin comentarios de revisión al integrar.
