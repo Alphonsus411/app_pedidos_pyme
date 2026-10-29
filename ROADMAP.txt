@@ -644,4 +644,6 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 79. REGISTRO 2026-10-29 — ensamblaje SQLite del ciclo de reservas
   [COMPLETADO] Ensamblaje explícito por ejecución para crear, confirmar, cancelar, registrar llegada, completar y marcar no presentación; repositorios, idempotencia, outbox y guard/adjudicación comparten conexión y UoW SQLite. Las políticas temporales se inyectan y se rechazan cuando faltan.
   [VALIDADO LOCALMENTE] Flujos con SQLite real, replay, políticas, rechazo de transacciones externas y outbox; 1084 pruebas (sin generador PDF por dependencia local), Ruff y mypy correctos.
-  [PENDIENTE] CI e integración. La frontera debe autenticar y autorizar cada llamada; escrituras externas pueden eludir el ensamblaje. Falta reconciliación de idempotencia tras fallo posterior a commit, migraciones, pedidos y validación funcional del prototipo completo. Mantener SQLite.
+  [PENDIENTE] La frontera debe autenticar y autorizar cada llamada; escrituras externas pueden eludir el ensamblaje. Falta reconciliación de idempotencia tras fallo posterior a commit, migraciones, pedidos y validación funcional del prototipo completo. Mantener SQLite.
+
+  [INTEGRADO 2026-10-29] PR #61 fusionada en master (ae4d408); CI completada correctamente en Python 3.11 y 3.12, ejecución 40883167758. Sin comentarios de revisión al integrar.
