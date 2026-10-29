@@ -22,6 +22,8 @@ class SqliteUnitOfWork:
     def __enter__(self) -> Self:
         if self._state != "new" or self.connection.in_transaction:
             raise RuntimeError("Se requiere UoW nueva y conexión sin transacción")
+        if getattr(self.connection, "autocommit", None) is True:
+            raise RuntimeError("autocommit=True no es compatible con esta UoW")
         self.connection.execute("BEGIN IMMEDIATE")
         self._state = "active"
         return self
