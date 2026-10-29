@@ -90,3 +90,20 @@ Para idempotencia (Gate 0.2):
   posterior al commit, el resultado puede ser incierto y no se libera. Si
   ``complete()`` falla tras commit tampoco se libera; se requiere reconciliación. Gate 0.2 no asume TTL; sin
   ``release()`` la key permanece ``RESERVED`` indefinidamente.
+
+
+## Extensión opcional: escritura transaccional de eventos (29-10-2026)
+
+Se añade el puerto `TransactionalOutboxWriter` y un parámetro opcional en
+`execute_use_case`. Si se configura, el lote se materializa y escribe antes
+del commit y se omite la publicación externa directa; el dispatch interno
+continúa después del commit. Si la escritura falla se aborta el flujo antes de
+commit y se ejecutan los hooks de fallo correspondientes. El ensamblaje debe
+usar la misma conexión y transacción para dominio y outbox; el protocolo no
+puede comprobarlo. El writer no debe confirmar ni publicar por su cuenta.
+
+**No activar esta opción sin adaptador durable y worker de publicación.** No
+existe todavía adaptador de producción ni worker, política de reintento o
+serialización versionada. La prueba SQLite valida únicamente el escenario
+compartido de prueba, no PostgreSQL ni otras configuraciones. La idempotencia
+sigue completándose tras commit: este cambio no cierra esa ventana de fallo.

@@ -17,12 +17,13 @@ Sea un ``UseCaseHandler[InT, OutT]`` que toma input y devuelve una tupla
         :class:`UseCaseHandlerWithExecutionHooks`. En este punto los
         closures ``on_success`` / ``on_failure`` capturan toda la info que
         necesitan (key idempotency, store, digests…).
-    4.  ``uow.commit()`` — solo aquí se consolidan los cambios.
-    5.  Si commit() NO lanzó error:
+    4.  Materializa los eventos y, si hay outbox, los escribe en la transacción.
+    5.  ``uow.commit()`` — solo aquí se consolidan los cambios.
+    6.  Si commit() NO lanzó error:
           a. Hooks on_success de ExecutionHooks (si los hay) — p. ej. IdempotencyStore.complete()
           b. ``dispatcher.dispatch_many(events_collected)``
-          c. ``publisher.publish_many(events_collected)``
-    6.  Devuelve ``resultado``.
+          c. ``publisher.publish_many(events_collected)`` solo sin outbox
+    7.  Devuelve ``resultado``.
 
 ### En caso de error
 
@@ -64,9 +65,9 @@ que ``uow.commit()`` haya retornado OK:
     misma key y crear un duplicado del aggregate.
   - El error de ``complete()`` se PROPAGA hacia arriba. El sistema queda en
     estado indeterminado post-commit que requiere reconciliación manual.
-  - Se intenta despachar y publicar eventos antes de propagar el error; si
-    dispatch falla, aborta la publicación. Si falla dispatch o publish, su
-    excepción queda como causa del fallo de complete. No se garantiza entrega.
+  - Se intenta despachar y, sin outbox, publicar antes de propagar el error;
+    si dispatch falla, aborta la publicación directa. La excepción de eventos
+    queda como causa del fallo de complete. La entrega requiere un worker.
   - Importante: ``commit() + complete()`` **NO** son atómicos. Este diseño
     elige *consistencia eventual con seguridad sobre duplicados* en lugar de
     intentar una atomicidad imposible entre dos sistemas separados.
@@ -79,6 +80,7 @@ from dataclasses import dataclass
 from typing import Generic, Protocol, TypeVar, runtime_checkable
 
 from universal_business.application.events.dispatcher import DomainEventDispatcher
+from universal_business.application.events.outbox import TransactionalOutboxWriter
 from universal_business.application.events.publisher import EventPublisher
 from universal_business.application.idempotency import IdempotencyKey, IdempotencyStore
 from universal_business.application.unit_of_work import CommitNotAppliedError, UnitOfWork
@@ -202,10 +204,13 @@ def _dispatch_and_publish_safe(
     events_list: list[DomainEvent],
     event_dispatcher: DomainEventDispatcher,
     event_publisher: EventPublisher,
+    *,
+    publish_directly: bool,
 ) -> None:
     if events_list:
         event_dispatcher.dispatch_many(events_list)
-        event_publisher.publish_many(events_list)
+        if publish_directly:
+            event_publisher.publish_many(events_list)
 
 
 def execute_use_case(
@@ -215,6 +220,7 @@ def execute_use_case(
     unit_of_work: UnitOfWork,
     event_dispatcher: DomainEventDispatcher,
     event_publisher: EventPublisher,
+    outbox_writer: TransactionalOutboxWriter | None = None,
     _collector_override: (
         Callable[[OutT, Sequence[DomainEvent]], Sequence[DomainEvent]] | None
     ) = None,
@@ -230,6 +236,11 @@ def execute_use_case(
         handler (p. ej. para añadir metadata a posteriori) antes de
         dispatch/publish. Útil en tests y en extensiones de verticales.
         ``None`` (default) = usar la lista tal cual devolvió el handler.
+
+    outbox_writer:
+        Opcional. Debe usar exactamente la transacción del UoW. Escribe antes
+        de commit y sustituye la publicación externa directa; la entrega
+        posterior requiere un worker separado. No cambia el dispatch interno.
 
     Hooks (nuevo flujo STATLESS)
     ----------------------------
@@ -270,6 +281,8 @@ def execute_use_case(
             # Materialize while rollback and the failure hook are still safe.
             # Also freeze the sequence against mutation during commit/exit.
             events_holder["e"] = list(events)
+            if outbox_writer is not None and events_holder["e"]:
+                outbox_writer.write_many(tuple(events_holder["e"]))
             commit_started = True
             uow.commit()
             commit_succeeded = True
@@ -313,13 +326,20 @@ def execute_use_case(
         # - SÍ dispatch + publish (los eventos son parte del dominio confirmado).
         # - Finalmente propagar hook_exc.
         try:
-            _dispatch_and_publish_safe(events_list, event_dispatcher, event_publisher)
+            _dispatch_and_publish_safe(
+                events_list,
+                event_dispatcher,
+                event_publisher,
+                publish_directly=outbox_writer is None,
+            )
         except Exception as event_exc:
             # Preserve the idempotency failure as the primary error and retain
             # the event failure as an explicit cause for reconciliation.
             raise hook_exc from event_exc
         raise
-    _dispatch_and_publish_safe(events_list, event_dispatcher, event_publisher)
+    _dispatch_and_publish_safe(
+        events_list, event_dispatcher, event_publisher, publish_directly=outbox_writer is None
+    )
     return result_val
 
 

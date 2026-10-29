@@ -488,3 +488,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] La copia es superficial; no implementa outbox ni garantiza publicación durable. Siguen pendientes autorización, persistencia, concurrencia real y las fases posteriores; Gate 0.4 sigue abierto.
 
 [INTEGRADO EN MASTER] PR #41: preparación de eventos antes de commit, merge e23d93b. CI completa: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40850213727 . Revisión manual; no había revisión automática finalizada al integrar. Outbox e infraestructura real siguen pendientes.
+
+60. REGISTRO DE AVANCE — 29-10-2026 (FRONTERA TRANSACCIONAL OUTBOX)
+
+[COMPLETADO EN BORRADOR] Puerto TransactionalOutboxWriter opcional y escritura antes de commit en execute_use_case. Al configurarlo se omite la publicación externa directa y se conserva el dispatch interno postcommit. Sin writer el comportamiento anterior permanece. El ensamblaje debe compartir conexión y transacción entre dominio y outbox.
+[COMPLETADO EN BORRADOR] Pruebas con SQLite real y dos conexiones: éxito persiste dominio y entrada conjuntamente; error de escritura revierte ambos; fallo de dispatch después del commit conserva ambos. Se verifica la publicación directa predeterminada. Suite local sobre worktree anterior a master: 974 pruebas, salvo generador PDF; Ruff y mypy correctos.
+[EN CURSO] No hay adaptador durable de producción, esquema completo, serialización de payload, worker ni reintentos. No activar la opción hasta contar con ellos: dejaría eventos sin entregar. SQLite no verifica concurrencia ni transacciones PostgreSQL. La idempotencia sigue completándose después de commit. Gate 0.4 y 0.5 siguen abiertos.
