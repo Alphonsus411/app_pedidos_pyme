@@ -415,3 +415,10 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] No hay implementación durable del lector, orden estable, paginación, autorización ni snapshot transaccional. El fake no demuestra aislamiento real. Gate 0.4 abierto.
 
 [INTEGRADO EN MASTER] PR #34: listado limitado de reservas por ubicación, merge cff7024. CI y revisión automática sin hallazgos: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40839612653 . Adaptador durable, autorización y paginación siguen pendientes.
+
+53. REGISTRO DE AVANCE — 29-10-2026 (POLÍTICA DE NO PRESENTACIÓN)
+
+[COMPLETADO EN BORRADOR] MarkReservationNoShow requiere política temporal inyectada y su aprobación bajo guard, sobre una copia de la reserva. Sin política o ante rechazo se falla sin cambiar estado ni publicar eventos. Un replay completado requiere política configurada, pero no reevalúa el plazo.
+[COMPLETADO EN BORRADOR] Pruebas de ausencia y rechazo de política, umbral con reloj fijo de ejemplo, replay y aislamiento de mutaciones del evaluador, además de la matriz existente.
+[COMPATIBILIDAD] La no presentación ya no funciona sin suministrar NoShowPolicy. No existe implementación ni plazo de gracia predeterminado; el negocio debe definirlos e inyectar reloj y política confiables. La frontera debe autorizar al actor, también en replay. Check-in continúa sin regla temporal.
+[EN CURSO] Persistencia y protección durables, aislamiento real y autorización siguen pendientes; Gate 0.4 permanece abierto.

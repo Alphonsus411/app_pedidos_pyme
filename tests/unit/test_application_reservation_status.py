@@ -70,7 +70,14 @@ def command_for(cls, original):
 
 def run(ledger, store, command, handler_cls, publisher=None):
     tx = GuardedTransaction(ledger)
-    handler = handler_cls(reservations=tx, guard=tx, idempotency=store)
+
+    class AllowNoShow:
+        def approve(self, *, reservation):
+            return True
+
+    handler = handler_cls(
+        reservations=tx, guard=tx, idempotency=store, no_show_policy=AllowNoShow()
+    )
     return execute_use_case(
         handler=handler,
         input=command,

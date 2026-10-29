@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
-from typing import Generic, TypeVar
+from typing import Generic, Protocol, TypeVar
 
 from universal_business.application.errors import ApplicationError, IdempotencyConflictError
 from universal_business.application.execution import ExecutionHooks, IdempotentReplay
@@ -22,6 +22,7 @@ from universal_business.application.reservations.commands import (
 )
 from universal_business.application.reservations.handlers import _snapshot
 from universal_business.domain.reservations.allocation import ReservationMutationGuard
+from universal_business.domain.reservations.entities import Reservation
 from universal_business.domain.reservations.events import ReservationStatusChanged
 from universal_business.domain.reservations.lifecycle import validate_reservation_transition
 from universal_business.domain.reservations.ports import IReservationRepository
@@ -49,6 +50,17 @@ class ReservationStatusResult:
 C = TypeVar("C", bound=ReservationStatusCommand)
 
 
+class NoShowPolicy(Protocol):
+    """Decidir si procede NO_SHOW para una reserva bajo protección.
+
+    La implementación debe usar un reloj inyectado y las reglas temporales
+    acordadas por el negocio; debe rechazar ante incertidumbre. No sustituye
+    la autenticación y autorización del actor antes de cada petición o replay.
+    """
+
+    def approve(self, *, reservation: Reservation) -> bool: ...
+
+
 def _key(command: ReservationStatusCommand) -> IdempotencyKey:
     if not isinstance(command.idempotency_key, IdempotencyKey):
         raise ApplicationError("Se requiere una clave de idempotencia válida")
@@ -62,8 +74,8 @@ def _key(command: ReservationStatusCommand) -> IdempotencyKey:
 class _StatusHandler(Generic[C]):
     """El guard y repositorio deben compartir la UnitOfWork del orquestador.
 
-    No verifica plazos para check-in o no-show; una política de tiempo y
-    autorización en la frontera debe definirse antes de exponer estos comandos.
+    NO_SHOW exige política temporal inyectada; check-in no valida plazos.
+    La autorización del actor debe aplicarse en la frontera, incluido replay.
     """
 
     command_type: type[C]
@@ -75,12 +87,16 @@ class _StatusHandler(Generic[C]):
         reservations: IReservationRepository,
         guard: ReservationMutationGuard,
         idempotency: IdempotencyStore,
+        no_show_policy: NoShowPolicy | None = None,
     ) -> None:
         self._reservations, self._guard, self._idempotency = reservations, guard, idempotency
+        self._no_show_policy = no_show_policy
 
     def handle(self, command: C, /) -> tuple[ReservationStatusResult, Sequence[DomainEvent]]:
         if type(command) is not self.command_type:
             raise ApplicationError("Tipo de comando no corresponde al handler")
+        if self.target == ReservationStatus.NO_SHOW and self._no_show_policy is None:
+            raise ApplicationError("Se requiere política temporal de no presentación")
         key, digest, tid = _key(command), request_digest(command), command.tenant_id
         if not self._idempotency.reserve(tid, key, digest):
             cached = self._idempotency.get(tid, key)
@@ -137,6 +153,12 @@ class _StatusHandler(Generic[C]):
                 raise ApplicationError("Reservation fuera del ámbito solicitado")
             if _snapshot(current) != snapshot:
                 raise ApplicationError("Reservation cambió durante la transición")
+            if self.target == ReservationStatus.NO_SHOW:
+                if (
+                    self._no_show_policy is None
+                    or self._no_show_policy.approve(reservation=replace(current)) is not True
+                ):
+                    raise ApplicationError("Política de no presentación no aprobada")
             updated = replace(current, status=self.target)
             updated.touch()
             self._reservations.save(updated)
