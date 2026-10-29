@@ -594,3 +594,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] Faltan repositorio de ubicación, tipos de recurso, integridad referencial, migraciones, autorización, idempotencia durable, adjudicación y protección compatibles para todos los cambios de recursos y reservas. Este repositorio no garantiza disponibilidad ni ausencia de solapes. El prototipo SQLite no está terminado.
 
 [INTEGRADO EN MASTER] PR #54: repositorio de recursos SQLite y flujo de creación con recurso real, merge 92cc701. CI completa: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40878093067 . Revisión manual; revisión automática sin finalizar al integrar. Local e idempotencia siguen siendo dobles.
+
+73. REGISTRO DE AVANCE — 29-10-2026 (UBICACIONES SQLITE)
+
+[COMPLETADO EN BORRADOR] Repositorio SQLite de ubicaciones con consulta por tenant/business/ID y listado por negocio/estado, escritura transaccional y protección frente a cambios de negocio o fecha de creación. Conserva dirección, contacto, zona declarada y horarios mediante JSON versionado; rechaza días o subtipos no soportados. Los horarios conservan instantes y offsets, no el nombre IANA del tzinfo de cada intervalo.
+[COMPLETADO EN BORRADOR] Pruebas SQLite de horarios, datos, ámbito, actualización, rollback y error de datos. La prueba del handler de creación usa ahora ubicaciones, recursos, clientes y reservas SQLite con la misma UoW y outbox; solo idempotencia es un doble. Suite local en worktree parcial anterior a master: 1056 pruebas excepto generador PDF; Ruff y mypy correctos.
+[EN CURSO] Persisten idempotencia durable/atómica, referencias entre entidades, adjudicación, migraciones, autorización y persistencia de pedidos. La prueba no valida confirmación concurrente ni entrega durable completa. SQLite sigue siendo el entorno de prototipo y no está terminado.
