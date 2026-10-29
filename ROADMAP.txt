@@ -654,3 +654,8 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
   [PENDIENTE] Migración de bases existentes, integridad referencial de todas las entidades, autorización, reconciliación de idempotencia, pedidos y validación del prototipo completo. Mantener SQLite.
 
   [INTEGRADO 2026-10-29] PR #62 fusionada en master (4c0aa17); CI completada correctamente, ejecución 40884229595. Sin comentarios de revisión al integrar.
+
+81. REGISTRO 2026-10-29 — idempotencia atómica en reservas SQLite
+  [COMPLETADO] En SqliteReservationExecution el resultado idempotente DONE se escribe en la misma UoW que la reserva y outbox; la ejecución genérica y el método postcommit anterior conservan su comportamiento. Los RESERVED antiguos no se adoptan ni se liberan automáticamente.
+  [VALIDADO LOCALMENTE] Replay tras reapertura, fallo de finalización y fallo outbox con rollback, fallo de dispatch postcommit y commit aplicado con respuesta incierta. Suite de 1096 pruebas sin generador PDF por dependencia local más prueba adicional de commit incierto; Ruff y mypy correctos.
+  [PENDIENTE] CI e integración; reconciliación de RESERVED heredados y casos fuera del ensamblaje, autorización, migraciones, integridad referencial, pedidos y validación funcional completa. Mantener SQLite.
