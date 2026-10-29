@@ -7,6 +7,7 @@ from decimal import Context, Decimal, localcontext
 from typing import Any
 from uuid import UUID
 
+from universal_business.application.errors import ApplicationError
 from universal_business.domain.orders.entities import Order
 from universal_business.domain.orders.line import OrderLine
 from universal_business.domain.orders.value_objects import OrderChannel, OrderStatus
@@ -19,6 +20,7 @@ from universal_business.domain.shared.value_objects.ids import (
     TenantId,
 )
 from universal_business.domain.shared.value_objects.money import Money
+from universal_business.infrastructure.sqlite_unit_of_work import SqliteUnitOfWork
 
 
 def create_sqlite_orders_schema(connection: sqlite3.Connection) -> None:
@@ -221,3 +223,41 @@ class SqliteOrderRepository:
             sql += " AND status=?"
             params.append(status.value)
         return [_read(row) for row in self._connection.execute(sql, params).fetchall()]
+
+
+class SqliteOrderMutationGuard:
+    """Protección asociada a una UoW SQLite con BEGIN IMMEDIATE.
+
+    Todas las mutaciones deben usar protección compatible y compartir la misma
+    conexión hasta commit o rollback. No protege el catálogo ni autoriza al actor.
+    """
+
+    def __init__(self, uow: SqliteUnitOfWork) -> None:
+        self._uow = uow
+
+    def protect(
+        self,
+        *,
+        tenant_id: TenantId,
+        business_id: BusinessId,
+        location_id: LocationId,
+        order_id: OrderId,
+    ) -> None:
+        self._uow.require_active()
+        if not (
+            isinstance(tenant_id, TenantId)
+            and isinstance(business_id, BusinessId)
+            and isinstance(location_id, LocationId)
+            and isinstance(order_id, OrderId)
+        ):
+            raise ApplicationError("Order no encontrado o fuera del ámbito")
+        order = SqliteOrderRepository(self._uow.connection).get(
+            tenant_id=tenant_id, order_id=order_id
+        )
+        if order is None or (order.tenant_id, order.business_id, order.location_id, order.id) != (
+            tenant_id,
+            business_id,
+            location_id,
+            order_id,
+        ):
+            raise ApplicationError("Order no encontrado o fuera del ámbito")
