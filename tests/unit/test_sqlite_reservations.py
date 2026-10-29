@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from universal_business.domain.reservations.allocation import ReservationUnavailableError
 from universal_business.domain.reservations.entities import Reservation
 from universal_business.domain.reservations.value_objects import ReservationStatus
 from universal_business.domain.shared.value_objects.ids import (
@@ -19,6 +20,7 @@ from universal_business.domain.shared.value_objects.ids import (
 )
 from universal_business.domain.shared.value_objects.temporal import TimeRange
 from universal_business.infrastructure.sqlite_reservations import (
+    SqliteReservationMutationGuard,
     SqliteReservationRepository,
     create_sqlite_reservations_schema,
 )
@@ -178,3 +180,37 @@ def test_list_by_location_filters_before_limit_and_scope(
         for invalid in (0, 101, True):
             with pytest.raises(ValueError, match="límite"):
                 repo.list_by_location(**(query | {"limit": invalid}))
+
+
+def test_mutation_guard_requires_uow_scope_and_blocks_second_writer(
+    db_path: Path, reservation: Reservation
+) -> None:
+    with sqlite3.connect(db_path) as first, sqlite3.connect(db_path, timeout=0.05) as second:
+        repo = SqliteReservationRepository(first)
+        with SqliteUnitOfWork(first) as setup:
+            repo.save(reservation)
+            setup.commit()
+        uow = SqliteUnitOfWork(first)
+        guard = SqliteReservationMutationGuard(uow)
+        args = dict(
+            tenant_id=reservation.tenant_id,
+            business_id=reservation.business_id,
+            location_id=reservation.location_id,
+            resource_id=reservation.resource_id,
+            reservation_id=reservation.id,
+        )
+        with pytest.raises(RuntimeError, match="UoW SQLite activa"):
+            guard.protect(**args)
+            with pytest.raises(ReservationUnavailableError):
+                guard.protect(**(args | {"tenant_id": TenantId.generate()}))
+        with uow:
+            guard.protect(**args)
+            with pytest.raises(ReservationUnavailableError):
+                guard.protect(**(args | {"business_id": BusinessId.generate()}))
+            with pytest.raises(ReservationUnavailableError):
+                guard.protect(**(args | {"resource_id": ResourceId.generate()}))
+            with pytest.raises(sqlite3.OperationalError, match="locked"):
+                with SqliteUnitOfWork(second):
+                    pass
+        with SqliteUnitOfWork(second) as other:
+            SqliteReservationMutationGuard(other).protect(**args)

@@ -50,6 +50,7 @@ from universal_business.infrastructure.sqlite_outbox import (
     create_sqlite_outbox_schema,
 )
 from universal_business.infrastructure.sqlite_reservations import (
+    SqliteReservationMutationGuard,
     SqliteReservationRepository,
     create_sqlite_reservations_schema,
 )
@@ -173,18 +174,18 @@ def test_create_reservation_and_event_commit_together(tmp_path: Path) -> None:
             reservation_id=command.reservation_id,
             idempotency_key=IdempotencyKey(value="cancel-res-001"),
         )
-        guard = Mock()
-        cancel_handler = CancelReservationHandler(
-            reservations=repo,
-            guard=guard,
-            idempotency=SqliteReservationIdempotencyStore(connection),
-        )
 
         def cancel_once():
+            uow = SqliteUnitOfWork(connection)
+            cancel_handler = CancelReservationHandler(
+                reservations=repo,
+                guard=SqliteReservationMutationGuard(uow),
+                idempotency=SqliteReservationIdempotencyStore(connection),
+            )
             return execute_use_case(
                 handler=cancel_handler,
                 input=cancel,
-                unit_of_work=SqliteUnitOfWork(connection),
+                unit_of_work=uow,
                 event_dispatcher=Mock(),
                 event_publisher=Mock(),
                 outbox_writer=SqliteOutboxWriter(
@@ -194,7 +195,6 @@ def test_create_reservation_and_event_commit_together(tmp_path: Path) -> None:
 
         cancellation = cancel_once()
         assert cancel_once() == cancellation
-        guard.protect.assert_called_once()
         with sqlite3.connect(path) as reader:
             actual = SqliteReservationRepository(reader).get(
                 tenant_id=tid, reservation_id=command.reservation_id

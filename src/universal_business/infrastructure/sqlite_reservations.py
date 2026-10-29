@@ -4,6 +4,7 @@ import sqlite3
 from datetime import UTC, datetime
 from typing import Any
 
+from universal_business.domain.reservations.allocation import ReservationUnavailableError
 from universal_business.domain.reservations.entities import Reservation
 from universal_business.domain.reservations.value_objects import ReservationStatus
 from universal_business.domain.shared.value_objects.ids import (
@@ -15,6 +16,7 @@ from universal_business.domain.shared.value_objects.ids import (
     TenantId,
 )
 from universal_business.domain.shared.value_objects.temporal import TimeRange
+from universal_business.infrastructure.sqlite_unit_of_work import SqliteUnitOfWork
 
 
 def create_sqlite_reservations_schema(connection: sqlite3.Connection) -> None:
@@ -174,3 +176,34 @@ class SqliteReservationRepository:
         sql += " ORDER BY id LIMIT ?"
         params.append(limit)
         return [_from_row(row) for row in self._connection.execute(sql, params).fetchall()]
+
+
+class SqliteReservationMutationGuard:
+    """Protección SQLite asociada a una UoW BEGIN IMMEDIATE de uso único.
+
+    Todos los cambios de recursos y disponibilidad deben usar protección
+    compatible. El ensamblaje debe compartir la conexión de la UoW y no
+    ejecutar BEGIN/COMMIT/ROLLBACK manualmente. No comprueba disponibilidad.
+    """
+
+    def __init__(self, uow: SqliteUnitOfWork) -> None:
+        self._uow = uow
+
+    def protect(
+        self,
+        *,
+        tenant_id: TenantId,
+        business_id: BusinessId,
+        location_id: LocationId,
+        resource_id: ResourceId,
+        reservation_id: ReservationId,
+    ) -> None:
+        self._uow.require_active()
+        repo = SqliteReservationRepository(self._uow.connection)
+        reservation = repo.get(tenant_id=tenant_id, reservation_id=reservation_id)
+        if reservation is None or (
+            reservation.business_id,
+            reservation.location_id,
+            reservation.resource_id,
+        ) != (business_id, location_id, resource_id):
+            raise ReservationUnavailableError("Reserva o recurso fuera de ámbito")
