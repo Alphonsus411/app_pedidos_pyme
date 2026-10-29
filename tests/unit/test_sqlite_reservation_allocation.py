@@ -38,35 +38,29 @@ from universal_business.domain.shared.value_objects.ids import (
 from universal_business.domain.shared.value_objects.temporal import DateRange, TimeRange
 from universal_business.infrastructure.sqlite_availability import (
     SqliteAvailabilityRepository,
-    create_sqlite_availability_schema,
 )
 from universal_business.infrastructure.sqlite_customers import (
     SqliteCustomerRepository,
-    create_sqlite_customers_schema,
 )
 from universal_business.infrastructure.sqlite_idempotency import (
     SqliteReservationIdempotencyStore,
-    create_sqlite_idempotency_schema,
 )
 from universal_business.infrastructure.sqlite_locations import (
     SqliteLocationRepository,
-    create_sqlite_locations_schema,
 )
 from universal_business.infrastructure.sqlite_outbox import (
     SqliteOutboxWriter,
-    create_sqlite_outbox_schema,
 )
 from universal_business.infrastructure.sqlite_reservation_allocation import (
     SqliteReservationAllocation,
 )
 from universal_business.infrastructure.sqlite_reservations import (
     SqliteReservationRepository,
-    create_sqlite_reservations_schema,
 )
 from universal_business.infrastructure.sqlite_resources import (
     SqliteResourceRepository,
-    create_sqlite_resources_schema,
 )
+from universal_business.infrastructure.sqlite_schema import initialize_sqlite_schema
 from universal_business.infrastructure.sqlite_unit_of_work import SqliteUnitOfWork
 
 
@@ -100,16 +94,7 @@ def case(tmp_path):
         party_size=2,
     )
     with sqlite3.connect(path) as connection:
-        for setup in (
-            create_sqlite_availability_schema,
-            create_sqlite_locations_schema,
-            create_sqlite_resources_schema,
-            create_sqlite_customers_schema,
-            create_sqlite_reservations_schema,
-            create_sqlite_outbox_schema,
-            create_sqlite_idempotency_schema,
-        ):
-            setup(connection)
+        initialize_sqlite_schema(connection)
         with SqliteUnitOfWork(connection) as uow:
             SqliteLocationRepository(connection).save(
                 Location(

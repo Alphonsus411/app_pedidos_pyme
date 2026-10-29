@@ -647,3 +647,8 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
   [PENDIENTE] La frontera debe autenticar y autorizar cada llamada; escrituras externas pueden eludir el ensamblaje. Falta reconciliación de idempotencia tras fallo posterior a commit, migraciones, pedidos y validación funcional del prototipo completo. Mantener SQLite.
 
   [INTEGRADO 2026-10-29] PR #61 fusionada en master (ae4d408); CI completada correctamente en Python 3.11 y 3.12, ejecución 40883167758. Sin comentarios de revisión al integrar.
+
+80. REGISTRO 2026-10-29 — inicialización SQLite del prototipo
+  [COMPLETADO] Inicializador transaccional para base dedicada vacía, esquema versión 1 de reservas, disponibilidad, idempotencia y outbox; reapertura verifica todos los objetos. Activa claves foráneas en la conexión actual. Rechaza esquemas legacy o alterados sin migrar.
+  [VALIDADO LOCALMENTE] Inicialización repetida, integridad referencial existente, rechazo no destructivo, rollback de creación fallida, dos inicializadores concurrentes y ciclo de reservas sobre esquema inicializado. 1092 pruebas (sin generador PDF por dependencia local), Ruff y mypy correctos.
+  [PENDIENTE] CI e integración. Migración de bases existentes, integridad referencial de todas las entidades, autorización, reconciliación de idempotencia, pedidos y validación del prototipo completo. Mantener SQLite.
