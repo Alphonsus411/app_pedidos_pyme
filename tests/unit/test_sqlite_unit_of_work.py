@@ -1,6 +1,7 @@
 """Pruebas transaccionales del UoW SQLite con conexiones independientes."""
 
 import sqlite3
+import sys
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -81,6 +82,18 @@ def test_rejects_existing_transaction_without_touching_it(db_path: Path) -> None
         assert connection.in_transaction
         connection.rollback()
     assert count(db_path, "orders") == 0
+
+
+@pytest.mark.skipif(sys.version_info < (3, 12), reason="sqlite autocommit requiere Python 3.12")
+def test_rejects_autocommit_true_before_begin(db_path: Path) -> None:
+    connection = sqlite3.connect(db_path, **{"autocommit": True})
+    try:
+        with pytest.raises(RuntimeError, match="autocommit=True"):
+            with SqliteUnitOfWork(connection):
+                pass
+        assert not connection.in_transaction
+    finally:
+        connection.close()
 
 
 def test_commit_failure_does_not_claim_it_was_not_applied(db_path: Path) -> None:
