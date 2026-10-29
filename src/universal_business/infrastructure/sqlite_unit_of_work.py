@@ -28,6 +28,11 @@ class SqliteUnitOfWork:
         self._state = "active"
         return self
 
+    def require_active(self) -> None:
+        """Exige UoW activa; la conexión no debe manipular transacciones por fuera."""
+        if self._state != "active" or not self.connection.in_transaction:
+            raise RuntimeError("Se requiere una UoW SQLite activa")
+
     def __exit__(
         self,
         exc_type: type[BaseException] | None,
