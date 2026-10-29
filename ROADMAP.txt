@@ -739,3 +739,7 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
   [PENDIENTE] Seguridad, entrega externa y validación funcional integral del prototipo. Mantener SQLite.
 
   [INTEGRADO 2026-10-29] PR #74 fusionada en master (d16f6fd); CI completa, ejecución 40939078468. Sin comentarios de revisión al integrar.
+
+95. REGISTRO 2026-10-29 — hoja de ruta de aplicaciones independientes
+  [COMPLETADO EN PLANIFICACIÓN] Documento docs/ROADMAP_APLICACIONES_Y_PANELES.txt: fases y criterios para núcleo/API, aislamiento, panel común de negocios, panel de plataforma y sitios independientes, con Fripollo ficticio y SQLite para el prototipo.
+  [PENDIENTE] Implementar y validar las fases propuestas; el documento es una planificación, no implica que exista API, autorización o integración visual. Revisar PR #75 y #76 sin asumir que están integrados.

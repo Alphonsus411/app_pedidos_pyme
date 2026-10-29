@@ -1,0 +1,96 @@
+HOJA DE RUTA — MOTOR COMÚN, NEGOCIOS Y PANELES
+Proyecto: Alphonsus411/app_pedidos_pyme
+Fecha: 29-10-2026 (Europe/Madrid)
+Estado: planificación propuesta; tareas no iniciadas salvo indicación explícita.
+
+1. OBJETIVO Y DECISIONES
+
+Construir un motor común reutilizable y aplicaciones de negocio independientes que se conecten exclusivamente mediante una API. El sitio público, el panel compartido de negocios y el panel de plataforma tendrán responsabilidades, permisos y ciclos de desarrollo diferenciados. Un sitio podrá cambiarse o sustituirse sin modificar el núcleo; cada negocio mantiene sus propios datos y configuración.
+
+Decisiones orientativas adoptadas con el usuario:
+- SQLite para desarrollo y pruebas hasta disponer de un prototipo sólido y verificable. La elección para uso real se evaluará después según concurrencia, operación y evidencias; no presupone una migración.
+- Un panel compartido de negocio, con acceso y datos aislados por negocio; habilitar solo los módulos que correspondan. Un panel específico de un cliente es posible posteriormente por API, sin adaptar el núcleo a ese cliente.
+- Funciones de administración general de plataforma separadas lógica y operativamente, con autorización reforzada; pueden compartir componentes de interfaz cuando resulte apropiado. No asumir que los administradores tienen acceso indiscriminado a datos de clientes.
+- Fripollo es una marca y carta ficticias, usadas solo para demostración hasta que el cliente confirme información real. La web de ejemplo es una aplicación independiente; no se integran su marca, textos, carta ni reglas particulares en el dominio común.
+- Las fases no comprometen fechas ni presupuesto. Las decisiones técnicas de infraestructura, seguridad y contratos se validarán al implementarlas.
+
+2. ESTADO DE PARTIDA — 29-10-2026
+
+- Master 92a7582: núcleo de pedidos, reservas y adaptadores SQLite, demo local con datos ficticios. La API y la autenticación/autorización completas siguen pendientes. Ver ROADMAP.txt, registros 79–92.
+- PR #75 en borrador: recorrido Fripollo sobre SQLite temporal; CI del commit e2f984e aprobada en Python 3.11 y 3.12. No integrado en master.
+- PR #76 en borrador, basado en #75: seis productos ficticios en el recorrido SQLite; pruebas locales documentadas; no integrado en master. Al apuntar a una rama de implementación, el flujo de CI configurado solo para PR contra master no se activa automáticamente; validar CI al cambiar su base o con mecanismo apropiado.
+- Prototipo visual React en copia local separada, sin API, sin publicación, sin prueba visual completa y fuera de master. Sus productos y precios son inventados. Evaluar su integración como aplicación independiente, preservando el trabajo existente.
+- La existencia de repositorios o UoW SQLite y pruebas del núcleo no implica un servicio HTTP seguro, un panel funcional, ni validación para producción.
+
+3. ORGANIZACIÓN PROPUESTA Y LÍMITES
+
+[PROPUESTO] Componentes lógicos:
+  A. Núcleo de dominio y aplicación: conceptos y casos de uso generales.
+  B. Servicio API: adaptador HTTP, identidad, autorización, validación y composición de infraestructura.
+  C. Panel de negocios: aplicación React compartida, configurable por negocio y funciones autorizadas.
+  D. Panel de plataforma: interfaz y permisos diferenciados para administración global.
+  E. Sitios de negocio: proyectos o aplicaciones independientes (Fripollo, futuros clientes), con identidad visual y configuración propias.
+  F. Infraestructura: repositorios, SQLite en el prototipo, migraciones y procesamiento de eventos.
+
+La separación lógica es obligatoria; decidir monorepositorio con paquetes aislados frente a repositorios separados durante la fase 1. Cada cliente consume contratos públicos versionados; ningún frontend accede a SQLite directamente ni importa repositorios o tablas internas. La configuración pública de un sitio no contiene secretos. Ubicación/tenant/negocio del servidor se deriva o valida desde identidad y autorizaciones; ningún identificador enviado por el navegador concede acceso por sí solo.
+
+4. FASES Y TAREAS
+
+F0 — BASE ESTABLE Y TRAZABILIDAD [EN CURSO]
+  [PENDIENTE] Revisar PR #75 y #76, sus dependencias, alcance, CI y conflictos antes de integrar; no asumir que su aprobación significa gate completo.
+  [PENDIENTE] Inventariar código React local, fixtures y demos; conservar trabajo existente y decidir qué piezas se trasladan o se retiran del repositorio del núcleo. Las herramientas de demostración no deben convertirse en una dependencia del dominio.
+  [PENDIENTE] Reproducir el flujo actual de pedido y reserva con SQLite y documentar resultados y límites.
+  Cierre: estado y fuentes identificados, cambios previos preservados y pruebas pertinentes ejecutadas.
+
+F1 — CONTRATOS Y SEPARACIÓN DE PROYECTOS [PENDIENTE]
+  [ ] Documentar límites entre núcleo, API, paneles y sitios; inventariar dependencias y prohibir imports desde aplicaciones cliente al núcleo o a sus adaptadores internos.
+  [ ] Elegir organización física, versionado y forma de ejecutar cada componente localmente. Establecer contratos HTTP, errores, paginación, compatibilidad, idempotencia y tratamiento monetario sin usar float.
+  [ ] Definir aislamiento por tenant, business y location; distinguir catálogo público, solicitudes de clientes, acceso del personal y operaciones de plataforma. Identificar identidad y alcance de cada operación.
+  [ ] Mantener Fripollo y sus datos sintéticos en proyecto/paquete de ejemplo independiente; decidir cómo inicializar datos sin introducir reglas específicas en el motor.
+  Cierre: contratos y dependencias revisados; sustitución de un sitio no exige cambios en el núcleo; decisiones y límites trazables.
+
+F2 — API LOCAL Y SEGURIDAD BÁSICA [PENDIENTE]
+  [ ] Implementar API local mínima de catálogo y flujo de pedidos sobre los casos de uso existentes y SQLite; reservas se incorporan cuando su contrato esté definido. Configurar entorno de desarrollo de forma explícita.
+  [ ] Diseñar autenticación y autorización del personal, rol y asociación de usuario a negocios; política de acceso público para consultar catálogo y crear pedidos sin exponer datos ajenos.
+  [ ] Validar ámbito desde identidad y servidor en todas las operaciones privadas; rechazar accesos cruzados, privilegios faltantes y solicitudes alteradas. Delimitar credenciales y CORS según entorno.
+  [ ] Cubrir entradas inválidas, importes calculados en servidor, idempotencia, reintentos, errores, persistencia y transacciones SQLite; documentar gestión de datos de prueba y recuperación.
+  Cierre: pruebas de contrato y de aislamiento entre al menos dos negocios, con SQLite real y una API local reproducible; sin inferir preparación para Internet.
+
+F3 — PANEL COMPARTIDO DE NEGOCIO [PENDIENTE]
+  [ ] Desarrollar aplicación independiente con inicio de sesión, selección autorizada de negocio y navegación según roles y módulos activados.
+  [ ] Implementar vista y gestión de catálogo y seguimiento de pedidos; añadir reservas y personal solo cuando sus contratos y permisos estén preparados.
+  [ ] Añadir estados de carga, errores, confirmaciones y accesibilidad; no confiar en la ocultación de botones como mecanismo de seguridad.
+  [ ] Probar dos negocios, cambio de contexto, sesión caducada y restricciones por rol en servidor y panel.
+  Cierre: un negocio ficticio puede administrar catálogo y pedidos exclusivamente propios a través de la API; pruebas automatizadas y revisión visual documentadas.
+
+F4 — PANEL DE PLATAFORMA [PENDIENTE]
+  [ ] Definir funciones mínimas: alta y configuración de negocios, activación de módulos y gestión de acceso; diseñar alcance y separación de responsabilidades.
+  [ ] Aplicar roles explícitos, autenticación y autorización en servidor, registro auditable y operación de soporte controlada. Evitar suplantación o acceso a datos de clientes sin política y autorización explícitas.
+  [ ] Probar que un administrador de negocio no puede realizar acciones de plataforma y que no existen escaladas de privilegios.
+  Cierre: operaciones permitidas y denegadas demostradas mediante pruebas y trazabilidad auditable; aún sin afirmar disponibilidad para producción.
+
+F5 — SITIO FRIPOLLO INDEPENDIENTE [PENDIENTE]
+  [ ] Recuperar y revisar el ejemplo React existente en un proyecto independiente; sustituir datos locales por respuestas de API sin introducir dependencias internas ni credenciales privadas.
+  [ ] Conectar carta, cesta y creación de pedido; el servidor calcula precios y aplica validaciones e idempotencia. Mostrar errores, confirmación real y estados sin simular éxitos.
+  [ ] Revisar diseño adaptable, accesibilidad, pedido en móvil, recarga y fallos de red; reservas solo si el cliente lo solicita y existe contrato validado.
+  [ ] Probar aislamiento con un segundo negocio ficticio y comprobar que ambos sitios pueden evolucionar y ejecutarse independientemente.
+  Cierre: recorrido completo reproducible sitio → API → SQLite → panel del negocio, con datos ficticios y sin pagos ni envíos externos no implementados.
+
+F6 — VALIDACIÓN Y DECISIÓN PARA USO REAL [PENDIENTE]
+  [ ] Revisar con el cliente marca, menú, precios, flujos, estados, permisos y políticas; distinguir datos aprobados de ejemplos.
+  [ ] Validar seguridad, aislamiento, privacidad, accesibilidad, operación, integridad, copia y restauración, migraciones, concurrencia y recuperación de eventos con evidencias apropiadas.
+  [ ] Medir límites de SQLite en el entorno previsto y comparar alternativas solo cuando haya requisitos y resultados. Documentar decisión y plan de migración únicamente si se justifica.
+  [ ] Definir entorno de publicación, soporte, observabilidad y criterios de aceptación; habilitar pagos, mensajería o integraciones solo con alcance y pruebas propias.
+  Cierre: aceptación del cliente y decisión documentada sobre despliegue, datos reales y almacenamiento. No declarar listo para producción antes de cumplir estos criterios.
+
+5. PRIORIDAD Y DEPENDENCIAS
+
+F0 → F1 → F2 → F3/F4 → F5 → F6. Los paneles pueden desarrollarse por incrementos cuando existan contratos y permisos; F5 puede avanzar en diseño de forma independiente, pero la conexión real requiere F2. Las funciones de plataforma y negocio pueden compartir librerías de presentación sin compartir privilegios. Se pueden ejecutar pruebas adicionales en paralelo siempre que no adelanten las garantías ni alteren trabajo existente.
+
+6. CRITERIOS TRANSVERSALES
+
+- Cada tarea registra fecha, rama/PR, alcance, pruebas y limitaciones en ROADMAP.txt; el estado distingue local, en revisión, integrado y validado.
+- No pasar datos personales, precios o identidad reales de un cliente por ejemplos sin confirmación y controles apropiados.
+- Pruebas negativas de aislamiento, autorización, idempotencia y errores; validar en SQLite real lo que dependa de transacciones, sin extrapolar a otra base.
+- Ninguna funcionalidad que todavía esté simulada se presenta como pedido, reserva, pago o notificación real.
+- La lista es un plan vivo: ajustar prioridades con evidencia y con el cliente; no marcar fases completas hasta cumplir sus criterios.
