@@ -739,3 +739,7 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
   [PENDIENTE] Seguridad, entrega externa y validación funcional integral del prototipo. Mantener SQLite.
 
   [INTEGRADO 2026-10-29] PR #74 fusionada en master (d16f6fd); CI completa, ejecución 40939078468. Sin comentarios de revisión al integrar.
+
+93. REGISTRO 2026-10-29 — ejemplo ficticio de Fripollo con SQLite
+  [COMPLETADO LOCALMENTE] Recorrido de demostración de restaurante dominicano sobre el núcleo existente: oferta ficticia, pedido de dos unidades y reserva; utiliza base SQLite temporal, confirma y reabre datos, y simula el procesamiento de eventos. Datos y precios son ficticios y no hay comunicaciones ni cobros externos.
+  [PENDIENTE] Conectar y validar la interfaz React mediante una API apropiada; definir autenticación/autorización, políticas reales, datos del negocio y pruebas de extremo a extremo antes de cualquier uso real. Mantener SQLite para el prototipo. El frontend anterior permanece en otra copia local y no está integrado en esta rama.
