@@ -6,6 +6,7 @@ from universal_business.infrastructure.sqlite_availability import create_sqlite_
 from universal_business.infrastructure.sqlite_customers import create_sqlite_customers_schema
 from universal_business.infrastructure.sqlite_idempotency import create_sqlite_idempotency_schema
 from universal_business.infrastructure.sqlite_locations import create_sqlite_locations_schema
+from universal_business.infrastructure.sqlite_offerings import create_sqlite_offerings_schema
 from universal_business.infrastructure.sqlite_orders import create_sqlite_orders_schema
 from universal_business.infrastructure.sqlite_outbox import (
     create_sqlite_delivery_schema,
@@ -15,7 +16,7 @@ from universal_business.infrastructure.sqlite_reservations import create_sqlite_
 from universal_business.infrastructure.sqlite_resources import create_sqlite_resources_schema
 from universal_business.infrastructure.sqlite_unit_of_work import SqliteUnitOfWork
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 class IncompatibleSqliteSchemaError(RuntimeError):
@@ -44,15 +45,17 @@ def _objects(connection: sqlite3.Connection) -> tuple[tuple[object, ...], ...]:
 def _expected_objects(version: int = SCHEMA_VERSION) -> tuple[tuple[object, ...], ...]:
     with sqlite3.connect(":memory:") as connection:
         _create_schema(connection)
-        if version == 2:
-            create_sqlite_orders_schema(connection)
-        elif version != 1:
+        if version not in (1, 2, 3):
             raise ValueError("Versión de esquema desconocida")
+        if version >= 2:
+            create_sqlite_orders_schema(connection)
+        if version >= 3:
+            create_sqlite_offerings_schema(connection)
         return _objects(connection)
 
 
 def initialize_sqlite_schema(connection: sqlite3.Connection) -> None:
-    """Inicializar una base vacía o validar una base gestionada versión 2.
+    """Inicializar una base vacía o validar una base gestionada versión 3.
 
     Se exige propiedad exclusiva del esquema: tablas, índices, vistas y triggers
     adicionales se rechazan. No migra ni adopta bases legacy, no cierra la
@@ -74,6 +77,7 @@ def initialize_sqlite_schema(connection: sqlite3.Connection) -> None:
         if version == 0 and not actual:
             _create_schema(connection)
             create_sqlite_orders_schema(connection)
+            create_sqlite_offerings_schema(connection)
             if _objects(connection) != expected:
                 raise IncompatibleSqliteSchemaError("Esquema inicial incoherente")
             connection.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
@@ -109,4 +113,33 @@ def migrate_sqlite_v1_to_v2(connection: sqlite3.Connection) -> None:
         if _objects(connection) != v2:
             raise IncompatibleSqliteSchemaError("Esquema v2 incoherente; no se ha migrado")
         connection.execute("PRAGMA user_version=2")
+        uow.commit()
+
+
+def migrate_sqlite_v2_to_v3(connection: sqlite3.Connection) -> None:
+    """Migrar una base gestionada v2 íntegra a v3 de forma explícita.
+
+    El caller debe verificar una copia de seguridad antes de migrar. No se
+    adoptan ofertas instaladas por separado ni esquemas alterados.
+    """
+    if connection.in_transaction:
+        raise RuntimeError("Se requiere una conexión sin transacción activa")
+    if getattr(connection, "autocommit", None) is True:
+        raise RuntimeError("autocommit=True no es compatible con esta UoW")
+    connection.execute("PRAGMA foreign_keys=ON")
+    if connection.execute("PRAGMA foreign_keys").fetchone()[0] != 1:
+        raise RuntimeError("No se pudieron activar las claves foráneas")
+    v2, v3 = _expected_objects(2), _expected_objects(3)
+    with SqliteUnitOfWork(connection) as uow:
+        version = connection.execute("PRAGMA user_version").fetchone()[0]
+        current = _objects(connection)
+        if version == 3 and current == v3:
+            uow.commit()
+            return
+        if version != 2 or current != v2:
+            raise IncompatibleSqliteSchemaError("Esquema v2 no compatible; no se ha migrado")
+        create_sqlite_offerings_schema(connection)
+        if _objects(connection) != v3:
+            raise IncompatibleSqliteSchemaError("Esquema v3 incoherente; no se ha migrado")
+        connection.execute("PRAGMA user_version=3")
         uow.commit()

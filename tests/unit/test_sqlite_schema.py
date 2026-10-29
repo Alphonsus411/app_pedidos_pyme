@@ -17,7 +17,7 @@ def test_initialize_reopen_idempotently_and_enforce_foreign_keys(tmp_path):
     path = tmp_path / "prototype.db"
     with sqlite3.connect(path) as connection:
         initialize_sqlite_schema(connection)
-        assert connection.execute("PRAGMA user_version").fetchone() == (2,)
+        assert connection.execute("PRAGMA user_version").fetchone() == (3,)
         assert connection.execute("PRAGMA foreign_keys").fetchone() == (1,)
         tables = {
             row[0]
@@ -35,6 +35,7 @@ def test_initialize_reopen_idempotently_and_enforce_foreign_keys(tmp_path):
             "outbox_delivery",
             "outbox_quarantine",
             "orders",
+            "offerings",
         } <= tables
         with pytest.raises(sqlite3.IntegrityError):
             connection.execute("INSERT INTO outbox_delivery(event_id) VALUES ('missing')")
@@ -78,7 +79,7 @@ def test_reject_changed_schema_even_when_version_matches(tmp_path):
         connection.execute("CREATE INDEX unexpected ON reservations(status)")
         with pytest.raises(IncompatibleSqliteSchemaError):
             initialize_sqlite_schema(connection)
-        assert connection.execute("PRAGMA user_version").fetchone() == (2,)
+        assert connection.execute("PRAGMA user_version").fetchone() == (3,)
 
 
 def test_creation_failure_rolls_back_schema_and_version(tmp_path, monkeypatch):
@@ -121,7 +122,7 @@ def test_parallel_initializers_are_serialized(tmp_path):
             return connection.execute("PRAGMA user_version").fetchone()[0]
 
     with ThreadPoolExecutor(max_workers=2) as executor:
-        assert list(executor.map(run, range(2))) == [2, 2]
+        assert list(executor.map(run, range(2))) == [3, 3]
 
 
 def _make_v1(connection):
@@ -177,6 +178,9 @@ def test_explicit_migration_preserves_v1_data_and_allows_orders(tmp_path):
             "SELECT name FROM sqlite_master WHERE name='orders'"
         ).fetchone() == ("orders",)
         sqlite_schema.migrate_sqlite_v1_to_v2(connection)
+        with pytest.raises(IncompatibleSqliteSchemaError):
+            initialize_sqlite_schema(connection)
+        sqlite_schema.migrate_sqlite_v2_to_v3(connection)
         initialize_sqlite_schema(connection)
     with sqlite3.connect(path) as connection:
         initialize_sqlite_schema(connection)
@@ -242,3 +246,128 @@ def test_parallel_v1_migrations_are_serialized(tmp_path):
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         assert list(executor.map(run, range(2))) == [2, 2]
+
+
+def _make_v2(connection):
+    sqlite_schema._create_schema(connection)
+    sqlite_schema.create_sqlite_orders_schema(connection)
+    connection.execute("PRAGMA user_version=2")
+    connection.commit()
+
+
+def test_v2_to_v3_preserves_data_and_can_reopen(tmp_path):
+    path = tmp_path / "v2.db"
+    with sqlite3.connect(path) as connection:
+        _make_v2(connection)
+        connection.execute(
+            "INSERT INTO orders VALUES ('t','o','b','l',NULL,'draft','web',NULL,NULL,'{}','c','u')"
+        )
+        connection.execute("INSERT INTO transactional_outbox VALUES ('event', X'010203')")
+        connection.execute(
+            "INSERT INTO idempotency VALUES ('t','key','digest','token','reserved',NULL)"
+        )
+        connection.commit()
+        before = [
+            connection.execute("SELECT * FROM " + table).fetchall()
+            for table in ("orders", "transactional_outbox", "idempotency")
+        ]
+        with pytest.raises(IncompatibleSqliteSchemaError):
+            initialize_sqlite_schema(connection)
+        sqlite_schema.migrate_sqlite_v2_to_v3(connection)
+        assert connection.execute("PRAGMA user_version").fetchone() == (3,)
+        assert before == [
+            connection.execute("SELECT * FROM " + table).fetchall()
+            for table in ("orders", "transactional_outbox", "idempotency")
+        ]
+        sqlite_schema.migrate_sqlite_v2_to_v3(connection)
+    with sqlite3.connect(path) as connection:
+        initialize_sqlite_schema(connection)
+        assert connection.execute(
+            "SELECT name FROM sqlite_master WHERE name='offerings'"
+        ).fetchone() == ("offerings",)
+
+
+def test_v2_with_separately_installed_offerings_is_rejected(tmp_path):
+    with sqlite3.connect(tmp_path / "foreign.db") as connection:
+        _make_v2(connection)
+        sqlite_schema.create_sqlite_offerings_schema(connection)
+        connection.execute(
+            "INSERT INTO offerings VALUES ('t','id','b','name',NULL,'active',NULL,'{}','c','u')"
+        )
+        connection.commit()
+        with pytest.raises(IncompatibleSqliteSchemaError):
+            sqlite_schema.migrate_sqlite_v2_to_v3(connection)
+        assert connection.execute("PRAGMA user_version").fetchone() == (2,)
+        assert connection.execute("SELECT name FROM offerings").fetchall() == [("name",)]
+
+
+def test_v2_to_v3_failure_rolls_back(tmp_path, monkeypatch):
+    with sqlite3.connect(tmp_path / "failure.db") as connection:
+        _make_v2(connection)
+        connection.execute("INSERT INTO transactional_outbox VALUES ('event', X'01')")
+        connection.commit()
+        v2, v3 = sqlite_schema._expected_objects(2), sqlite_schema._expected_objects(3)
+        monkeypatch.setattr(
+            sqlite_schema, "_expected_objects", lambda version: {2: v2, 3: v3}[version]
+        )
+
+        def fail(connection):
+            connection.execute("CREATE TABLE offerings (id TEXT)")
+            raise RuntimeError("injected failure")
+
+        monkeypatch.setattr(sqlite_schema, "create_sqlite_offerings_schema", fail)
+        with pytest.raises(RuntimeError, match="injected failure"):
+            sqlite_schema.migrate_sqlite_v2_to_v3(connection)
+        assert connection.execute("PRAGMA user_version").fetchone() == (2,)
+        assert (
+            connection.execute("SELECT name FROM sqlite_master WHERE name='offerings'").fetchone()
+            is None
+        )
+        assert connection.execute("SELECT * FROM transactional_outbox").fetchall() == [
+            ("event", b"\x01")
+        ]
+
+
+def test_parallel_v2_to_v3_migrations(tmp_path):
+    path = tmp_path / "parallel-v2.db"
+    with sqlite3.connect(path) as connection:
+        _make_v2(connection)
+    barrier = Barrier(2)
+
+    def run(_):
+        with sqlite3.connect(path, timeout=5) as connection:
+            barrier.wait(timeout=5)
+            sqlite_schema.migrate_sqlite_v2_to_v3(connection)
+            return connection.execute("PRAGMA user_version").fetchone()[0]
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        assert list(executor.map(run, range(2))) == [3, 3]
+
+
+def test_migrated_database_can_store_offering(tmp_path):
+    from universal_business.domain.catalog.entities import Offering
+    from universal_business.domain.shared.value_objects.ids import BusinessId, OfferingId, TenantId
+    from universal_business.domain.shared.value_objects.money import Money
+    from universal_business.infrastructure.sqlite_offerings import SqliteOfferingRepository
+    from universal_business.infrastructure.sqlite_unit_of_work import SqliteUnitOfWork
+
+    path = tmp_path / "offerings.db"
+    item = Offering(
+        id=OfferingId.generate(),
+        tenant_id=TenantId.generate(),
+        business_id=BusinessId.generate(),
+        name="Prueba",
+        base_price=Money("12.3456", "EUR"),
+    )
+    with sqlite3.connect(path) as connection:
+        _make_v2(connection)
+        sqlite_schema.migrate_sqlite_v2_to_v3(connection)
+        with SqliteUnitOfWork(connection) as uow:
+            SqliteOfferingRepository(connection).save(item)
+            uow.commit()
+    with sqlite3.connect(path) as connection:
+        initialize_sqlite_schema(connection)
+        saved = SqliteOfferingRepository(connection).get(
+            tenant_id=item.tenant_id, business_id=item.business_id, offering_id=item.id
+        )
+        assert saved is not None and saved.base_price == item.base_price
