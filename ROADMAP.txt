@@ -405,3 +405,5 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [COMPLETADO EN BORRADOR] GetReservation devuelve vista inmutable y valida tenant/business/location/ID; las reservas fuera de ámbito y ausentes se devuelven como None. Datos temporales y estado inválidos se rechazan.
 [COMPLETADO EN BORRADOR] Pruebas de ámbito, ausencia, parámetros inválidos y estabilidad de la vista con repositorio fake.
 [EN CURSO] La frontera debe autenticar y autorizar al actor; el repositorio real debe aislar tenant y garantizar lectura coherente. La consulta no garantiza snapshot transaccional ni adjudica disponibilidad. Gate 0.4 sigue abierto.
+
+[INTEGRADO EN MASTER] PR #33: consulta de reserva con ámbito explícito y vista inmutable, merge 2826165. CI y revisión automática sin hallazgos: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40838860443 . Autorización y consistencia real siguen pendientes.
