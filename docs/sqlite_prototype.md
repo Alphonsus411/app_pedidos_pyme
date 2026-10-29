@@ -53,3 +53,20 @@ ofertas e índices dentro de una transacción y conserva los datos existentes.
 La función acepta v2 íntegra o v3 íntegra ya migrada; rechaza esquemas
 alterados o tablas de ofertas instaladas por separado, sin adoptar sus datos.
 Después se puede llamar a `initialize_sqlite_schema(connection)`.
+
+## Demostración local reproducible
+
+Desde la raíz del repositorio, con Python 3.11 o 3.12 y el paquete instalado:
+
+```bash
+python -m pip install -e .
+python examples/sqlite_demo.py
+```
+
+La demostración usa datos ficticios y crea una base temporal que se elimina al
+finalizar. Crea y confirma un pedido y una reserva, vuelve a abrir la base y
+procesa seis eventos con un publicador local simulado. Las políticas de esta
+demostración aprueban las operaciones para que el flujo pueda probarse; no son
+reglas de negocio, autenticación ni autorización para uso real. No envía
+mensajes ni conecta con servicios externos. La prueba automatizada equivalente
+es `python -m pytest tests/unit/test_sqlite_demo.py` (requiere los extras `dev`).
