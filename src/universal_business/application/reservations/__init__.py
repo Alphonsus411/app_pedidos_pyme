@@ -4,6 +4,7 @@ from universal_business.application.reservations.cancellation import (
     CancelReservationHandler,
     ReservationCancellation,
 )
+from universal_business.application.reservations.check_in_policy import CheckInWindowPolicy
 from universal_business.application.reservations.commands import (
     CancelReservation,
     CheckInReservation,
@@ -31,6 +32,7 @@ from universal_business.application.reservations.query_handlers import (
     ReservationView,
 )
 from universal_business.application.reservations.status_change import (
+    CheckInPolicy,
     CheckInReservationHandler,
     CompleteReservationHandler,
     MarkReservationNoShowHandler,
@@ -46,6 +48,8 @@ __all__ = [
     "ListReservationsByLocationHandler",
     "CheckInReservation",
     "CheckInReservationHandler",
+    "CheckInPolicy",
+    "CheckInWindowPolicy",
     "CompleteReservation",
     "CompleteReservationHandler",
     "MarkReservationNoShow",

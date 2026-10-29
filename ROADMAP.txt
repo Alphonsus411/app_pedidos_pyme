@@ -432,3 +432,10 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] El negocio debe seleccionar y configurar el plazo; la política no autoriza actores ni implementa mecanismos durables. El check-in sigue sin política temporal. Adaptadores reales y Gate 0.4 pendientes.
 
 [INTEGRADO EN MASTER] PR #36: política configurable de plazo de no presentación, merge 7fd0e47. CI y revisión automática sin hallazgos: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40840601128 . La selección del plazo y la autorización siguen pendientes.
+
+55. REGISTRO DE AVANCE — 29-10-2026 (POLÍTICA TEMPORAL DE LLEGADA)
+
+[COMPLETADO EN BORRADOR] CheckInReservation exige CheckInPolicy configurada y aprobación bajo guard. CheckInWindowPolicy recibe reloj y plazos explícitos antes/después del inicio; compara instantes UTC e incluye ambos extremos.
+[COMPLETADO EN BORRADOR] Pruebas de política ausente, bordes, rechazo, replay, reloj inválido y cambio horario fold. Los plazos y reloj usados en pruebas no establecen valores por defecto.
+[COMPATIBILIDAD] Los consumidores de CheckInReservationHandler deben inyectar política. El negocio debe definir y coordinar ventanas de llegada/no presentación; la frontera debe autorizar al actor también en replay. No existe garantía de que ambas configuraciones sean coherentes.
+[EN CURSO] Adaptadores durables, pruebas transaccionales reales, autorización y Gate 0.4 siguen pendientes.

@@ -61,6 +61,15 @@ class NoShowPolicy(Protocol):
     def approve(self, *, reservation: Reservation) -> bool: ...
 
 
+class CheckInPolicy(Protocol):
+    """Aprobar la llegada bajo guard según reglas temporales configuradas.
+
+    El actor debe autenticarse y autorizarse en la frontera, incluso en replay.
+    """
+
+    def approve(self, *, reservation: Reservation) -> bool: ...
+
+
 def _key(command: ReservationStatusCommand) -> IdempotencyKey:
     if not isinstance(command.idempotency_key, IdempotencyKey):
         raise ApplicationError("Se requiere una clave de idempotencia válida")
@@ -74,7 +83,7 @@ def _key(command: ReservationStatusCommand) -> IdempotencyKey:
 class _StatusHandler(Generic[C]):
     """El guard y repositorio deben compartir la UnitOfWork del orquestador.
 
-    NO_SHOW exige política temporal inyectada; check-in no valida plazos.
+    NO_SHOW y check-in exigen políticas temporales inyectadas.
     La autorización del actor debe aplicarse en la frontera, incluido replay.
     """
 
@@ -88,15 +97,19 @@ class _StatusHandler(Generic[C]):
         guard: ReservationMutationGuard,
         idempotency: IdempotencyStore,
         no_show_policy: NoShowPolicy | None = None,
+        check_in_policy: CheckInPolicy | None = None,
     ) -> None:
         self._reservations, self._guard, self._idempotency = reservations, guard, idempotency
         self._no_show_policy = no_show_policy
+        self._check_in_policy = check_in_policy
 
     def handle(self, command: C, /) -> tuple[ReservationStatusResult, Sequence[DomainEvent]]:
         if type(command) is not self.command_type:
             raise ApplicationError("Tipo de comando no corresponde al handler")
         if self.target == ReservationStatus.NO_SHOW and self._no_show_policy is None:
             raise ApplicationError("Se requiere política temporal de no presentación")
+        if self.target == ReservationStatus.CHECKED_IN and self._check_in_policy is None:
+            raise ApplicationError("Se requiere política temporal de llegada")
         key, digest, tid = _key(command), request_digest(command), command.tenant_id
         if not self._idempotency.reserve(tid, key, digest):
             cached = self._idempotency.get(tid, key)
@@ -159,6 +172,12 @@ class _StatusHandler(Generic[C]):
                     or self._no_show_policy.approve(reservation=replace(current)) is not True
                 ):
                     raise ApplicationError("Política de no presentación no aprobada")
+            if self.target == ReservationStatus.CHECKED_IN:
+                if (
+                    self._check_in_policy is None
+                    or self._check_in_policy.approve(reservation=replace(current)) is not True
+                ):
+                    raise ApplicationError("Política de llegada no aprobada")
             updated = replace(current, status=self.target)
             updated.touch()
             self._reservations.save(updated)
