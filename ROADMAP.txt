@@ -478,3 +478,5 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [PROPUESTO] 0.5e — Añadir pruebas de integración reproducibles con PostgreSQL real y migraciones, CI, observabilidad y procedimientos de recuperación; incluir fallos de conexión, concurrencia, reintentos y aislamiento entre tenants. Documentar decisiones y límites antes de cerrar el gate.
 [PENDIENTE] Autenticación/autorización por actor incluso en replays, selección de políticas del negocio y configuración coordinada de llegada/no presentación; no se asumen decisiones ni plazos por defecto.
 [EN CURSO] Ninguna de las propuestas de 0.5 constituye implementación ni aprobación del gate. Las pruebas anteriores con fakes no sustituyen las garantías de base de datos real. Las fases y tareas del proyecto no están terminadas.
+
+[INTEGRADO EN MASTER] PR #40: estado actualizado y plan propuesto de infraestructura, merge 98b8bd9. CI completa: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40849521161 . Revisión manual; no había revisión automática finalizada al integrar. Las tareas de infraestructura siguen pendientes.
