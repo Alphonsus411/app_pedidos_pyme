@@ -407,3 +407,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] La frontera debe autenticar y autorizar al actor; el repositorio real debe aislar tenant y garantizar lectura coherente. La consulta no garantiza snapshot transaccional ni adjudica disponibilidad. Gate 0.4 sigue abierto.
 
 [INTEGRADO EN MASTER] PR #33: consulta de reserva con ámbito explícito y vista inmutable, merge 2826165. CI y revisión automática sin hallazgos: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40838860443 . Autorización y consistencia real siguen pendientes.
+
+52. REGISTRO DE AVANCE — 29-10-2026 (LISTADO DE RESERVAS)
+
+[COMPLETADO EN BORRADOR] ListReservationsByLocation con lector acotado separado, ámbito tenant/business/location, estado opcional y límite 1–100; rechaza respuestas con ámbitos o estados erróneos, duplicados o exceso de límite. Devuelve vistas inmutables.
+[COMPLETADO EN BORRADOR] Pruebas con fake de filtros, aislamiento, datos inválidos, límite, duplicados y snapshot. No cambia el contrato de candidatos completos para disponibilidad.
+[EN CURSO] No hay implementación durable del lector, orden estable, paginación, autorización ni snapshot transaccional. El fake no demuestra aislamiento real. Gate 0.4 abierto.
