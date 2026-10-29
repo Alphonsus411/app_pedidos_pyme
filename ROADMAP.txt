@@ -630,6 +630,11 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 77. REGISTRO 2026-10-29 — disponibilidad SQLite
   [COMPLETADO] Repositorio SQLite de reglas y bloqueos: consultas por ámbito y fechas, inclusión de reglas generales, persistencia transaccional y rechazo de intervalos corruptos.
   [VALIDADO LOCALMENTE] 1071 pruebas (sin generador PDF por dependencia local), Ruff y mypy. La consulta de disponibilidad utiliza reglas y bloqueos persistidos.
-  [PENDIENTE] Integración tras CI; adjudicación de reservas completa y atómica con comprobación de disponibilidad, conflictos, capacidad y ámbito. Mantener SQLite para el prototipo.
+  [COMPLETADO] Integración de disponibilidad en master mediante PR #59. Ver registro 78 para adjudicación SQLite.
 
   [INTEGRADO 2026-10-29] PR #59 fusionada en master; CI de GitHub completada correctamente (ejecución 40881851919).
+
+78. REGISTRO 2026-10-29 — adjudicación SQLite de reservas
+  [COMPLETADO] Adaptador de adjudicación protegido por UoW SQLite BEGIN IMMEDIATE, que verifica la reserva y evalúa ubicación, recurso, capacidad, ventanas, bloqueos y solapes antes de confirmar.
+  [VALIDADO LOCALMENTE] Confirmación y replay con persistencia e idempotencia; dos conexiones compitiendo por un intervalo, contigüidad, rechazos de disponibilidad y rollback al fallar outbox. Suite local: 1079 pruebas sin generador PDF por dependencia ausente, más la nueva prueba de rollback; Ruff y mypy correctos.
+  [PENDIENTE] CI e integración; garantizar ensamblaje y protección compartida en todas las rutas, autorización, reconciliación tras fallo de idempotencia, migraciones y completar pedidos. Mantener SQLite; prototipo completo aún no validado.
