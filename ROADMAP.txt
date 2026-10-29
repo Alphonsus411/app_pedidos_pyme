@@ -413,3 +413,5 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [COMPLETADO EN BORRADOR] ListReservationsByLocation con lector acotado separado, ámbito tenant/business/location, estado opcional y límite 1–100; rechaza respuestas con ámbitos o estados erróneos, duplicados o exceso de límite. Devuelve vistas inmutables.
 [COMPLETADO EN BORRADOR] Pruebas con fake de filtros, aislamiento, datos inválidos, límite, duplicados y snapshot. No cambia el contrato de candidatos completos para disponibilidad.
 [EN CURSO] No hay implementación durable del lector, orden estable, paginación, autorización ni snapshot transaccional. El fake no demuestra aislamiento real. Gate 0.4 abierto.
+
+[INTEGRADO EN MASTER] PR #34: listado limitado de reservas por ubicación, merge cff7024. CI y revisión automática sin hallazgos: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40839612653 . Adaptador durable, autorización y paginación siguen pendientes.
