@@ -661,3 +661,8 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
   [PENDIENTE] Reconciliación de RESERVED heredados y casos fuera del ensamblaje, autorización, migraciones, integridad referencial, pedidos y validación funcional completa. Mantener SQLite.
 
   [INTEGRADO 2026-10-29] PR #63 fusionada en master (fd9d236); CI completada correctamente, ejecución 40885114599. Sin comentarios de revisión al integrar.
+
+82. REGISTRO 2026-10-29 — repositorio SQLite de pedidos
+  [COMPLETADO] Repositorio de pedidos con líneas, importes Decimal, ámbito por tenant, filtros de ubicación y cliente, escritura transaccional y protección contra cambios de negocio, ubicación y fecha de creación. Esquema explícito independiente, sin alterar el inicializador v1.
+  [VALIDADO LOCALMENTE] Persistencia y reapertura, precisión de importes, aislamiento, rollback, payload corrupto y creación de pedido con repositorio real y dobles para el resto. 1148 pruebas en worktree parcial anterior a master, sin generador PDF por dependencia local; Ruff y mypy correctos.
+  [PENDIENTE] CI e integración; migración versionada que incorpore pedidos al inicializador, guard, idempotencia y outbox reales para el ciclo completo, autorización y validación integral. SQLite sigue siendo la base del prototipo.
