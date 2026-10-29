@@ -724,3 +724,8 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
   [PENDIENTE] Validación con políticas y autenticación/autorización reales, integridad referencial, integración externa y deduplicación de consumidores. No se ha validado un prototipo completo ni una entrega externa real. Mantener SQLite.
 
   [INTEGRADO 2026-10-29] PR #72 fusionada en master (6e78303); CI completa, ejecución 40937992406. Sin comentarios de revisión al integrar.
+
+91. REGISTRO 2026-10-29 — demostración local SQLite
+  [COMPLETADO] Ejemplo ejecutable con base temporal y datos ficticios: crea y confirma pedido y reserva, reabre la base y procesa seis eventos con publicador simulado. Incluye instrucciones y cierre de conexiones para eliminar la base temporal.
+  [VALIDADO LOCALMENTE] Ejecución en proceso independiente y limpieza de archivos temporales. Suite parcial 1169 pruebas sin generador PDF por dependencia local; Ruff y mypy correctos.
+  [PENDIENTE] CI e integración; políticas del ejemplo son simuladas, sin autenticación ni autorización, entrega externa ni interfaz de usuario. Validación funcional integral sigue pendiente. Mantener SQLite.
