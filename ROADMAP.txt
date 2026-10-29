@@ -717,3 +717,8 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
   [PENDIENTE] Autorización, configuración real de políticas, integridad referencial, entrega efectiva de eventos y validación integral del prototipo. Mantener SQLite.
 
   [INTEGRADO 2026-10-29] PR #71 fusionada en master (2fcc37a); CI completa, ejecución 40927587553. Sin comentarios de revisión al integrar.
+
+90. REGISTRO 2026-10-29 — prueba transversal del prototipo SQLite
+  [COMPLETADO] Prueba reproducible sobre base temporal v3: catálogo, pedido y reserva con repositorios SQLite; reintentos y reapertura, cola mixta y recuperación tras fallo de publicación y vencimiento de adjudicación.
+  [VALIDADO LOCALMENTE] Pedido y reserva confirmados, seis eventos persistidos y marcados entregados por worker con publicador simulado; políticas de pedido simuladas. Suite parcial 1168 pruebas sin generador PDF por dependencia local; Ruff y mypy correctos.
+  [PENDIENTE] CI e integración; validación con políticas y autenticación/autorización reales, integridad referencial, integración externa y deduplicación de consumidores. No se ha validado un prototipo completo ni una entrega externa real. Mantener SQLite.
