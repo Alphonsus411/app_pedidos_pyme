@@ -545,3 +545,10 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] El codec no soporta todos los eventos del proyecto ni metadata arbitraria. Persisten aislamiento por tenant, gestión de eventos inválidos, migraciones, scheduler, consumidores idempotentes y pruebas adicionales. SQLite sigue siendo la prioridad para desarrollo y pruebas; gates 0.4/0.5 abiertos.
 
 [INTEGRADO EN MASTER] PR #48: codec de pedidos y cola mixta SQLite, merge b79f517. CI completa: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40858270012 . Revisión manual; la revisión automática no había terminado al integrar. SQLite sigue en validación.
+
+67. REGISTRO DE AVANCE — 29-10-2026 (CUARENTENA MANUAL SQLITE)
+
+[COMPLETADO EN BORRADOR] Se añade cuarentena explícita para eventos pendientes de la cola SQLite: aparta el evento y conserva su payload y motivo, permite procesar entradas posteriores y ofrece reencolado manual. Se rechazan eventos ausentes, entregados o con adjudicación vigente. El decoder no mueve eventos automáticamente: un error puede ser de configuración y debe investigarse.
+[COMPLETADO EN BORRADOR] Pruebas SQLite del bloqueo por evento inválido, liberación de la cola, conservación y reencolado del payload y rechazo ante entrega activa o completada. Suite local de worktree parcial anterior a master: 1028 pruebas, salvo generador PDF; Ruff y mypy correctos. La CI valida la base actual completa.
+[COMPATIBILIDAD] Las bases SQLite experimentales ya creadas requieren ejecutar de nuevo create_sqlite_delivery_schema para crear outbox_quarantine antes de usar el store actualizado. No es una migración versionada y no altera eventos existentes. La recuperación elimina la entrada de cuarentena y no mantiene historial de auditoría.
+[EN CURSO] Persisten aislamiento por tenant, migraciones versionadas, scheduler, consumidores idempotentes, tratamiento operativo de fallos y funcionalidad de negocio persistente. El prototipo aún no está completo; SQLite continúa siendo la prioridad.
