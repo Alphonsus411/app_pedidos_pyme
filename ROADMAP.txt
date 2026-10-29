@@ -637,4 +637,6 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 78. REGISTRO 2026-10-29 — adjudicación SQLite de reservas
   [COMPLETADO] Adaptador de adjudicación protegido por UoW SQLite BEGIN IMMEDIATE, que verifica la reserva y evalúa ubicación, recurso, capacidad, ventanas, bloqueos y solapes antes de confirmar.
   [VALIDADO LOCALMENTE] Confirmación y replay con persistencia e idempotencia; dos conexiones compitiendo por un intervalo, contigüidad, rechazos de disponibilidad y rollback al fallar outbox. Suite local: 1079 pruebas sin generador PDF por dependencia ausente, más la nueva prueba de rollback; Ruff y mypy correctos.
-  [PENDIENTE] CI e integración; garantizar ensamblaje y protección compartida en todas las rutas, autorización, reconciliación tras fallo de idempotencia, migraciones y completar pedidos. Mantener SQLite; prototipo completo aún no validado.
+  [PENDIENTE] Garantizar ensamblaje y protección compartida en todas las rutas, autorización, reconciliación tras fallo de idempotencia, migraciones y completar pedidos. Mantener SQLite; prototipo completo aún no validado.
+
+  [INTEGRADO 2026-10-29] PR #60 fusionada en master (f60774c); CI completa correctamente, ejecución 40882477243. Sin comentarios de revisión al integrar.
