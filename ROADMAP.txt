@@ -640,3 +640,8 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
   [PENDIENTE] Garantizar ensamblaje y protección compartida en todas las rutas, autorización, reconciliación tras fallo de idempotencia, migraciones y completar pedidos. Mantener SQLite; prototipo completo aún no validado.
 
   [INTEGRADO 2026-10-29] PR #60 fusionada en master (f60774c); CI completa correctamente, ejecución 40882477243. Sin comentarios de revisión al integrar.
+
+79. REGISTRO 2026-10-29 — ensamblaje SQLite del ciclo de reservas
+  [COMPLETADO] Ensamblaje explícito por ejecución para crear, confirmar, cancelar, registrar llegada, completar y marcar no presentación; repositorios, idempotencia, outbox y guard/adjudicación comparten conexión y UoW SQLite. Las políticas temporales se inyectan y se rechazan cuando faltan.
+  [VALIDADO LOCALMENTE] Flujos con SQLite real, replay, políticas, rechazo de transacciones externas y outbox; 1084 pruebas (sin generador PDF por dependencia local), Ruff y mypy correctos.
+  [PENDIENTE] CI e integración. La frontera debe autenticar y autorizar cada llamada; escrituras externas pueden eludir el ensamblaje. Falta reconciliación de idempotencia tras fallo posterior a commit, migraciones, pedidos y validación funcional del prototipo completo. Mantener SQLite.

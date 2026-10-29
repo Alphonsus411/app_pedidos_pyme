@@ -307,3 +307,158 @@ def test_outbox_failure_rolls_back_confirmation(case):
         assert connection.execute("SELECT status FROM reservations").fetchone() == ("draft",)
         assert connection.execute("SELECT count(*) FROM idempotency").fetchone() == (0,)
         assert connection.execute("SELECT count(*) FROM transactional_outbox").fetchone() == (0,)
+
+
+def test_composed_execution_create_confirm_cancel_and_replay(case):
+    from universal_business.application.reservations.commands import (
+        CancelReservation,
+        CreateReservation,
+    )
+    from universal_business.infrastructure.sqlite_reservation_execution import (
+        SqliteReservationExecution,
+    )
+
+    path, existing, _ = case
+    reservation_id = ReservationId.generate()
+    with sqlite3.connect(path) as connection:
+        service = SqliteReservationExecution(connection, dispatcher=Mock(), publisher=Mock())
+        created = CreateReservation(
+            tenant_id=existing.tenant_id,
+            business_id=existing.business_id,
+            location_id=existing.location_id,
+            resource_id=existing.resource_id,
+            customer_id=existing.customer_id,
+            reservation_id=reservation_id,
+            interval=ReservationInterval(existing.time_range.start, existing.time_range.end),
+            idempotency_key=IdempotencyKey(value="service-create"),
+            party_size=2,
+        )
+        confirmed = ConfirmReservation(
+            tenant_id=existing.tenant_id,
+            business_id=existing.business_id,
+            location_id=existing.location_id,
+            reservation_id=reservation_id,
+            idempotency_key=IdempotencyKey(value="service-confirm"),
+        )
+        cancelled = CancelReservation(
+            tenant_id=existing.tenant_id,
+            business_id=existing.business_id,
+            location_id=existing.location_id,
+            reservation_id=reservation_id,
+            idempotency_key=IdempotencyKey(value="service-cancel"),
+        )
+        assert service.create(created).reservation_id == reservation_id
+        assert service.confirm(confirmed) == service.confirm(confirmed)
+        assert service.cancel(cancelled) == service.cancel(cancelled)
+        assert (
+            SqliteReservationRepository(connection)
+            .get(tenant_id=existing.tenant_id, reservation_id=reservation_id)
+            .status
+            == ReservationStatus.CANCELLED
+        )
+        assert connection.execute("SELECT count(*) FROM transactional_outbox").fetchone() == (3,)
+        assert connection.execute(
+            "SELECT count(*) FROM idempotency WHERE state='done'"
+        ).fetchone() == (3,)
+
+
+def test_composed_status_handlers_require_and_apply_policies(case):
+    from universal_business.application.errors import ApplicationError
+    from universal_business.application.reservations.commands import (
+        CheckInReservation,
+        CompleteReservation,
+    )
+    from universal_business.infrastructure.sqlite_reservation_execution import (
+        SqliteReservationExecution,
+    )
+
+    path, reservation, _ = case
+    with sqlite3.connect(path) as connection:
+        dispatcher, publisher = Mock(), Mock()
+        service = SqliteReservationExecution(connection, dispatcher=dispatcher, publisher=publisher)
+        scope = dict(
+            tenant_id=reservation.tenant_id,
+            business_id=reservation.business_id,
+            location_id=reservation.location_id,
+            reservation_id=reservation.id,
+        )
+        service.confirm(
+            ConfirmReservation(**scope, idempotency_key=IdempotencyKey(value="service-confirm"))
+        )
+        checkin = CheckInReservation(
+            **scope, idempotency_key=IdempotencyKey(value="service-checkin")
+        )
+        with pytest.raises(ApplicationError, match="política temporal"):
+            service.check_in(checkin)
+        deny = Mock()
+        deny.approve.return_value = False
+        with pytest.raises(ApplicationError):
+            SqliteReservationExecution(
+                connection, dispatcher=dispatcher, publisher=publisher, check_in_policy=deny
+            ).check_in(checkin)
+        allow = Mock()
+        allow.approve.return_value = True
+        service = SqliteReservationExecution(
+            connection, dispatcher=dispatcher, publisher=publisher, check_in_policy=allow
+        )
+        assert service.check_in(checkin).status == ReservationStatus.CHECKED_IN
+        completed = CompleteReservation(
+            **scope, idempotency_key=IdempotencyKey(value="service-complete")
+        )
+        assert service.complete(completed).status == ReservationStatus.COMPLETED
+        assert connection.execute("SELECT count(*) FROM transactional_outbox").fetchone() == (3,)
+
+
+def test_composed_execution_refuses_external_transaction(case):
+    from universal_business.infrastructure.sqlite_reservation_execution import (
+        SqliteReservationExecution,
+    )
+
+    path, reservation, _ = case
+    with sqlite3.connect(path) as connection:
+        service = SqliteReservationExecution(connection, dispatcher=Mock(), publisher=Mock())
+        command = ConfirmReservation(
+            tenant_id=reservation.tenant_id,
+            business_id=reservation.business_id,
+            location_id=reservation.location_id,
+            reservation_id=reservation.id,
+            idempotency_key=IdempotencyKey(value="service-confirm"),
+        )
+        connection.execute("BEGIN")
+        with pytest.raises(RuntimeError, match="sin transacción"):
+            service.confirm(command)
+        connection.rollback()
+        assert connection.execute("SELECT status FROM reservations").fetchone() == ("draft",)
+
+
+def test_composed_no_show_policy(case):
+    from universal_business.application.errors import ApplicationError
+    from universal_business.application.reservations.commands import MarkReservationNoShow
+    from universal_business.infrastructure.sqlite_reservation_execution import (
+        SqliteReservationExecution,
+    )
+
+    path, reservation, _ = case
+    with sqlite3.connect(path) as connection:
+        dispatcher, publisher = Mock(), Mock()
+        scope = dict(
+            tenant_id=reservation.tenant_id,
+            business_id=reservation.business_id,
+            location_id=reservation.location_id,
+            reservation_id=reservation.id,
+        )
+        service = SqliteReservationExecution(connection, dispatcher=dispatcher, publisher=publisher)
+        service.confirm(
+            ConfirmReservation(**scope, idempotency_key=IdempotencyKey(value="no-show-confirm"))
+        )
+        command = MarkReservationNoShow(**scope, idempotency_key=IdempotencyKey(value="no-show-001"))
+        with pytest.raises(ApplicationError, match="política temporal"):
+            service.no_show(command)
+        policy = Mock()
+        policy.approve.return_value = True
+        service = SqliteReservationExecution(
+            connection, dispatcher=dispatcher, publisher=publisher, no_show_policy=policy
+        )
+        assert service.no_show(command).status == ReservationStatus.NO_SHOW
+        assert service.no_show(command).status == ReservationStatus.NO_SHOW
+        assert connection.execute("SELECT count(*) FROM transactional_outbox").fetchone() == (2,)
