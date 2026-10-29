@@ -1,6 +1,7 @@
 """Concurrencia y recuperación de adjudicaciones experimentales SQLite."""
 
 import sqlite3
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import Mock
@@ -204,3 +205,23 @@ def test_existing_delivery_schema_can_add_quarantine_without_losing_events(tmp_p
             "SELECT event_id, payload FROM transactional_outbox"
         ).fetchall() == [("existing", b"original")]
         assert connection.execute("SELECT * FROM outbox_quarantine").fetchall() == []
+
+
+@pytest.mark.skipif(sys.version_info < (3, 12), reason="sqlite autocommit requiere Python 3.12")
+@pytest.mark.parametrize("operation", ["claim", "mark", "quarantine", "requeue"])
+def test_delivery_rejects_autocommit_true(
+    db_path: Path, event: DomainEvent, operation: str
+) -> None:
+    store = SqliteOutboxDeliveryStore(
+        connect=lambda: sqlite3.connect(db_path, **{"autocommit": True}),
+        decoder=Mock(),
+        lease_seconds=10,
+    )
+    actions = {
+        "claim": lambda: store.claim_one(),
+        "mark": lambda: store.mark_delivered(event.event_id, "token"),
+        "quarantine": lambda: store.quarantine(event.event_id, "reason"),
+        "requeue": lambda: store.requeue(event.event_id),
+    }
+    with pytest.raises(RuntimeError, match="conexión nueva"):
+        actions[operation]()

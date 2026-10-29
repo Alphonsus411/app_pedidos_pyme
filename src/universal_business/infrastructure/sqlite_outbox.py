@@ -126,7 +126,7 @@ class SqliteOutboxDeliveryStore:
     def claim_one(self) -> ClaimedOutboxEvent | None:
         connection = self._connect()
         try:
-            if connection.in_transaction:
+            if connection.in_transaction or getattr(connection, "autocommit", None) is True:
                 raise RuntimeError("Se requiere una conexión nueva sin transacción")
             connection.execute("BEGIN IMMEDIATE")
             now = self._now()
@@ -175,7 +175,7 @@ class SqliteOutboxDeliveryStore:
             raise ValueError("El motivo debe contener entre 1 y 500 caracteres")
         connection = self._connect()
         try:
-            if connection.in_transaction:
+            if connection.in_transaction or getattr(connection, "autocommit", None) is True:
                 raise RuntimeError("Se requiere una conexión nueva sin transacción")
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
@@ -205,7 +205,7 @@ class SqliteOutboxDeliveryStore:
             raise ValueError("Se requiere un identificador de evento")
         connection = self._connect()
         try:
-            if connection.in_transaction:
+            if connection.in_transaction or getattr(connection, "autocommit", None) is True:
                 raise RuntimeError("Se requiere una conexión nueva sin transacción")
             connection.execute("BEGIN IMMEDIATE")
             result = connection.execute(
@@ -223,7 +223,7 @@ class SqliteOutboxDeliveryStore:
     def mark_delivered(self, event_id: DomainEventId, claim_token: str, /) -> None:
         connection = self._connect()
         try:
-            if connection.in_transaction:
+            if connection.in_transaction or getattr(connection, "autocommit", None) is True:
                 raise RuntimeError("Se requiere una conexión nueva sin transacción")
             connection.execute("BEGIN IMMEDIATE")
             result = connection.execute(

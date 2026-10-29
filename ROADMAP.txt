@@ -554,3 +554,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] Persisten aislamiento por tenant, migraciones versionadas, scheduler, consumidores idempotentes, tratamiento operativo de fallos y funcionalidad de negocio persistente. El prototipo aún no está completo; SQLite continúa siendo la prioridad.
 
 [INTEGRADO EN MASTER] PR #49: cuarentena manual de eventos SQLite, merge f150e9a. CI del commit final: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40858986458 . Prueba adicional verifica que crear la tabla en una base previa conserva eventos. Revisión manual; revisión automática sin finalizar al integrar. Persisten migraciones versionadas y demás tareas del prototipo.
+
+68. REGISTRO DE AVANCE — 29-10-2026 (UNIDAD DE TRABAJO SQLITE)
+
+[COMPLETADO EN BORRADOR] SqliteUnitOfWork para transacción de un solo uso en conexión proporcionada por el caller: BEGIN IMMEDIATE, commit explícito, rollback sin commit, rechazo de anidamiento y doble commit seguro. No cierra la conexión. El ensamblaje debe proporcionar la misma conexión al repositorio y al escritor outbox; el contrato no comprueba esa coordinación.
+[COMPLETADO EN BORRADOR] Pruebas SQLite con conexiones independientes de visibilidad, rollback, error de commit, protección de transacción preexistente y uso con orquestador, codec real y outbox. Un fallo de commit se propaga sin afirmar que no se aplicó. Suite local de worktree parcial anterior a master: 1036 pruebas, salvo generador PDF; Ruff y mypy correctos.
+[EN CURSO] UoW no implementa repositorios reales de pedidos/reservas, idempotencia atómica, migraciones, autorización ni aislamiento entre tenants. El prototipo SQLite y los gates 0.4/0.5 siguen abiertos. La prueba de commit fallido simula un fallo anterior a la llamada real de SQLite; no demuestra recuperación ante un commit de resultado incierto.
