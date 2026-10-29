@@ -1,11 +1,14 @@
 """Creación de reserva con persistencia y outbox SQLite reales."""
 
 import sqlite3
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import Mock
 
-from tests.unit.test_application_reservation_confirm import LockedStore
+import pytest
+
+from universal_business.application.errors import IdempotencyConflictError
 from universal_business.application.events.reservation_codec import ReservationEventJsonCodec
 from universal_business.application.execution import execute_use_case
 from universal_business.application.idempotency import IdempotencyKey
@@ -29,6 +32,10 @@ from universal_business.domain.shared.value_objects.ids import (
 from universal_business.infrastructure.sqlite_customers import (
     SqliteCustomerRepository,
     create_sqlite_customers_schema,
+)
+from universal_business.infrastructure.sqlite_idempotency import (
+    SqliteReservationIdempotencyStore,
+    create_sqlite_idempotency_schema,
 )
 from universal_business.infrastructure.sqlite_locations import (
     SqliteLocationRepository,
@@ -57,6 +64,7 @@ def test_create_reservation_and_event_commit_together(tmp_path: Path) -> None:
         create_sqlite_customers_schema(setup)
         create_sqlite_resources_schema(setup)
         create_sqlite_locations_schema(setup)
+        create_sqlite_idempotency_schema(setup)
     tid, bid, lid, rid, cid = (
         TenantId.generate(),
         BusinessId.generate(),
@@ -112,7 +120,7 @@ def test_create_reservation_and_event_commit_together(tmp_path: Path) -> None:
             customers=customers,
             locations=locations,
             resources=resources,
-            idempotency=LockedStore(),
+            idempotency=SqliteReservationIdempotencyStore(connection),
         )
         result = execute_use_case(
             handler=handler,
@@ -125,11 +133,34 @@ def test_create_reservation_and_event_commit_together(tmp_path: Path) -> None:
             ),
         )
         assert result.reservation_id == command.reservation_id
+        replay = execute_use_case(
+            handler=handler,
+            input=command,
+            unit_of_work=SqliteUnitOfWork(connection),
+            event_dispatcher=Mock(),
+            event_publisher=Mock(),
+            outbox_writer=SqliteOutboxWriter(
+                connection=connection, encoder=ReservationEventJsonCodec()
+            ),
+        )
+        assert replay == result
+        with pytest.raises(IdempotencyConflictError):
+            execute_use_case(
+                handler=handler,
+                input=replace(command, notes="different"),
+                unit_of_work=SqliteUnitOfWork(connection),
+                event_dispatcher=Mock(),
+                event_publisher=Mock(),
+                outbox_writer=SqliteOutboxWriter(
+                    connection=connection, encoder=ReservationEventJsonCodec()
+                ),
+            )
         with sqlite3.connect(path) as reader:
             actual = SqliteReservationRepository(reader).get(
                 tenant_id=tid, reservation_id=command.reservation_id
             )
             assert actual is not None and actual.status == ReservationStatus.DRAFT
             assert reader.execute("SELECT count(*) FROM transactional_outbox").fetchone() == (1,)
+            assert reader.execute("SELECT state FROM idempotency").fetchall() == [("done",)]
     finally:
         connection.close()
