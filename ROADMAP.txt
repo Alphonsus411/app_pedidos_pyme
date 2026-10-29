@@ -686,4 +686,6 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 85. REGISTRO 2026-10-29 — idempotencia SQLite para pedidos
   [COMPLETADO] Almacén SQLite de resultados de creación, adición/eliminación de línea y cambio de estado de pedido, con codec explícito versionado y opción de completar en la misma UoW. El codec existente de reservas conserva su formato y comportamiento.
   [VALIDADO LOCALMENTE] Reapertura y replay de los cuatro resultados, aislamiento, propiedad de reserva, rollback, payload inválido y creación de pedido con repositorio, idempotencia y outbox reales en una transacción ensamblada explícitamente. 1148 pruebas en copia parcial, sin generador PDF por dependencia local; Ruff y mypy correctos.
-  [PENDIENTE] CI e integración; ensamblaje automático del ciclo completo de pedidos, pruebas de todos los comandos con outbox e idempotencia reales, catálogo transaccional, autorización y validación integral. Complete postcommit genérico aún puede dejar RESERVED. Mantener SQLite.
+  [PENDIENTE] Ensamblaje automático del ciclo completo de pedidos, pruebas de todos los comandos con outbox e idempotencia reales, catálogo transaccional, autorización y validación integral. Complete postcommit genérico aún puede dejar RESERVED. Mantener SQLite.
+
+  [INTEGRADO 2026-10-29] PR #67 fusionada en master (8927e72); CI completa, ejecución 40892693750. Sin comentarios de revisión al integrar.
