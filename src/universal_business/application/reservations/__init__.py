@@ -20,6 +20,7 @@ from universal_business.application.reservations.handlers import (
     ConfirmReservationHandler,
     ReservationConfirmation,
 )
+from universal_business.application.reservations.no_show_policy import GracePeriodNoShowPolicy
 from universal_business.application.reservations.queries import (
     GetReservation,
     ListReservationsByLocation,
@@ -50,6 +51,7 @@ __all__ = [
     "MarkReservationNoShow",
     "MarkReservationNoShowHandler",
     "NoShowPolicy",
+    "GracePeriodNoShowPolicy",
     "ReservationStatusResult",
     "CancelReservation",
     "CancelReservationHandler",

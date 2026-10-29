@@ -424,3 +424,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] Persistencia y protección durables, aislamiento real y autorización siguen pendientes; Gate 0.4 permanece abierto.
 
 [INTEGRADO EN MASTER] PR #35: política temporal obligatoria para no presentación, merge ba3d8a7. CI y revisión automática sin hallazgos: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40840159024 . Plazo y política reales, autorización y adaptadores siguen pendientes.
+
+54. REGISTRO DE AVANCE — 29-10-2026 (PLAZO CONFIGURABLE DE NO PRESENTACIÓN)
+
+[COMPLETADO EN BORRADOR] GracePeriodNoShowPolicy exige reloj y duración de cortesía explícitos; autoriza desde inicio más plazo por instantes UTC y rechaza reloj sin zona o duración negativa. No hay valor por defecto.
+[COMPLETADO EN BORRADOR] Pruebas de borde, reloj inválido y cambio horario con fold, además del handler de no presentación con fakes.
+[EN CURSO] El negocio debe seleccionar y configurar el plazo; la política no autoriza actores ni implementa mecanismos durables. El check-in sigue sin política temporal. Adaptadores reales y Gate 0.4 pendientes.
