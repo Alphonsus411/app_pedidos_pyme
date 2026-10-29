@@ -586,3 +586,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] Esquema inicial sin migraciones; se rechazan subtipos de los objetos del cliente. Fechas conservan instante y offset, no zona IANA. No hay autorización ni medidas completas de protección de datos personales. Repositorios de local/recurso, idempotencia durable y adjudicación, pedidos y validación integral siguen pendientes. Prototipo SQLite no terminado.
 
 [INTEGRADO EN MASTER] PR #53: repositorio de clientes SQLite y creación de reserva con clientes reales, merge 401eaeb. CI completa: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40861566183 . Revisión manual; revisión automática sin finalizar al integrar. Local, recurso e idempotencia siguen usando dobles en la prueba.
+
+72. REGISTRO DE AVANCE — 29-10-2026 (RECURSOS SQLITE)
+
+[COMPLETADO EN BORRADOR] Repositorio SQLite de recursos con consulta por tenant/business/ID y listados por ámbito, ubicación, estado y tipo persistente; escrituras en transacción activa y business/fecha de creación protegidos. Al reconstruir limpia el evento de creación generado por el constructor. El filtro legacy ResourceType se rechaza explícitamente porque no tiene un mapeo persistido; no se considera implementado.
+[COMPLETADO EN BORRADOR] Pruebas SQLite de aislamiento, rollback, filtros y ausencia de evento duplicado; la creación de reservas utiliza ahora repositorios reales de recursos, clientes y reservas con UoW y outbox SQLite. Ubicación e idempotencia siguen siendo dobles. Suite local de worktree parcial anterior a master: 1054 pruebas salvo generador PDF; Ruff y mypy correctos.
+[EN CURSO] Faltan repositorio de ubicación, tipos de recurso, integridad referencial, migraciones, autorización, idempotencia durable, adjudicación y protección compatibles para todos los cambios de recursos y reservas. Este repositorio no garantiza disponibilidad ni ausencia de solapes. El prototipo SQLite no está terminado.

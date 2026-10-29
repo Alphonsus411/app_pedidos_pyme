@@ -39,6 +39,10 @@ from universal_business.infrastructure.sqlite_reservations import (
     SqliteReservationRepository,
     create_sqlite_reservations_schema,
 )
+from universal_business.infrastructure.sqlite_resources import (
+    SqliteResourceRepository,
+    create_sqlite_resources_schema,
+)
 from universal_business.infrastructure.sqlite_unit_of_work import SqliteUnitOfWork
 
 
@@ -48,6 +52,7 @@ def test_create_reservation_and_event_commit_together(tmp_path: Path) -> None:
         create_sqlite_reservations_schema(setup)
         create_sqlite_outbox_schema(setup)
         create_sqlite_customers_schema(setup)
+        create_sqlite_resources_schema(setup)
     tid, bid, lid, rid, cid = (
         TenantId.generate(),
         BusinessId.generate(),
@@ -91,14 +96,16 @@ def test_create_reservation_and_event_commit_together(tmp_path: Path) -> None:
     try:
         repo = SqliteReservationRepository(connection)
         customers = SqliteCustomerRepository(connection)
+        resources = SqliteResourceRepository(connection)
         with SqliteUnitOfWork(connection) as uow:
             customers.save(customer)
+            resources.save(resource)
             uow.commit()
         handler = CreateReservationHandler(
             reservations=repo,
             customers=customers,
             locations=FixedRepo(location),
-            resources=FixedRepo(resource),
+            resources=resources,
             idempotency=LockedStore(),
         )
         result = execute_use_case(
