@@ -430,3 +430,5 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [COMPLETADO EN BORRADOR] GracePeriodNoShowPolicy exige reloj y duración de cortesía explícitos; autoriza desde inicio más plazo por instantes UTC y rechaza reloj sin zona o duración negativa. No hay valor por defecto.
 [COMPLETADO EN BORRADOR] Pruebas de borde, reloj inválido y cambio horario con fold, además del handler de no presentación con fakes.
 [EN CURSO] El negocio debe seleccionar y configurar el plazo; la política no autoriza actores ni implementa mecanismos durables. El check-in sigue sin política temporal. Adaptadores reales y Gate 0.4 pendientes.
+
+[INTEGRADO EN MASTER] PR #36: política configurable de plazo de no presentación, merge 7fd0e47. CI y revisión automática sin hallazgos: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40840601128 . La selección del plazo y la autorización siguen pendientes.
