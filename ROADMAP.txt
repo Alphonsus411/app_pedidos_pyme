@@ -454,3 +454,5 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 
 [COMPLETADO EN BORRADOR] Pruebas con fakes: crear y confirmar una reserva; llegada y finalización o no presentación; consulta final, políticas temporales conjuntas y replays con misma clave por operación. Se comprueba que las transiciones incompatibles fallan y que no se duplican eventos.
 [EN CURSO] La política temporal coordinada sigue siendo optativa. Los fakes no prueban adjudicación, disponibilidad completa, rollback ni concurrencia de base real, autorización o entrega durable. Gate 0.4 sigue abierto.
+
+[INTEGRADO EN MASTER] PR #39: flujos integrados de reservas con fakes, merge 7c37289. CI y revisión automática sin hallazgos: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40846753183 . No sustituye pruebas con infraestructura real ni autorización.
