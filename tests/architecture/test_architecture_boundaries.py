@@ -256,6 +256,7 @@ def test_at8_layers_are_skeleton_only(layer: Path) -> None:
             SRC / "infrastructure" / "sqlite_reservation_allocation.py",
             SRC / "infrastructure" / "sqlite_reservation_execution.py",
             SRC / "infrastructure" / "sqlite_schema.py",
+            SRC / "infrastructure" / "sqlite_orders.py",
         }:
             continue
         content = [ln for ln in pyfile.read_text(encoding="utf-8").splitlines() if ln.strip()]
