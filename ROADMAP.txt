@@ -578,3 +578,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] Permanecen pendientes repositorios reales complementarios, idempotencia durable/atómica, adjudicación y validación de disponibilidad bajo protección, autorización, migraciones y persistencia de pedidos. El prototipo funcional aún no está terminado y SQLite sigue siendo la prioridad.
 
 [INTEGRADO EN MASTER] PR #52: listado y prueba integrada de creación de reservas con SQLite, merge 9a95d0d. CI completa: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40861125618 . Revisión manual; revisión automática sin finalizar al integrar. Los repositorios complementarios y la idempotencia usados en la prueba son dobles.
+
+71. REGISTRO DE AVANCE — 29-10-2026 (CLIENTES SQLITE)
+
+[COMPLETADO EN BORRADOR] Repositorio SQLite de clientes con get por tenant/business/ID, referencia externa única por tenant/business y búsqueda filtrada; guarda contactos, direcciones, consentimientos, preferencias y datos básicos en transacción activa. El negocio y fecha de creación son inmutables al actualizar. La búsqueda de ubicación es exacta y lower SQLite no garantiza plegado Unicode completo.
+[COMPLETADO EN BORRADOR] Pruebas de ida/vuelta de los campos, aislamiento, rollback, unicidad y filtros. La prueba del handler de creación de reserva usa ahora repositorio real SQLite de clientes y reservas, UoW y outbox; local, recurso e idempotencia siguen siendo dobles. Suite local en worktree parcial anterior a master: 1051 pruebas excepto generador PDF; Ruff y mypy correctos.
+[EN CURSO] Esquema inicial sin migraciones; se rechazan subtipos de los objetos del cliente. Fechas conservan instante y offset, no zona IANA. No hay autorización ni medidas completas de protección de datos personales. Repositorios de local/recurso, idempotencia durable y adjudicación, pedidos y validación integral siguen pendientes. Prototipo SQLite no terminado.

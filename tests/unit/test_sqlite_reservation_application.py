@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import Mock
 
-from tests.unit.test_application_reservation_confirm import Customers, LockedStore
+from tests.unit.test_application_reservation_confirm import LockedStore
 from tests.unit.test_application_reservation_create import FixedRepo
 from universal_business.application.events.reservation_codec import ReservationEventJsonCodec
 from universal_business.application.execution import execute_use_case
@@ -27,6 +27,10 @@ from universal_business.domain.shared.value_objects.ids import (
     ResourceTypeId,
     TenantId,
 )
+from universal_business.infrastructure.sqlite_customers import (
+    SqliteCustomerRepository,
+    create_sqlite_customers_schema,
+)
 from universal_business.infrastructure.sqlite_outbox import (
     SqliteOutboxWriter,
     create_sqlite_outbox_schema,
@@ -43,6 +47,7 @@ def test_create_reservation_and_event_commit_together(tmp_path: Path) -> None:
     with sqlite3.connect(path) as setup:
         create_sqlite_reservations_schema(setup)
         create_sqlite_outbox_schema(setup)
+        create_sqlite_customers_schema(setup)
     tid, bid, lid, rid, cid = (
         TenantId.generate(),
         BusinessId.generate(),
@@ -85,9 +90,13 @@ def test_create_reservation_and_event_commit_together(tmp_path: Path) -> None:
     connection = sqlite3.connect(path)
     try:
         repo = SqliteReservationRepository(connection)
+        customers = SqliteCustomerRepository(connection)
+        with SqliteUnitOfWork(connection) as uow:
+            customers.save(customer)
+            uow.commit()
         handler = CreateReservationHandler(
             reservations=repo,
-            customers=Customers(customer),
+            customers=customers,
             locations=FixedRepo(location),
             resources=FixedRepo(resource),
             idempotency=LockedStore(),
