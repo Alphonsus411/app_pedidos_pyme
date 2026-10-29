@@ -151,3 +151,30 @@ def test_candidates_compare_instants_across_offsets(
             resource_id=reservation.resource_id,
             time_range=query,
         ) == [reservation]
+
+
+def test_list_by_location_filters_before_limit_and_scope(
+    db_path: Path, reservation: Reservation
+) -> None:
+    other_business = replace(
+        reservation, id=ReservationId.generate(), business_id=BusinessId.generate()
+    )
+    second = replace(reservation, id=ReservationId.generate(), status=ReservationStatus.CONFIRMED)
+    with sqlite3.connect(db_path) as connection:
+        repo = SqliteReservationRepository(connection)
+        with SqliteUnitOfWork(connection) as uow:
+            for item in (reservation, other_business, second):
+                repo.save(item)
+            uow.commit()
+        query = dict(
+            tenant_id=reservation.tenant_id,
+            business_id=reservation.business_id,
+            location_id=reservation.location_id,
+            status=ReservationStatus.CONFIRMED,
+            limit=1,
+        )
+        assert repo.list_by_location(**query) == [second]
+        assert repo.list_by_location(**(query | {"business_id": BusinessId.generate()})) == []
+        for invalid in (0, 101, True):
+            with pytest.raises(ValueError, match="límite"):
+                repo.list_by_location(**(query | {"limit": invalid}))
