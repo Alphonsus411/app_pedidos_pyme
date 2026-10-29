@@ -496,3 +496,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] No hay adaptador durable de producción, esquema completo, serialización de payload, worker ni reintentos. No activar la opción hasta contar con ellos: dejaría eventos sin entregar. SQLite no verifica concurrencia ni transacciones PostgreSQL. La idempotencia sigue completándose después de commit. Gate 0.4 y 0.5 siguen abiertos.
 
 [INTEGRADO EN MASTER] PR #42: puerto opcional y frontera transaccional de outbox, merge dbc8e6a. CI completa: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40850690848 . Revisión manual; no había revisión automática finalizada al integrar. Adaptador, worker, PostgreSQL e idempotencia atómica siguen pendientes.
+
+61. REGISTRO DE AVANCE — 29-10-2026 (LÓGICA DE ENTREGA OUTBOX)
+
+[COMPLETADO EN BORRADOR] OutboxDeliveryWorker procesa una entrada por invocación: solicita adjudicación durable mediante puerto, publica y después marca la entrega con event_id y token de adjudicación. Ausencia de entrada devuelve False; errores de publicación o marcado se propagan. El adaptador debe confirmar la adjudicación y verificar atómicamente propiedad y caducidad antes del marcado.
+[COMPLETADO EN BORRADOR] Pruebas unitarias con dobles para cola vacía, orden publicación/marcado, fallo de publicación, fallo de marcado y reintento potencialmente duplicado. Suite local en worktree anterior a master: 982 pruebas superadas, excepto generador PDF; Ruff y mypy correctos.
+[EN CURSO] No existe adaptador durable de adjudicación, recuperación por caducidad, serialización ni scheduler: el worker no debe activarse en producción. La entrega puede duplicarse después de una publicación incierta o fallo de marcado; los consumidores necesitan deduplicar event_id. Falta probar propiedad, expiración y concurrencia reales en PostgreSQL. No se ha cerrado ningún gate.
