@@ -451,7 +451,9 @@ def test_composed_no_show_policy(case):
         service.confirm(
             ConfirmReservation(**scope, idempotency_key=IdempotencyKey(value="no-show-confirm"))
         )
-        command = MarkReservationNoShow(**scope, idempotency_key=IdempotencyKey(value="no-show-001"))
+        command = MarkReservationNoShow(
+            **scope, idempotency_key=IdempotencyKey(value="no-show-001")
+        )
         with pytest.raises(ApplicationError, match="política temporal"):
             service.no_show(command)
         policy = Mock()
