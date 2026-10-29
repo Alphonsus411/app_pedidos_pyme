@@ -449,3 +449,8 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] La validación solo se aplica a quienes construyan ambas políticas mediante esta configuración; las políticas individuales pueden configurarse de forma contradictoria. Faltan integración obligatoria, autorización, persistencia y pruebas reales. Gate 0.4 abierto.
 
 [INTEGRADO EN MASTER] PR #38: configuración coordinada de políticas temporales, merge 9f71da7. CI: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40841741589 . Revisión manual; revisión automática en curso al integrar. El uso de esta configuración es opcional y la integración obligatoria queda pendiente.
+
+57. REGISTRO DE AVANCE — 29-10-2026 (FLUJOS INTEGRADOS DE RESERVAS)
+
+[COMPLETADO EN BORRADOR] Pruebas con fakes: crear y confirmar una reserva; llegada y finalización o no presentación; consulta final, políticas temporales conjuntas y replays con misma clave por operación. Se comprueba que las transiciones incompatibles fallan y que no se duplican eventos.
+[EN CURSO] La política temporal coordinada sigue siendo optativa. Los fakes no prueban adjudicación, disponibilidad completa, rollback ni concurrencia de base real, autorización o entrega durable. Gate 0.4 sigue abierto.
