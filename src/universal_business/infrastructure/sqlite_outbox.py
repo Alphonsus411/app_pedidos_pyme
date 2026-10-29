@@ -135,12 +135,13 @@ class SqliteOutboxDeliveryStore:
             if not isinstance(event, DomainEvent) or str(event.event_id) != row[0]:
                 raise ValueError("El evento decodificado no coincide con su identificador")
             token = token_urlsafe(32)
+            expires_at = self._now() + self._lease_seconds
             connection.execute(
                 """INSERT INTO outbox_delivery (event_id, token, expires_at)
                    VALUES (?, ?, ?)
                    ON CONFLICT(event_id) DO UPDATE SET token = excluded.token,
                      expires_at = excluded.expires_at""",
-                (row[0], token, now + self._lease_seconds),
+                (row[0], token, expires_at),
             )
             connection.commit()
             return ClaimedOutboxEvent(event=event, claim_token=token)
