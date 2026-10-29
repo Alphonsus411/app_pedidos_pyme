@@ -721,4 +721,6 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 90. REGISTRO 2026-10-29 — prueba transversal del prototipo SQLite
   [COMPLETADO] Prueba reproducible sobre base temporal v3: catálogo, pedido y reserva con repositorios SQLite; reintentos y reapertura, cola mixta y recuperación tras fallo de publicación y vencimiento de adjudicación.
   [VALIDADO LOCALMENTE] Pedido y reserva confirmados, seis eventos persistidos y marcados entregados por worker con publicador simulado; políticas de pedido simuladas. Suite parcial 1168 pruebas sin generador PDF por dependencia local; Ruff y mypy correctos.
-  [PENDIENTE] CI e integración; validación con políticas y autenticación/autorización reales, integridad referencial, integración externa y deduplicación de consumidores. No se ha validado un prototipo completo ni una entrega externa real. Mantener SQLite.
+  [PENDIENTE] Validación con políticas y autenticación/autorización reales, integridad referencial, integración externa y deduplicación de consumidores. No se ha validado un prototipo completo ni una entrega externa real. Mantener SQLite.
+
+  [INTEGRADO 2026-10-29] PR #72 fusionada en master (6e78303); CI completa, ejecución 40937992406. Sin comentarios de revisión al integrar.
