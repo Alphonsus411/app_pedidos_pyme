@@ -537,3 +537,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] La validación no cubre todavía los eventos de pedidos, aislamiento por tenant ni recuperación de mensajes inválidos en SQLite. Fases 0.4/0.5 abiertas; PostgreSQL aplazado según decisión del usuario.
 
 [INTEGRADO EN MASTER] PR #47: corrección del codec para cambio horario, merge 1331adf. CI completa: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40857905963 . Resuelve el hallazgo posterior de PR #46; revisión manual del cambio, revisión automática sin finalizar al integrar.
+
+66. REGISTRO DE AVANCE — 29-10-2026 (CODEC DE PEDIDOS Y COLA MIXTA SQLITE)
+
+[COMPLETADO EN BORRADOR] Codec JSON v1 explícito para OrderCreated, OrderLineAdded, OrderLineRemoved y OrderStatusChanged; preserva ID, ámbito, líneas, estado y metadata JSON limitada. Conserva instante y offset, no el nombre de zona IANA. Un codec combinado permite procesar pedidos y reservas en la misma cola SQLite sin cargar clases dinámicamente.
+[COMPLETADO EN BORRADOR] Pruebas de ida/vuelta, errores de formato, ambas ocurrencias de hora repetida, y escritura y entrega SQLite de eventos de pedidos y de una cola mixta. Suite local de worktree parcial anterior a master: 1025 pruebas salvo generador PDF; Ruff y mypy correctos. La CI valida master y extras completos.
+[EN CURSO] El codec no soporta todos los eventos del proyecto ni metadata arbitraria. Persisten aislamiento por tenant, gestión de eventos inválidos, migraciones, scheduler, consumidores idempotentes y pruebas adicionales. SQLite sigue siendo la prioridad para desarrollo y pruebas; gates 0.4/0.5 abiertos.
