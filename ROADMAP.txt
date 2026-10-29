@@ -714,4 +714,6 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 89. REGISTRO 2026-10-29 — adición de líneas al ensamblaje SQLite
   [COMPLETADO] SqliteOrderExecution incorpora AddOrderLine con oferta, pedido, guard, idempotencia y outbox en una UoW y una política de línea explícita. La protección depende de que las escrituras relevantes respeten la UoW SQLite.
   [VALIDADO LOCALMENTE] Ciclo de creación, adición desde oferta persistida y estados hasta completado; replay, oferta inactiva, política denegada, rollback ante fallo de outbox y bloqueo de escritor concurrente. Suite parcial 1167 pruebas sin generador PDF por dependencia local; Ruff y mypy correctos.
-  [PENDIENTE] CI e integración; autorización, configuración real de políticas, integridad referencial, entrega efectiva de eventos y validación integral del prototipo. Mantener SQLite.
+  [PENDIENTE] Autorización, configuración real de políticas, integridad referencial, entrega efectiva de eventos y validación integral del prototipo. Mantener SQLite.
+
+  [INTEGRADO 2026-10-29] PR #71 fusionada en master (2fcc37a); CI completa, ejecución 40927587553. Sin comentarios de revisión al integrar.
