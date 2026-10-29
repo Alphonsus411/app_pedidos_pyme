@@ -242,6 +242,10 @@ def test_at7_application_does_not_import_infrastructure(pyfile: Path) -> None:
 )
 def test_at8_layers_are_skeleton_only(layer: Path) -> None:
     for pyfile in iter_python_files(layer):
+        # Gate 0.5: único adaptador experimental de outbox autorizado.
+        # El resto de infraestructura, API y verticales sigue siendo esqueleto.
+        if pyfile == SRC / "infrastructure" / "sqlite_outbox.py":
+            continue
         content = [ln for ln in pyfile.read_text(encoding="utf-8").splitlines() if ln.strip()]
         # Permitir archivos con poco código (docstring + from __future__ + pass)
         assert len(content) <= 15, (
