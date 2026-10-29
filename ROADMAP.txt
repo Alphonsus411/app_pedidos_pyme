@@ -529,3 +529,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] El codec no cubre pedidos ni otros eventos y rechaza floats y objetos arbitrarios en metadata. Persisten aislamiento por tenant, tratamiento de mensajes inválidos, migraciones, scheduler, consumidores idempotentes y otras tareas de SQLite. La publicación puede duplicarse; no declarar listos los gates 0.4/0.5.
 
 [INTEGRADO EN MASTER] PR #46: codec JSON v1 de eventos de reserva y flujo SQLite, merge 9a20c8f. CI completa: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40853846870 . Revisión manual; no había revisión automática finalizada al integrar. Se continúa con SQLite para desarrollo y pruebas.
+
+65. REGISTRO DE AVANCE — 29-10-2026 (CAMBIO HORARIO DEL CODEC)
+
+[COMPLETADO EN BORRADOR] Corregida observación de revisión del PR #46: la comparación de ida y vuelta normaliza fechas a UTC antes de comparar eventos, evitando rechazar horas ambiguas con ZoneInfo. El formato conserva el instante y offset, pero no el identificador de zona IANA; el registro anterior de reconstrucción sin pérdida se entiende con esta limitación.
+[COMPLETADO EN BORRADOR] Pruebas para ambas ocurrencias de la hora repetida en Europe/Madrid; suite local en worktree anterior a master: 1006 pruebas, excepto generador PDF; Ruff y mypy correctos.
+[EN CURSO] La validación no cubre todavía los eventos de pedidos, aislamiento por tenant ni recuperación de mensajes inválidos en SQLite. Fases 0.4/0.5 abiertas; PostgreSQL aplazado según decisión del usuario.

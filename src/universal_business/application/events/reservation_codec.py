@@ -1,7 +1,8 @@
 """Codec JSON v1 para eventos de reserva, con tipos explícitos permitidos."""
 
 import json
-from datetime import datetime
+from dataclasses import replace
+from datetime import UTC, datetime
 from typing import Any
 
 from universal_business.domain.reservations.events import (
@@ -56,7 +57,8 @@ class ReservationEventJsonCodec:
     """Serialización v1 limitada a los cuatro tipos de eventos de reserva.
 
     Rechaza campos desconocidos y tipos no admitidos para evitar pérdida
-    silenciosa de datos. No permite importar clases a partir del documento.
+    silenciosa de datos. La fecha conserva instante y offset, pero ISO 8601
+    no conserva el nombre de zona IANA. No importa clases del documento.
     """
 
     def encode(self, event: DomainEvent, /) -> bytes:
@@ -96,7 +98,13 @@ class ReservationEventJsonCodec:
         payload = json.dumps(
             data, ensure_ascii=False, sort_keys=True, separators=(",", ":")
         ).encode("utf-8")
-        if self.decode(payload) != event:
+        decoded = self.decode(payload)
+        # ISO 8601 preserves the instant and offset, not the ZoneInfo key.
+        # Python equality for ambiguous local times differs between ZoneInfo
+        # and fixed offsets, so compare both event instants in UTC.
+        if replace(decoded, occurred_at=decoded.occurred_at.astimezone(UTC)) != replace(
+            event, occurred_at=event.occurred_at.astimezone(UTC)
+        ):
             raise ValueError("El evento no puede reconstruirse sin pérdida")
         return payload
 

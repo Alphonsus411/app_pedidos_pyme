@@ -2,8 +2,10 @@
 
 import json
 import sqlite3
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import Mock
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -59,6 +61,17 @@ def test_roundtrip_status_change() -> None:
     )
     codec = ReservationEventJsonCodec()
     assert codec.decode(codec.encode(event)) == event
+
+
+@pytest.mark.parametrize("fold", [0, 1])
+def test_roundtrip_ambiguous_madrid_time_preserves_instant(fold: int) -> None:
+    instant = datetime(2026, 10, 25, 2, 30, tzinfo=ZoneInfo("Europe/Madrid"), fold=fold)
+    event = ReservationCreated(**fields(), occurred_at=instant)
+    codec = ReservationEventJsonCodec()
+    decoded = codec.decode(codec.encode(event))
+    assert decoded.occurred_at.astimezone(UTC) == instant.astimezone(UTC)
+    assert decoded.event_id == event.event_id
+    assert decoded.tenant_id == event.tenant_id
 
 
 def test_reject_unknown_version_type_fields_and_duplicate_key() -> None:
