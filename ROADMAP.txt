@@ -441,3 +441,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] Adaptadores durables, pruebas transaccionales reales, autorización y Gate 0.4 siguen pendientes.
 
 [INTEGRADO EN MASTER] PR #37: ventana configurable obligatoria para llegada, merge 5843c72. CI y revisión automática sin hallazgos: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40841325873 . Configuración conjunta con no-show, autorización y adaptadores siguen pendientes.
+
+56. REGISTRO DE AVANCE — 29-10-2026 (COORDINACIÓN TEMPORAL DE RESERVAS)
+
+[COMPLETADO EN BORRADOR] ReservationTimingPolicies construye políticas de llegada y no presentación con reloj compartido y plazos explícitos. Exige gracia estrictamente mayor que el retraso de llegada porque ambos extremos son inclusivos; puede existir un intervalo sin transición permitida.
+[COMPLETADO EN BORRADOR] Pruebas de extremos, hueco, solapamiento y duraciones inválidas.
+[EN CURSO] La validación solo se aplica a quienes construyan ambas políticas mediante esta configuración; las políticas individuales pueden configurarse de forma contradictoria. Faltan integración obligatoria, autorización, persistencia y pruebas reales. Gate 0.4 abierto.
