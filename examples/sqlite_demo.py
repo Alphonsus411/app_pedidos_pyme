@@ -62,9 +62,26 @@ from universal_business.infrastructure.sqlite_schema import initialize_sqlite_sc
 from universal_business.infrastructure.sqlite_unit_of_work import SqliteUnitOfWork
 
 
-class DemoPolicy:
-    def approve(self, **kwargs):
-        return True
+class DemoTransitionPolicy:
+    """Ejemplo limitado a validar y confirmar un pedido de demostración."""
+
+    def approve(self, *, order, target):
+        return (order.status, target) in {
+            (OrderStatus.DRAFT, OrderStatus.VALIDATED),
+            (OrderStatus.VALIDATED, OrderStatus.CONFIRMED),
+        }
+
+
+class DemoLinePolicy:
+    """Ejemplo sin descuentos ni impuestos; no es una política fiscal."""
+
+    def approve(self, *, order, offering, line):
+        return (
+            order.status == OrderStatus.DRAFT
+            and offering.status == CatalogItemStatus.ACTIVE
+            and line.discount.amount == 0
+            and line.tax.amount == 0
+        )
 
 
 class DemoPublisher:
@@ -137,7 +154,7 @@ def run_demo(tmp_path):
                 )
             )
             uow.commit()
-        transition, line_policy = DemoPolicy(), DemoPolicy()
+        transition, line_policy = DemoTransitionPolicy(), DemoLinePolicy()
         orders = SqliteOrderExecution(
             connection,
             dispatcher=DomainEventDispatcher(),
