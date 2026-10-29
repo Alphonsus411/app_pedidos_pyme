@@ -66,7 +66,8 @@ python examples/sqlite_demo.py
 La demostración usa datos ficticios y crea una base temporal que se elimina al
 finalizar. Crea y confirma un pedido y una reserva, vuelve a abrir la base y
 procesa seis eventos con un publicador local simulado. Las políticas de esta
-demostración aprueban las operaciones para que el flujo pueda probarse; no son
-reglas de negocio, autenticación ni autorización para uso real. No envía
+demostración solo permiten validar y confirmar pedidos y líneas sin descuentos
+ni impuestos. Son reglas ficticias para la prueba, no son reglas de negocio
+reales ni sustituyen autenticación, autorización o política fiscal. No envía
 mensajes ni conecta con servicios externos. La prueba automatizada equivalente
 es `python -m pytest tests/unit/test_sqlite_demo.py` (requiere los extras `dev`).
