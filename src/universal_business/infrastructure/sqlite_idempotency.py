@@ -1,4 +1,4 @@
-"""Idempotencia SQLite experimental para creación de reservas.
+"""Idempotencia SQLite experimental para operaciones de reservas.
 
 El registro RESERVED comparte la transacción de dominio; DONE se escribe
 después del commit, tal como exige el orquestador actual. Una caída entre
@@ -9,9 +9,14 @@ instancia debe pertenecer a una sola ejecución y usar la conexión del UoW.
 import json
 import sqlite3
 from secrets import token_urlsafe
+from typing import Any
 
 from universal_business.application.idempotency import IdempotencyKey
+from universal_business.application.reservations.cancellation import ReservationCancellation
 from universal_business.application.reservations.creation import ReservationDraftCreated
+from universal_business.application.reservations.handlers import ReservationConfirmation
+from universal_business.application.reservations.status_change import ReservationStatusResult
+from universal_business.domain.reservations.value_objects import ReservationStatus
 from universal_business.domain.shared.value_objects.ids import (
     BusinessId,
     LocationId,
@@ -31,42 +36,84 @@ def create_sqlite_idempotency_schema(connection: sqlite3.Connection) -> None:
 
 
 def _encode(result: object) -> str:
-    if type(result) is not ReservationDraftCreated:
-        raise ValueError("Resultado no soportado por idempotencia SQLite")
-    return json.dumps(
-        {
-            "version": 1,
-            "tenant": str(result.tenant_id),
-            "business": str(result.business_id),
-            "location": str(result.location_id),
-            "reservation": str(result.reservation_id),
-            "resource": str(result.resource_id),
-        },
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-
-
-def _decode(payload: str) -> ReservationDraftCreated:
-    data = json.loads(payload)
-    if (
-        type(data) is not dict
-        or type(data.get("version")) is not int
-        or data["version"] != 1
-        or set(data) != {"version", "tenant", "business", "location", "reservation", "resource"}
+    if type(result) not in (
+        ReservationDraftCreated,
+        ReservationConfirmation,
+        ReservationCancellation,
+        ReservationStatusResult,
     ):
+        raise ValueError("Resultado no soportado por idempotencia SQLite")
+    assert isinstance(
+        result,
+        (
+            ReservationDraftCreated,
+            ReservationConfirmation,
+            ReservationCancellation,
+            ReservationStatusResult,
+        ),
+    )
+    data = {
+        "version": 1,
+        "tenant": str(result.tenant_id),
+        "business": str(result.business_id),
+        "location": str(result.location_id),
+        "reservation": str(result.reservation_id),
+        "resource": str(result.resource_id),
+    }
+    if type(result) is not ReservationDraftCreated:
+        data["version"] = 2
+        data["kind"] = {
+            ReservationConfirmation: "confirmation",
+            ReservationCancellation: "cancellation",
+            ReservationStatusResult: "status",
+        }[type(result)]
+        if isinstance(result, ReservationStatusResult):
+            if not isinstance(result.status, ReservationStatus):
+                raise ValueError("Estado de reserva inválido")
+            data["status"] = result.status.value
+    return json.dumps(data, sort_keys=True, separators=(",", ":"))
+
+
+def _decode(payload: str) -> object:
+    data = json.loads(payload)
+    if type(data) is not dict or type(data.get("version")) is not int:
         raise ValueError("Resultado de idempotencia inválido")
-    return ReservationDraftCreated(
+    base = {"version", "tenant", "business", "location", "reservation", "resource"}
+    version = data["version"]
+    result_type: type[
+        ReservationDraftCreated
+        | ReservationConfirmation
+        | ReservationCancellation
+        | ReservationStatusResult
+    ]
+    if version == 1 and set(data) == base:
+        result_type = ReservationDraftCreated
+    elif version == 2 and data.get("kind") in ("confirmation", "cancellation", "status"):
+        kind = data["kind"]
+        expected = base | {"kind"} | ({"status"} if kind == "status" else set())
+        if set(data) != expected:
+            raise ValueError("Resultado de idempotencia inválido")
+        result_type = {
+            "confirmation": ReservationConfirmation,
+            "cancellation": ReservationCancellation,
+            "status": ReservationStatusResult,
+        }[kind]
+    else:
+        raise ValueError("Resultado de idempotencia inválido")
+    fields: dict[str, Any] = dict(
         tenant_id=TenantId.from_raw(data["tenant"]),
         business_id=BusinessId.from_raw(data["business"]),
         location_id=LocationId.from_raw(data["location"]),
         reservation_id=ReservationId.from_raw(data["reservation"]),
         resource_id=ResourceId.from_raw(data["resource"]),
     )
+    if result_type is ReservationStatusResult:
+        return ReservationStatusResult(**fields, status=ReservationStatus(data["status"]))
+    return result_type(**fields)
 
 
 class SqliteReservationIdempotencyStore:
-    """Almacén por ejecución; solo admite ReservationDraftCreated.
+    """Almacén por ejecución para resultados explícitos de reservas.
 
     El token privado limita complete/release a la ejecución que reservó la
     clave. La conexión no se cierra. No usar como almacén general ni compartir

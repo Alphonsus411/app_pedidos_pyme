@@ -12,7 +12,11 @@ from universal_business.application.errors import IdempotencyConflictError
 from universal_business.application.events.reservation_codec import ReservationEventJsonCodec
 from universal_business.application.execution import execute_use_case
 from universal_business.application.idempotency import IdempotencyKey
-from universal_business.application.reservations.commands import CreateReservation
+from universal_business.application.reservations.cancellation import CancelReservationHandler
+from universal_business.application.reservations.commands import (
+    CancelReservation,
+    CreateReservation,
+)
 from universal_business.application.reservations.creation import CreateReservationHandler
 from universal_business.domain.business.entities import Location
 from universal_business.domain.business.value_objects import Address, LocationStatus, OperatingHours
@@ -162,5 +166,43 @@ def test_create_reservation_and_event_commit_together(tmp_path: Path) -> None:
             assert actual is not None and actual.status == ReservationStatus.DRAFT
             assert reader.execute("SELECT count(*) FROM transactional_outbox").fetchone() == (1,)
             assert reader.execute("SELECT state FROM idempotency").fetchall() == [("done",)]
+        cancel = CancelReservation(
+            tenant_id=tid,
+            business_id=bid,
+            location_id=lid,
+            reservation_id=command.reservation_id,
+            idempotency_key=IdempotencyKey(value="cancel-res-001"),
+        )
+        guard = Mock()
+        cancel_handler = CancelReservationHandler(
+            reservations=repo,
+            guard=guard,
+            idempotency=SqliteReservationIdempotencyStore(connection),
+        )
+
+        def cancel_once():
+            return execute_use_case(
+                handler=cancel_handler,
+                input=cancel,
+                unit_of_work=SqliteUnitOfWork(connection),
+                event_dispatcher=Mock(),
+                event_publisher=Mock(),
+                outbox_writer=SqliteOutboxWriter(
+                    connection=connection, encoder=ReservationEventJsonCodec()
+                ),
+            )
+
+        cancellation = cancel_once()
+        assert cancel_once() == cancellation
+        guard.protect.assert_called_once()
+        with sqlite3.connect(path) as reader:
+            actual = SqliteReservationRepository(reader).get(
+                tenant_id=tid, reservation_id=command.reservation_id
+            )
+            assert actual is not None and actual.status == ReservationStatus.CANCELLED
+            assert reader.execute("SELECT count(*) FROM transactional_outbox").fetchone() == (2,)
+            assert reader.execute(
+                "SELECT count(*) FROM idempotency WHERE state='done'"
+            ).fetchone() == (2,)
     finally:
         connection.close()
