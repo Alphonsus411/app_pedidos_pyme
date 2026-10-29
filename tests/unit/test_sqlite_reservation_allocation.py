@@ -449,3 +449,148 @@ def test_composed_no_show_policy(case):
         assert service.no_show(command).status == ReservationStatus.NO_SHOW
         assert service.no_show(command).status == ReservationStatus.NO_SHOW
         assert connection.execute("SELECT count(*) FROM transactional_outbox").fetchone() == (2,)
+
+
+def test_composed_idempotency_and_domain_commit_together(case):
+    from universal_business.infrastructure.sqlite_reservation_execution import (
+        SqliteReservationExecution,
+    )
+
+    path, reservation, _ = case
+    with sqlite3.connect(path) as connection:
+        statements = []
+        connection.set_trace_callback(statements.append)
+        service = SqliteReservationExecution(connection, dispatcher=Mock(), publisher=Mock())
+        command = ConfirmReservation(
+            tenant_id=reservation.tenant_id,
+            business_id=reservation.business_id,
+            location_id=reservation.location_id,
+            reservation_id=reservation.id,
+            idempotency_key=IdempotencyKey(value="atomic-confirm"),
+        )
+        service.confirm(command)
+        transaction = [s.upper() for s in statements]
+        update = next(
+            i for i, sql in enumerate(transaction) if sql.startswith("UPDATE IDEMPOTENCY SET")
+        )
+        outbox = next(
+            i
+            for i, sql in enumerate(transaction)
+            if sql.startswith("INSERT INTO TRANSACTIONAL_OUTBOX")
+        )
+        commits = [i for i, sql in enumerate(transaction) if sql == "COMMIT"]
+        assert len(commits) == 1 and update < commits[0] and outbox < commits[0]
+    with sqlite3.connect(path) as connection:
+        assert connection.execute("SELECT state FROM idempotency").fetchone() == ("done",)
+        assert connection.execute("SELECT status FROM reservations").fetchone() == ("confirmed",)
+        assert connection.execute("SELECT count(*) FROM transactional_outbox").fetchone() == (1,)
+        service = SqliteReservationExecution(connection, dispatcher=Mock(), publisher=Mock())
+        assert service.confirm(command).reservation_id == reservation.id
+        assert connection.execute("SELECT count(*) FROM transactional_outbox").fetchone() == (1,)
+
+
+def test_composed_idempotency_failure_rolls_back_everything(case):
+    from universal_business.infrastructure.sqlite_reservation_execution import (
+        SqliteReservationExecution,
+    )
+
+    path, reservation, _ = case
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            "CREATE TRIGGER reject_completion BEFORE UPDATE ON idempotency BEGIN SELECT RAISE(ABORT, 'idempotency failure'); END"
+        )
+        service = SqliteReservationExecution(connection, dispatcher=Mock(), publisher=Mock())
+        command = ConfirmReservation(
+            tenant_id=reservation.tenant_id,
+            business_id=reservation.business_id,
+            location_id=reservation.location_id,
+            reservation_id=reservation.id,
+            idempotency_key=IdempotencyKey(value="atomic-confirm"),
+        )
+        with pytest.raises(sqlite3.IntegrityError, match="idempotency failure"):
+            service.confirm(command)
+        assert connection.execute("SELECT status FROM reservations").fetchone() == ("draft",)
+        assert connection.execute("SELECT count(*) FROM idempotency").fetchone() == (0,)
+        assert connection.execute("SELECT count(*) FROM transactional_outbox").fetchone() == (0,)
+        connection.execute("DROP TRIGGER reject_completion")
+        assert service.confirm(command).reservation_id == reservation.id
+
+
+def test_composed_outbox_failure_rolls_back_completed_idempotency(case):
+    from universal_business.infrastructure.sqlite_reservation_execution import (
+        SqliteReservationExecution,
+    )
+
+    path, reservation, _ = case
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            "CREATE TRIGGER reject_outbox BEFORE INSERT ON transactional_outbox BEGIN SELECT RAISE(ABORT, 'outbox failure'); END"
+        )
+        service = SqliteReservationExecution(connection, dispatcher=Mock(), publisher=Mock())
+        command = ConfirmReservation(
+            tenant_id=reservation.tenant_id,
+            business_id=reservation.business_id,
+            location_id=reservation.location_id,
+            reservation_id=reservation.id,
+            idempotency_key=IdempotencyKey(value="atomic-outbox"),
+        )
+        with pytest.raises(sqlite3.IntegrityError, match="outbox failure"):
+            service.confirm(command)
+        assert connection.execute("SELECT status FROM reservations").fetchone() == ("draft",)
+        assert connection.execute("SELECT count(*) FROM idempotency").fetchone() == (0,)
+        assert connection.execute("SELECT count(*) FROM transactional_outbox").fetchone() == (0,)
+
+
+def test_dispatch_failure_after_commit_allows_safe_replay(case):
+    from universal_business.infrastructure.sqlite_reservation_execution import (
+        SqliteReservationExecution,
+    )
+
+    path, reservation, _ = case
+    with sqlite3.connect(path) as connection:
+        dispatcher = Mock()
+        dispatcher.dispatch_many.side_effect = RuntimeError("dispatch failed")
+        service = SqliteReservationExecution(connection, dispatcher=dispatcher, publisher=Mock())
+        command = ConfirmReservation(
+            tenant_id=reservation.tenant_id,
+            business_id=reservation.business_id,
+            location_id=reservation.location_id,
+            reservation_id=reservation.id,
+            idempotency_key=IdempotencyKey(value="atomic-dispatch"),
+        )
+        with pytest.raises(RuntimeError, match="dispatch failed"):
+            service.confirm(command)
+        assert connection.execute("SELECT state FROM idempotency").fetchone() == ("done",)
+        assert connection.execute("SELECT count(*) FROM transactional_outbox").fetchone() == (1,)
+        assert service.confirm(command).reservation_id == reservation.id
+        assert dispatcher.dispatch_many.call_count == 1
+
+
+def test_composed_uncertain_commit_can_be_replayed(case):
+    from universal_business.infrastructure.sqlite_reservation_execution import (
+        SqliteReservationExecution,
+    )
+
+    class CommitThenFail(sqlite3.Connection):
+        def commit(self):
+            super().commit()
+            raise RuntimeError("commit result uncertain")
+
+    path, reservation, _ = case
+    command = ConfirmReservation(
+        tenant_id=reservation.tenant_id,
+        business_id=reservation.business_id,
+        location_id=reservation.location_id,
+        reservation_id=reservation.id,
+        idempotency_key=IdempotencyKey(value="atomic-uncertain"),
+    )
+    with sqlite3.connect(path, factory=CommitThenFail) as connection:
+        service = SqliteReservationExecution(connection, dispatcher=Mock(), publisher=Mock())
+        with pytest.raises(RuntimeError, match="commit result uncertain"):
+            service.confirm(command)
+    with sqlite3.connect(path) as connection:
+        assert connection.execute("SELECT state FROM idempotency").fetchone() == ("done",)
+        assert connection.execute("SELECT count(*) FROM transactional_outbox").fetchone() == (1,)
+        service = SqliteReservationExecution(connection, dispatcher=Mock(), publisher=Mock())
+        assert service.confirm(command).reservation_id == reservation.id
+        assert connection.execute("SELECT count(*) FROM transactional_outbox").fetchone() == (1,)

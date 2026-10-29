@@ -26,6 +26,8 @@ validar una migración específica. No usar esta inicialización como herramient
 de migración ni como sustituto de copias de seguridad.
 
 El ensamblaje `SqliteReservationExecution` requiere que la frontera autentique
-y autorice cada operación. La entrega de outbox necesita su worker; el fallo
-entre el commit y la finalización de idempotencia aún requiere reconciliación.
+y autorice cada operación. La entrega de outbox necesita su worker. En ese
+ensamblaje, resultado de idempotencia y cambios se confirman juntos; registros
+RESERVED de ejecuciones anteriores siguen requiriendo reconciliación manual.
+Otros usos del almacén mantienen su modalidad previa de complete postcommit.
 El prototipo completo continúa en desarrollo.

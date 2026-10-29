@@ -24,6 +24,7 @@ from universal_business.domain.shared.value_objects.ids import (
     ResourceId,
     TenantId,
 )
+from universal_business.infrastructure.sqlite_unit_of_work import SqliteUnitOfWork
 
 
 def create_sqlite_idempotency_schema(connection: sqlite3.Connection) -> None:
@@ -178,6 +179,32 @@ class SqliteReservationIdempotencyStore:
         except BaseException:
             self._connection.rollback()
             raise
+        self._owned.pop(identity, None)
+
+    def complete_in_uow(
+        self,
+        uow: SqliteUnitOfWork,
+        tenant_id: TenantId,
+        key: IdempotencyKey,
+        request_digest: str,
+        result_object: object,
+    ) -> None:
+        """Completar en la misma transacción que el dominio y la outbox."""
+        if uow.connection is not self._connection:
+            raise RuntimeError("Idempotencia y UoW deben compartir conexión")
+        uow.require_active()
+        identity = (str(tenant_id), key.value)
+        token = self._owned.get(identity)
+        if token is None:
+            raise RuntimeError("Complete requiere reserva propia")
+        encoded = _encode(result_object)
+        updated = self._connection.execute(
+            "UPDATE idempotency SET state='done', result=? "
+            "WHERE tenant_id=? AND key=? AND token=? AND digest=? AND state='reserved'",
+            (encoded, *identity, token, request_digest),
+        )
+        if updated.rowcount != 1:
+            raise RuntimeError("Reserva de idempotencia no válida o ajena")
         self._owned.pop(identity, None)
 
     def release(self, tenant_id: TenantId, key: IdempotencyKey, /) -> None:
