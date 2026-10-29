@@ -520,3 +520,10 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 [EN CURSO] Experimental: el decodificador se inyecta, no hay codec versionado real, migraciones, aislamiento multitenant, cuarentena de eventos inválidos ni scheduler. Un evento que no se decodifica puede bloquear el procesamiento; el reloj debe ser consistente. No hay garantía exactamente una vez: pueden darse duplicados y los consumidores deben deduplicar. No usar en producción ni extrapolar pruebas SQLite a PostgreSQL; gates 0.4 y 0.5 abiertos.
 
 [INTEGRADO EN MASTER] PR #45: adjudicación outbox SQLite experimental, merge 6439c2b. CI del commit final: https://github.com/Alphonsus411/app_pedidos_pyme/actions/runs/40853316935 . La revisión automática señaló el cálculo prematuro del plazo; corregido y cubierto con prueba. Codec real, scheduler, aislamiento, PostgreSQL y prevención de duplicados siguen pendientes.
+
+64. REGISTRO DE AVANCE — 29-10-2026 (SQLITE Y CODEC DE RESERVAS)
+
+[DECISIÓN DEL USUARIO] Continuar con SQLite para desarrollo y pruebas hasta comprobar y validar el conjunto. PostgreSQL queda aplazado; no es requisito inmediato ni implica que SQLite esté listo para producción.
+[COMPLETADO EN BORRADOR] Codec JSON versión 1 explícito para ReservationCreated, ReservationConfirmed, ReservationCancelled y ReservationStatusChanged. Preserva identificadores, fechas, ámbito, estados y metadata JSON limitada; rechaza tipos o versiones desconocidos, campos extra, duplicados y valores no soportados. Sin importación dinámica ni pickle. Se verifica reconstrucción sin pérdida antes de guardar.
+[COMPLETADO EN BORRADOR] Pruebas de ida y vuelta, corrupción y flujo con escritor, SQLite, adjudicación y worker usando codec real. Suite local en worktree anterior a master: 1004 pruebas, excepto generador PDF; Ruff y mypy correctos.
+[EN CURSO] El codec no cubre pedidos ni otros eventos y rechaza floats y objetos arbitrarios en metadata. Persisten aislamiento por tenant, tratamiento de mensajes inválidos, migraciones, scheduler, consumidores idempotentes y otras tareas de SQLite. La publicación puede duplicarse; no declarar listos los gates 0.4/0.5.
