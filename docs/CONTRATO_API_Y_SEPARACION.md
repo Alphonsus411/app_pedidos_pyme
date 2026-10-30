@@ -50,6 +50,7 @@ sus limitaciones; el resto del contrato sigue siendo evolutivo.
 ### Operaciones privadas de personal
 
 - `GET /staff/businesses/{business_slug}/locations/{location_slug}/orders`: lectura inicial de pedidos. Requiere Bearer, el permiso `read_orders` y asociación explícita al negocio y ubicación solicitados.
+- `GET /staff/businesses/{business_slug}/locations/{location_slug}/orders/{order_id}`: detalle de un pedido solo si pertenece al ámbito ya autorizado. Un identificador malformado o ajeno responde como no encontrado y no concede ni revela acceso entre negocios.
 - El prototipo compone un autenticador de tokens estáticos fuera de la aplicación; no emite, almacena, rota ni revoca tokens. Sirve para validar la frontera de autorización y no es una solución de identidad de producción.
 - Toda ruta `/staff/...` posterior requiere identidad autenticada, rol y asociación vigente a negocio y ubicación.
 - `/platform/... `: requiere rol de plataforma explícito. No hereda acceso a datos de todos los negocios por ser administrador.

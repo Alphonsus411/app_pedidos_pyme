@@ -790,3 +790,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
   [COMPLETADO] El adaptador HTTP normaliza errores en `{error: {code, message, request_id}}` y devuelve el UUID de correlación en `X-Request-ID`. Conserva una cabecera UUID válida del cliente y sustituye valores ausentes o malformados. Cubre errores HTTP, validación y fallos inesperados sin exponer detalles de infraestructura.
   [VALIDADO LOCALMENTE] Pruebas de respuesta 503 compuesta, 422 de validación y 404 de ruta inexistente, incluida generación y propagación segura de identificadores; suite completa, Ruff, formato y mypy correctos.
   [LIMITACIONES] El identificador no se persiste ni se envía a una plataforma de observabilidad; no hay auditoría, rate limiting, CORS por entorno ni gestión centralizada de errores de dependencias externas. La identidad de personal sigue siendo estática y exclusiva de pruebas. No hay cambios en el núcleo, pagos, notificaciones ni frontend de Fripollo.
+
+
+102. REGISTRO 2026-10-30 — detalle privado de pedidos con aislamiento de recurso
+  [COMPLETADO] GET /api/v1/staff/businesses/{business_slug}/locations/{location_slug}/orders/{order_id} reutiliza la identidad técnica y comprueba el pedido dentro del tenant, negocio y ubicación autorizados antes de serializarlo. Los identificadores internos siguen sin exponerse.
+  [VALIDADO LOCALMENTE] Pruebas HTTP con SQLite real: lectura del pedido autorizado, rechazo como 404 de un UUID del otro negocio y de un identificador malformado, además de la cobertura previa de 401, 403, 422 y 503. Ruff, formato y mypy de apps/api correctos.
+  [LIMITACIONES] Es una lectura acotada, sin acciones privadas sobre el pedido, auditoría, identidad gestionada, secretos por entorno, límites de solicitud ni paginación con cursor. No hay confirmación, pago, notificaciones, panel ni integración de Fripollo. SQLite se mantiene para el prototipo.

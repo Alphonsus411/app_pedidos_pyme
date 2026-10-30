@@ -8,6 +8,7 @@ from apps.api.app.public_orders import PublicOrderItem, PublicOrderRejected, Sql
 from apps.api.app.staff_auth import AuthenticationRequired, StaticBearerAuthenticator
 from apps.api.app.staff_orders import (
     SqliteStaffOrders,
+    StaffOrderNotFound,
     StaffOrdersForbidden,
     StaffOrdersUnavailable,
 )
@@ -125,6 +126,42 @@ def create_app(
                 status_code=403, detail="Access to staff scope is forbidden"
             ) from None
         return {"items": items}
+
+    @app.get(
+        "/api/v1/staff/businesses/{business_slug}/locations/{location_slug}/orders/{order_id}",
+        tags=["staff-orders"],
+    )
+    def get_staff_order(
+        business_slug: str,
+        location_slug: str,
+        order_id: str,
+        authorization: str | None = Header(default=None),
+    ) -> dict[str, object]:
+        if staff_authenticator is None or staff_orders is None:
+            raise HTTPException(status_code=503, detail="Staff orders are not configured")
+        try:
+            principal = staff_authenticator.authenticate(authorization)
+        except AuthenticationRequired:
+            raise HTTPException(
+                status_code=401,
+                detail="Authentication is required",
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from None
+        try:
+            return staff_orders.get_for_location(
+                principal=principal,
+                business_slug=business_slug,
+                location_slug=location_slug,
+                order_id=order_id,
+            )
+        except StaffOrdersUnavailable:
+            raise HTTPException(status_code=404, detail="Staff scope not found") from None
+        except StaffOrdersForbidden:
+            raise HTTPException(
+                status_code=403, detail="Access to staff scope is forbidden"
+            ) from None
+        except StaffOrderNotFound:
+            raise HTTPException(status_code=404, detail="Staff order not found") from None
 
     return app
 

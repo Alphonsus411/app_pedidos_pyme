@@ -36,7 +36,7 @@ from universal_business.infrastructure.sqlite_schema import initialize_sqlite_sc
 from universal_business.infrastructure.sqlite_unit_of_work import SqliteUnitOfWork
 
 
-def _staff_client(database_path: str) -> TestClient:
+def _staff_client(database_path: str) -> tuple[TestClient, str, str]:
     first_tenant, second_tenant = TenantId.generate(), TenantId.generate()
     first_business, second_business = BusinessId.generate(), BusinessId.generate()
     first_location, second_location = LocationId.generate(), LocationId.generate()
@@ -91,13 +91,13 @@ def _staff_client(database_path: str) -> TestClient:
         connect=lambda: sqlite3.connect(database_path),
         scopes=scopes,
     )
-    public_orders.create_draft(
+    first_order = public_orders.create_draft(
         business_slug="first",
         location_slug="main",
         idempotency_key="first-order-0001",
         items=[PublicOrderItem(offering_id=str(first_offering), quantity=Decimal("1"))],
     )
-    public_orders.create_draft(
+    second_order = public_orders.create_draft(
         business_slug="second",
         location_slug="main",
         idempotency_key="second-order-0001",
@@ -127,18 +127,22 @@ def _staff_client(database_path: str) -> TestClient:
             ),
         }
     )
-    return TestClient(
-        create_app(
-            staff_authenticator=authenticator,
-            staff_orders=SqliteStaffOrders(
-                connect=lambda: sqlite3.connect(database_path), scopes=scopes
-            ),
-        )
+    return (
+        TestClient(
+            create_app(
+                staff_authenticator=authenticator,
+                staff_orders=SqliteStaffOrders(
+                    connect=lambda: sqlite3.connect(database_path), scopes=scopes
+                ),
+            )
+        ),
+        str(first_order["id"]),
+        str(second_order["id"]),
     )
 
 
 def test_staff_order_list_requires_identity_and_enforces_business_isolation(tmp_path) -> None:
-    client = _staff_client(str(tmp_path / "staff-orders.db"))
+    client, _, _ = _staff_client(str(tmp_path / "staff-orders.db"))
     first_route = "/api/v1/staff/businesses/first/locations/main/orders"
     second_route = "/api/v1/staff/businesses/second/locations/main/orders"
 
@@ -156,7 +160,7 @@ def test_staff_order_list_requires_identity_and_enforces_business_isolation(tmp_
 
 
 def test_staff_order_list_rejects_unknown_credentials_and_invalid_limits(tmp_path) -> None:
-    client = _staff_client(str(tmp_path / "staff-orders.db"))
+    client, _, _ = _staff_client(str(tmp_path / "staff-orders.db"))
     route = "/api/v1/staff/businesses/first/locations/main/orders"
 
     invalid_token = client.get(route, headers={"Authorization": "Bearer unknown-token"})
@@ -177,6 +181,21 @@ def test_static_authenticator_rejects_non_ascii_bearer_tokens() -> None:
 
     with pytest.raises(AuthenticationRequired):
         authenticator.authenticate("Bearer café")
+
+
+def test_staff_order_detail_is_authorized_and_cannot_cross_resource_boundaries(tmp_path) -> None:
+    client, first_order_id, second_order_id = _staff_client(str(tmp_path / "staff-orders.db"))
+    route = "/api/v1/staff/businesses/first/locations/main/orders"
+    headers = {"Authorization": "Bearer first-staff-token"}
+
+    allowed = client.get(f"{route}/{first_order_id}", headers=headers)
+    cross_scope = client.get(f"{route}/{second_order_id}", headers=headers)
+    malformed = client.get(f"{route}/not-a-uuid", headers=headers)
+
+    assert allowed.status_code == 200
+    assert allowed.json()["id"] == first_order_id
+    assert cross_scope.status_code == 404
+    assert malformed.status_code == 404
 
 
 def test_staff_order_list_is_unavailable_without_explicit_composition() -> None:
