@@ -1,9 +1,9 @@
 # API local del prototipo
 
 Adaptador HTTP independiente del núcleo. Expone GET /health y, cuando el
-entorno compone explícitamente los adaptadores SQLite, catálogo público y
-creación de borradores de pedido. El módulo no abre SQLite por sí mismo ni
-autentica usuarios.
+entorno compone explícitamente los adaptadores SQLite, catálogo público,
+creación de borradores y lectura de pedidos de personal. El módulo no abre
+SQLite por sí mismo.
 
 Instalación local desde la raíz del repositorio:
 
@@ -12,6 +12,11 @@ Instalación local desde la raíz del repositorio:
 
 La creación pública solo deja pedidos en estado `draft`: no los valida, confirma,
 cobra ni envía notificaciones. Requiere `Idempotency-Key`, resuelve el ámbito en
-el servidor y recalcula el importe desde las ofertas activas. La composición,
-identidad, autorización, límites y configuración segura por entorno siguen
-pendientes.
+el servidor y recalcula el importe desde las ofertas activas.
+
+La lectura bajo `/api/v1/staff/...` exige `Authorization: Bearer` y comprueba un
+permiso de lectura limitado al negocio y ubicación solicitados. Durante el
+prototipo, el autenticador recibe tokens estáticos por composición explícita: no
+emite tokens, no almacena credenciales y no es apto para producción. Siguen
+pendientes un proveedor de identidad, gestión segura de secretos, renovación y
+revocación de credenciales, auditoría, límites y configuración por entorno.
