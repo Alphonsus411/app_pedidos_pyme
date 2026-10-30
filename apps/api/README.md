@@ -14,6 +14,12 @@ La creación pública solo deja pedidos en estado `draft`: no los valida, confir
 cobra ni envía notificaciones. Requiere `Idempotency-Key`, resuelve el ámbito en
 el servidor y recalcula el importe desde las ofertas activas.
 
+El catálogo público acepta `limit` entre 1 y 100 y un cursor opaco `cursor`; la
+respuesta devuelve `next_cursor` o `null`. El cursor no concede acceso ni
+contiene ámbitos internos de negocio. En este prototipo SQLite el adaptador aún
+carga el resultado del catálogo antes de recortarlo; no es paginación eficiente
+para catálogos grandes.
+
 La lectura bajo `/api/v1/staff/...` exige `Authorization: Bearer` y comprueba un
 permiso de lectura limitado al negocio y ubicación solicitados. Durante el
 prototipo, el autenticador recibe tokens estáticos por composición explícita: no
