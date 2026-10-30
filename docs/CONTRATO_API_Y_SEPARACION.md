@@ -79,7 +79,8 @@ Las rutas actuales ya devuelven este sobre de error y una cabecera `X-Request-ID
 - Los importes se serializarán como cadenas decimales y código ISO de moneda; no se usa `float`.
 - La versión mayor vive en la URL. Cambios incompatibles requieren una nueva versión o una transición documentada.
 - Los identificadores expuestos son opacos. Los consumidores no dependen de nombres de tablas ni de claves internas.
-- CORS, límites de solicitud, credenciales, retención y observabilidad se fijarán por entorno al implementar F2.
+- CORS se compone por entorno con una lista cerrada de orígenes HTTP(S), sin `*`, rutas ni credenciales embebidas. Por defecto no se habilita. La API expone `X-Request-ID` al navegador y permite los encabezados `Authorization`, `Content-Type`, `Idempotency-Key` y `X-Request-ID` para las rutas actuales.
+- Límites de solicitud, identidad gestionada, retención y observabilidad siguen pendientes de fijar por entorno.
 
 ## Criterios realizados y siguientes de F2
 

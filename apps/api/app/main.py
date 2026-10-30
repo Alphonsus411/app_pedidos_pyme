@@ -2,6 +2,7 @@
 
 from decimal import Decimal
 
+from apps.api.app.cors import ApiCorsSettings, install_cors
 from apps.api.app.error_contract import install_error_contract
 from apps.api.app.public_catalog import (
     PublicCatalogCursorInvalid,
@@ -37,6 +38,7 @@ def create_app(
     *,
     public_catalog: PublicCatalogReader | None = None,
     public_orders: SqlitePublicOrders | None = None,
+    cors_settings: ApiCorsSettings | None = None,
     staff_authenticator: StaticBearerAuthenticator | None = None,
     staff_orders: SqliteStaffOrders | None = None,
 ) -> FastAPI:
@@ -47,6 +49,7 @@ def create_app(
         description="Adaptador local del prototipo; no preparado para producción.",
     )
     install_error_contract(app)
+    install_cors(app, cors_settings)
 
     @app.get("/health", tags=["system"])
     def health() -> dict[str, str]:
