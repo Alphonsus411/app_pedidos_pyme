@@ -1,6 +1,8 @@
 # Contrato v1 y separación de aplicaciones
 
-Estado: propuesta de F1. No implementa un servidor HTTP, autenticación, paneles ni integración del frontend.
+Estado: contrato inicial de F1 y avances acotados de F2. Existe una API local
+con rutas públicas y una primera lectura privada; no existe un sistema de
+identidad listo para producción, paneles ni integración del frontend.
 
 ## Decisión de organización
 
@@ -27,7 +29,8 @@ La validación de estas fronteras se incorporará con pruebas de arquitectura cu
 
 ## Borrador del contrato HTTP
 
-Prefijo reservado: `/api/v1`. JSON UTF-8. Este documento no habilita todavía ninguna ruta.
+Prefijo: `/api/v1`. JSON UTF-8. Las rutas materializadas se documentan junto a
+sus limitaciones; el resto del contrato sigue siendo evolutivo.
 
 ### Lectura pública de catálogo
 
@@ -44,9 +47,11 @@ Prefijo reservado: `/api/v1`. JSON UTF-8. Este documento no habilita todavía ni
 - Nunca se aceptan total, descuento, impuesto, estado ni identificadores de tenant procedentes del navegador.
 - La respuesta describe el estado real persistido; no comunica pago, envío o notificación si no existe esa integración.
 
-### Operaciones privadas futuras
+### Operaciones privadas de personal
 
-- `/staff/... `: requiere identidad autenticada, rol y asociación vigente a negocio y ubicación.
+- `GET /staff/businesses/{business_slug}/locations/{location_slug}/orders`: lectura inicial de pedidos. Requiere Bearer, el permiso `read_orders` y asociación explícita al negocio y ubicación solicitados.
+- El prototipo compone un autenticador de tokens estáticos fuera de la aplicación; no emite, almacena, rota ni revoca tokens. Sirve para validar la frontera de autorización y no es una solución de identidad de producción.
+- Toda ruta `/staff/...` posterior requiere identidad autenticada, rol y asociación vigente a negocio y ubicación.
 - `/platform/... `: requiere rol de plataforma explícito. No hereda acceso a datos de todos los negocios por ser administrador.
 - Las rutas privadas derivan el ámbito de identidad y verifican cada recurso en el servidor. Un identificador de URL, cabecera o cuerpo no concede privilegios.
 
@@ -64,7 +69,7 @@ Todas las rutas futuras usarán:
 }
 ```
 
-Códigos iniciales reservados: `validation_error`, `authentication_required`, `forbidden`, `not_found`, `conflict`, `idempotency_conflict`, `rate_limited` e `internal_error`. Los detalles de infraestructura, SQL, secretos y trazas no se devuelven al cliente.
+Códigos iniciales reservados: `validation_error`, `authentication_required`, `forbidden`, `not_found`, `conflict`, `idempotency_conflict`, `rate_limited` e `internal_error`. Los detalles de infraestructura, SQL, secretos y trazas no se devuelven al cliente. La normalización común de errores sigue pendiente: la primera ruta privada ya devuelve 401, 403, 404 y 503 seguros, pero aún usa el formato HTTP por defecto del framework.
 
 ## Datos, importes y compatibilidad
 
@@ -73,9 +78,10 @@ Códigos iniciales reservados: `validation_error`, `authentication_required`, `f
 - Los identificadores expuestos son opacos. Los consumidores no dependen de nombres de tablas ni de claves internas.
 - CORS, límites de solicitud, credenciales, retención y observabilidad se fijarán por entorno al implementar F2.
 
-## Criterios antes de F2
+## Criterios realizados y siguientes de F2
 
 1. Revisar este borrador frente a los casos de uso existentes.
 2. Elegir la forma concreta del servicio API sin mover todavía el frontend.
 3. Escribir pruebas de contrato y de acceso cruzado entre dos negocios antes de declarar una ruta privada.
 4. Mantener SQLite real para las pruebas de transacción del prototipo, sin afirmar garantías de producción.
+5. Sustituir el autenticador estático por una identidad gestionada, con secretos por entorno, expiración, revocación, auditoría y pruebas negativas adicionales antes de uso real.
