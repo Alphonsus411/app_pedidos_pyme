@@ -766,3 +766,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 97. REGISTRO 2026-10-30 — base de API local independiente
   [COMPLETADO] apps/api aporta una factoría FastAPI con GET /health, dependencias opcionales y prueba HTTP. El núcleo sigue sin depender de FastAPI y no hay acceso a SQLite, rutas de catálogo, pedidos, autenticación ni integración de Fripollo.
   [PENDIENTE] Componer repositorios SQLite por entorno, resolver ámbito público sin confiar en IDs del cliente y añadir contratos y pruebas negativas antes de exponer catálogo o pedidos.
+
+
+98. REGISTRO 2026-10-30 — catálogo público local aislado
+  [COMPLETADO] GET /api/v1/public/businesses/{business_slug}/locations/{location_slug}/catalog compone el catálogo activo desde SQLite mediante un registro de ámbito del servidor. No acepta tenant_id, business_id o location_id del navegador.
+  [VALIDADO LOCALMENTE] Pruebas con SQLite real y dos negocios sintéticos: solo se devuelven ofertas activas del ámbito solicitado, sin IDs internos; un ámbito desconocido devuelve 404. La API sin composición devuelve 503.
+  [PENDIENTE] El registro de slugs aún es configuración inyectada del prototipo; faltan identidad, autorización privada, creación de pedidos, paginación real, límites y configuración segura por entorno. Fripollo sigue sin consumir la API.
