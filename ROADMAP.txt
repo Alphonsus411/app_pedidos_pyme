@@ -743,3 +743,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
 93. REGISTRO 2026-10-29 — ejemplo ficticio de Fripollo con SQLite
   [COMPLETADO LOCALMENTE] Recorrido de demostración de restaurante dominicano sobre el núcleo existente: oferta ficticia, pedido de dos unidades y reserva; utiliza base SQLite temporal, confirma y reabre datos, y simula el procesamiento de eventos. Datos y precios son ficticios y no hay comunicaciones ni cobros externos.
   [PENDIENTE] Conectar y validar la interfaz React mediante una API apropiada; definir autenticación/autorización, políticas reales, datos del negocio y pruebas de extremo a extremo antes de cualquier uso real. Mantener SQLite para el prototipo. El frontend anterior permanece en otra copia local y no está integrado en esta rama.
+
+94. REGISTRO 2026-10-29 — catálogo ficticio de Fripollo
+  [COMPLETADO LOCALMENTE] La demo carga seis productos ficticios con sus precios en SQLite dentro de una misma transacción y utiliza la primera oferta en el pedido de ejemplo. La carga fallida revierte la transacción; la base sigue siendo temporal.
+  [VALIDADO LOCALMENTE] Pruebas de contenido y precios de las seis ofertas, pedido y reserva confirmados, limpieza temporal y rollback por importe inválido.
+  [PENDIENTE] Esta carta no es una API ni está vinculada al frontend; validar con el cliente y conectar más adelante mediante una interfaz de aplicación. Pendientes autenticación, autorización y pruebas de extremo a extremo. SQLite se mantiene para desarrollo.
+  [TRAZABILIDAD] Este cambio depende del PR #75. La CI del PR #75 pasó en Python 3.11 y 3.12 (ejecución 40943663348); el PR permanece en borrador y no está integrado en master.
