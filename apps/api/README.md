@@ -10,6 +10,17 @@ Instalación local desde la raíz del repositorio:
     python -m pip install -e ".[api,dev]"
     uvicorn apps.api.app.main:app --reload
 
+Para componer las rutas de negocio durante desarrollo, use un JSON externo no
+versionado y ejecute:
+
+    UNIVERSAL_BUSINESS_API_LOCAL_CONFIG=/ruta/local-api.json \
+      uvicorn apps.api.app.local_entry:app --reload
+
+El JSON debe contener `sqlite_path`, una lista de `scopes`,
+`staff_credentials` y `cors_origins`. Las credenciales son tokens estáticos
+exclusivos de desarrollo: no incluya un archivo con secretos en Git ni lo use
+en producción.
+
 La creación pública solo deja pedidos en estado `draft`: no los valida, confirma,
 cobra ni envía notificaciones. Requiere `Idempotency-Key`, resuelve el ámbito en
 el servidor y recalcula el importe desde las ofertas activas.

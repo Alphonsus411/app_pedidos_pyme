@@ -808,3 +808,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
   [COMPLETADO] La factoría API acepta una configuración de CORS inyectada con orígenes HTTP(S) concretos; rechaza comodines, rutas, credenciales embebidas y duplicados. Si el entorno no aporta configuración, CORS permanece deshabilitado. Expone `X-Request-ID` y permite los encabezados de los contratos públicos y privados actuales.
   [VALIDADO LOCALMENTE] Preflight y respuesta real desde origen permitido, rechazo de origen no permitido, ausencia de cabecera CORS sin composición y rechazo de valores de configuración inválidos. Ruff, formato y mypy de apps/api correctos.
   [LIMITACIONES] No hay carga de configuración desde secretos o entorno, credenciales de navegador, rate limiting distribuido, auditoría ni identidad gestionada. La lista debe componerse de forma segura en cada despliegue. No se codifican orígenes ni reglas de Fripollo y SQLite sigue siendo solo el almacenamiento de prototipo.
+
+
+105. REGISTRO 2026-10-30 — composición local reproducible de la API
+  [COMPLETADO] Un punto de entrada local opcional compone catálogo, creación pública de borradores, lectura privada, CORS y SQLite desde un JSON externo validado. La aplicación principal sigue sin componer rutas de negocio por defecto; el archivo requiere ruta SQLite, scopes, credenciales de desarrollo y orígenes CORS explícitos.
+  [VALIDADO LOCALMENTE] Prueba de composición completa con SQLite temporal: catálogo vacío accesible, personal autorizado, CORS permitido y rechazo de un rol desconocido antes de servir. Ruff, formato y mypy de apps/api correctos.
+  [LIMITACIONES] El JSON puede contener tokens estáticos de desarrollo y debe permanecer fuera de Git; no existe carga desde secret manager, cifrado, rotación, identidad gestionada, auditoría ni despliegue. No crea datos de negocio, no reemplaza una configuración de producción y no incorpora Fripollo.
