@@ -47,6 +47,30 @@ def _catalog_client(database_path: str) -> TestClient:
                     id=OfferingId.generate(),
                     tenant_id=first_tenant,
                     business_id=first_business,
+                    name="Alpha first",
+                    description="First page item",
+                    status=CatalogItemStatus.ACTIVE,
+                    base_price=Money("4.00", "EUR"),
+                    location_ids=frozenset({first_location}),
+                )
+            )
+            repository.save(
+                Offering(
+                    id=OfferingId.generate(),
+                    tenant_id=first_tenant,
+                    business_id=first_business,
+                    name="Bravo first",
+                    description="Second page item",
+                    status=CatalogItemStatus.ACTIVE,
+                    base_price=Money("6.00", "EUR"),
+                    location_ids=frozenset({first_location}),
+                )
+            )
+            repository.save(
+                Offering(
+                    id=OfferingId.generate(),
+                    tenant_id=first_tenant,
+                    business_id=first_business,
                     name="Hidden inactive",
                     status=CatalogItemStatus.INACTIVE,
                     base_price=Money("9.00", "EUR"),
@@ -89,10 +113,10 @@ def test_public_catalog_only_returns_active_items_from_server_resolved_scope(tmp
 
     assert response.status_code == 200
     item = response.json()["items"]
-    assert len(item) == 1
-    assert item[0]["name"] == "Visible first"
-    assert item[0]["description"] == "Only for the first business"
-    assert item[0]["price"] == {"amount": "12.5000", "currency": "EUR"}
+    assert [entry["name"] for entry in item] == ["Alpha first", "Bravo first", "Visible first"]
+    assert item[2]["description"] == "Only for the first business"
+    assert item[2]["price"] == {"amount": "12.5000", "currency": "EUR"}
+    assert response.json()["next_cursor"] is None
 
 
 def test_public_catalog_does_not_cross_business_boundaries_or_accept_unknown_scope(
@@ -107,3 +131,30 @@ def test_public_catalog_does_not_cross_business_boundaries_or_accept_unknown_sco
     assert "tenant_id" not in second.json()["items"][0]
     assert "business_id" not in second.json()["items"][0]
     assert unknown.status_code == 404
+
+
+def test_public_catalog_uses_an_opaque_cursor_without_crossing_scope(tmp_path) -> None:
+    client = _catalog_client(str(tmp_path / "catalog.db"))
+    route = "/api/v1/public/businesses/first/locations/main/catalog"
+
+    first = client.get(route, params={"limit": 1})
+    second = client.get(route, params={"limit": 1, "cursor": first.json()["next_cursor"]})
+    last = client.get(route, params={"limit": 1, "cursor": second.json()["next_cursor"]})
+
+    assert first.status_code == second.status_code == last.status_code == 200
+    assert first.json()["items"][0]["name"] == "Alpha first"
+    assert second.json()["items"][0]["name"] == "Bravo first"
+    assert last.json()["items"][0]["name"] == "Visible first"
+    assert last.json()["next_cursor"] is None
+
+
+def test_public_catalog_rejects_invalid_cursor_with_the_api_error_contract(tmp_path) -> None:
+    client = _catalog_client(str(tmp_path / "catalog.db"))
+
+    response = client.get(
+        "/api/v1/public/businesses/first/locations/main/catalog",
+        params={"cursor": "not-a-cursor"},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"

@@ -37,7 +37,7 @@ sus limitaciones; el resto del contrato sigue siendo evolutivo.
 - `GET /public/businesses/{business_slug}/locations/{location_slug}/catalog`
 - Solo devuelve artículos visibles y la información pública necesaria para mostrar la carta.
 - No acepta `tenant_id` ni `business_id` como ámbito de confianza: el servidor los resuelve desde slugs y configuración validada.
-- Paginación futura: `limit` y cursor opaco `cursor`; no exponer offsets como contrato de estabilidad.
+- Acepta `limit` (1..100) y cursor opaco `cursor`; devuelve `next_cursor` o `null`. No expone offsets como contrato de estabilidad. El cursor solo representa una posición de orden en ese catálogo, nunca identidad ni ámbito interno.
 
 ### Creación de pedido de cliente
 
