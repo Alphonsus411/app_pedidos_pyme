@@ -749,3 +749,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
   [VALIDADO LOCALMENTE] Pruebas de contenido y precios de las seis ofertas, pedido y reserva confirmados, limpieza temporal y rollback por importe inválido.
   [PENDIENTE] Esta carta no es una API ni está vinculada al frontend; validar con el cliente y conectar más adelante mediante una interfaz de aplicación. Pendientes autenticación, autorización y pruebas de extremo a extremo. SQLite se mantiene para desarrollo.
   [TRAZABILIDAD] Este cambio depende del PR #75. La CI del PR #75 pasó en Python 3.11 y 3.12 (ejecución 40943663348); el PR permanece en borrador y no está integrado en master.
+
+
+95. REGISTRO 2026-10-30 — hoja de ruta de aplicaciones independientes
+  [COMPLETADO EN PLANIFICACIÓN] Documento docs/ROADMAP_APLICACIONES_Y_PANELES.txt: fases y criterios para núcleo/API, aislamiento, panel común de negocios, panel de plataforma y sitios independientes, con Fripollo ficticio y SQLite para el prototipo.
+  [ESTADO] PR #75 y PR #78 se integraron en master; #78 sustituye el PR #76, cerrado por divergencia después del squash de #75. La planificación no implica que exista API, autorización ni integración visual.
+  [PENDIENTE] Implementar y validar las fases propuestas; el documento es una planificación y deberá actualizarse con cada avance verificable.
