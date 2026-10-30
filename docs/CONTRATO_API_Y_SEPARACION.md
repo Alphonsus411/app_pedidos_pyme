@@ -69,7 +69,9 @@ Todas las rutas futuras usarán:
 }
 ```
 
-Códigos iniciales reservados: `validation_error`, `authentication_required`, `forbidden`, `not_found`, `conflict`, `idempotency_conflict`, `rate_limited` e `internal_error`. Los detalles de infraestructura, SQL, secretos y trazas no se devuelven al cliente. La normalización común de errores sigue pendiente: la primera ruta privada ya devuelve 401, 403, 404 y 503 seguros, pero aún usa el formato HTTP por defecto del framework.
+Códigos iniciales reservados: `validation_error`, `authentication_required`, `forbidden`, `not_found`, `conflict`, `idempotency_conflict`, `rate_limited` e `internal_error`. Se incorpora además `service_unavailable` para composición local ausente. Los detalles de infraestructura, SQL, secretos y trazas no se devuelven al cliente.
+
+Las rutas actuales ya devuelven este sobre de error y una cabecera `X-Request-ID`. Si el cliente aporta una cabecera con UUID válido se conserva; si no, el servidor genera una nueva. Esto no equivale aún a auditoría persistente, trazas distribuidas ni política de retención.
 
 ## Datos, importes y compatibilidad
 
