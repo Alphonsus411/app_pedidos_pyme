@@ -755,3 +755,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
   [COMPLETADO EN PLANIFICACIÓN] Documento docs/ROADMAP_APLICACIONES_Y_PANELES.txt: fases y criterios para núcleo/API, aislamiento, panel común de negocios, panel de plataforma y sitios independientes, con Fripollo ficticio y SQLite para el prototipo.
   [ESTADO] PR #75 y PR #78 se integraron en master; #78 sustituye el PR #76, cerrado por divergencia después del squash de #75. La planificación no implica que exista API, autorización ni integración visual.
   [PENDIENTE] Implementar y validar las fases propuestas; el documento es una planificación y deberá actualizarse con cada avance verificable.
+
+
+96. REGISTRO 2026-10-30 — F1 contratos y separación de aplicaciones
+  [COMPLETADO EN DISEÑO] docs/CONTRATO_API_Y_SEPARACION.md define límites entre núcleo, API futura, paneles y sitios independientes; organización inicial, dependencias permitidas, borrador HTTP v1, errores, idempotencia, importes y ámbitos de acceso.
+  [VALIDADO DOCUMENTALMENTE] El diseño conserva SQLite para el prototipo, prohíbe acceso de clientes a adaptadores o tablas y evita introducir marca o reglas de Fripollo en el núcleo.
+  [PENDIENTE] Revisar los casos de uso existentes y materializar F2 con API local, autenticación/autorización y pruebas reales de contrato y aislamiento. Este registro no declara rutas HTTP implementadas.
