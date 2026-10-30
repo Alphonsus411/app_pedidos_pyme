@@ -22,6 +22,11 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
+api = [
+    # El adaptador HTTP es opcional: el núcleo no depende de FastAPI.
+    "fastapi>=0.115,<1",
+    "httpx>=0.27,<1",
+]
 dev = [
     # Gate 0.1 reproducibilidad: rangos cerrados minor para tooling.
     # Evita saltos de versiones breaking en Gates estables.
