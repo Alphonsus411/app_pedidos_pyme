@@ -761,3 +761,8 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
   [COMPLETADO EN DISEÑO] docs/CONTRATO_API_Y_SEPARACION.md define límites entre núcleo, API futura, paneles y sitios independientes; organización inicial, dependencias permitidas, borrador HTTP v1, errores, idempotencia, importes y ámbitos de acceso.
   [VALIDADO DOCUMENTALMENTE] El diseño conserva SQLite para el prototipo, prohíbe acceso de clientes a adaptadores o tablas y evita introducir marca o reglas de Fripollo en el núcleo.
   [PENDIENTE] Revisar los casos de uso existentes y materializar F2 con API local, autenticación/autorización y pruebas reales de contrato y aislamiento. Este registro no declara rutas HTTP implementadas.
+
+
+97. REGISTRO 2026-10-30 — base de API local independiente
+  [COMPLETADO] apps/api aporta una factoría FastAPI con GET /health, dependencias opcionales y prueba HTTP. El núcleo sigue sin depender de FastAPI y no hay acceso a SQLite, rutas de catálogo, pedidos, autenticación ni integración de Fripollo.
+  [PENDIENTE] Componer repositorios SQLite por entorno, resolver ámbito público sin confiar en IDs del cliente y añadir contratos y pruebas negativas antes de exponer catálogo o pedidos.
