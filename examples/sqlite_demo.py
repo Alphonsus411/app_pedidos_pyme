@@ -95,7 +95,7 @@ class DemoPublisher:
         self.events.extend(events)
 
 
-def run_demo(tmp_path):
+def run_demo(tmp_path, *, location_name="Local", product_name="Producto", product_price="10"):
     path = tmp_path / "prototype.db"
     tenant, business, location = TenantId.generate(), BusinessId.generate(), LocationId.generate()
     customer, resource, offering = (
@@ -113,7 +113,7 @@ def run_demo(tmp_path):
                     id=location,
                     tenant_id=tenant,
                     business_id=business,
-                    name="Local",
+                    name=location_name,
                     address=Address(country_code="ES"),
                     timezone="UTC",
                     operating_hours=OperatingHours(),
@@ -148,9 +148,9 @@ def run_demo(tmp_path):
                     id=offering,
                     tenant_id=tenant,
                     business_id=business,
-                    name="Producto",
+                    name=product_name,
                     status=CatalogItemStatus.ACTIVE,
-                    base_price=Money("10", "EUR"),
+                    base_price=Money(product_price, "EUR"),
                 )
             )
             uow.commit()
