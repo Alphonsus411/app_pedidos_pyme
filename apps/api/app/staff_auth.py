@@ -68,7 +68,13 @@ class StaticBearerAuthenticator:
         if authorization is None:
             raise AuthenticationRequired
         scheme, separator, token = authorization.partition(" ")
-        if scheme.lower() != "bearer" or not separator or not token or token.strip() != token:
+        if (
+            scheme.lower() != "bearer"
+            or not separator
+            or not token
+            or not token.isascii()
+            or token.strip() != token
+        ):
             raise AuthenticationRequired
         for configured_token, principal in self._credentials.items():
             if hmac.compare_digest(configured_token, token):
