@@ -802,3 +802,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
   [COMPLETADO] GET /api/v1/public/businesses/{business_slug}/locations/{location_slug}/catalog acepta `limit` (1..100) y cursor opaco, y devuelve `next_cursor` sin exponer offsets ni ámbito interno. La ordenación por nombre e ID conserva una posición reproducible dentro del catálogo resuelto por servidor.
   [VALIDADO LOCALMENTE] Pruebas con SQLite real: tres páginas consecutivas, final sin cursor, catálogo aislado por negocio y cursor malformado con 422 bajo el contrato común de errores. Ruff, formato y mypy de apps/api correctos.
   [LIMITACIONES] El adaptador SQLite recupera las ofertas activas del ámbito y recorta la página en memoria; no es adecuado para catálogos grandes ni sustituye una consulta con cursor indexado. Faltan límites de solicitud, CORS por entorno, identidad gestionada, auditoría y validación integral. No hay cambios en precios, pagos, notificaciones ni Fripollo.
+
+
+104. REGISTRO 2026-10-30 — CORS explícito para aplicaciones independientes
+  [COMPLETADO] La factoría API acepta una configuración de CORS inyectada con orígenes HTTP(S) concretos; rechaza comodines, rutas, credenciales embebidas y duplicados. Si el entorno no aporta configuración, CORS permanece deshabilitado. Expone `X-Request-ID` y permite los encabezados de los contratos públicos y privados actuales.
+  [VALIDADO LOCALMENTE] Preflight y respuesta real desde origen permitido, rechazo de origen no permitido, ausencia de cabecera CORS sin composición y rechazo de valores de configuración inválidos. Ruff, formato y mypy de apps/api correctos.
+  [LIMITACIONES] No hay carga de configuración desde secretos o entorno, credenciales de navegador, rate limiting distribuido, auditoría ni identidad gestionada. La lista debe componerse de forma segura en cada despliegue. No se codifican orígenes ni reglas de Fripollo y SQLite sigue siendo solo el almacenamiento de prototipo.
