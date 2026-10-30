@@ -3,7 +3,11 @@
 from decimal import Decimal
 
 from apps.api.app.error_contract import install_error_contract
-from apps.api.app.public_catalog import PublicCatalogReader, PublicCatalogUnavailable
+from apps.api.app.public_catalog import (
+    PublicCatalogCursorInvalid,
+    PublicCatalogReader,
+    PublicCatalogUnavailable,
+)
 from apps.api.app.public_orders import PublicOrderItem, PublicOrderRejected, SqlitePublicOrders
 from apps.api.app.staff_auth import AuthenticationRequired, StaticBearerAuthenticator
 from apps.api.app.staff_orders import (
@@ -52,17 +56,26 @@ def create_app(
         "/api/v1/public/businesses/{business_slug}/locations/{location_slug}/catalog",
         tags=["public-catalog"],
     )
-    def list_public_catalog(business_slug: str, location_slug: str) -> dict[str, object]:
+    def list_public_catalog(
+        business_slug: str,
+        location_slug: str,
+        limit: int = Query(default=50, ge=1, le=100),
+        cursor: str | None = Query(default=None, max_length=512),
+    ) -> dict[str, object]:
         if public_catalog is None:
             raise HTTPException(status_code=503, detail="Public catalog is not configured")
         try:
-            items = public_catalog.list_active(
+            page = public_catalog.list_active(
                 business_slug=business_slug,
                 location_slug=location_slug,
+                limit=limit,
+                cursor=cursor,
             )
         except PublicCatalogUnavailable:
             raise HTTPException(status_code=404, detail="Public catalog not found") from None
-        return {"items": items}
+        except PublicCatalogCursorInvalid:
+            raise HTTPException(status_code=422, detail="Catalog cursor is invalid") from None
+        return {"items": page.items, "next_cursor": page.next_cursor}
 
     @app.post(
         "/api/v1/public/businesses/{business_slug}/locations/{location_slug}/orders",
