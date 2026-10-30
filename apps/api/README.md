@@ -38,3 +38,8 @@ Los errores HTTP del adaptador usan `{ "error": { "code", "message",
 `X-Request-ID` con UUID válido se conserva; cualquier otro valor se reemplaza.
 El identificador ayuda a correlacionar la solicitud, pero todavía no existe
 registro de auditoría ni observabilidad externa.
+
+CORS solo se activa si la composición recibe una lista cerrada de orígenes
+HTTP(S). No admite `*`, rutas ni orígenes con credenciales, y permite los
+encabezados necesarios para los contratos actuales. El valor depende del
+entorno consumidor; no hay ningún origen de Fripollo codificado en la API.
