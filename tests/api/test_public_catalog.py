@@ -31,25 +31,62 @@ def _catalog_client(database_path: str) -> TestClient:
         with SqliteUnitOfWork(connection) as uow:
             repository = SqliteOfferingRepository(connection)
             repository.save(
-                Offering(id=OfferingId.generate(), tenant_id=first_tenant, business_id=first_business, name="Visible first", description="Only for the first business", status=CatalogItemStatus.ACTIVE, base_price=Money("12.50", "EUR"), location_ids=frozenset({first_location}))
+                Offering(
+                    id=OfferingId.generate(),
+                    tenant_id=first_tenant,
+                    business_id=first_business,
+                    name="Visible first",
+                    description="Only for the first business",
+                    status=CatalogItemStatus.ACTIVE,
+                    base_price=Money("12.50", "EUR"),
+                    location_ids=frozenset({first_location}),
+                )
             )
             repository.save(
-                Offering(id=OfferingId.generate(), tenant_id=first_tenant, business_id=first_business, name="Hidden inactive", status=CatalogItemStatus.INACTIVE, base_price=Money("9.00", "EUR"))
+                Offering(
+                    id=OfferingId.generate(),
+                    tenant_id=first_tenant,
+                    business_id=first_business,
+                    name="Hidden inactive",
+                    status=CatalogItemStatus.INACTIVE,
+                    base_price=Money("9.00", "EUR"),
+                )
             )
             repository.save(
-                Offering(id=OfferingId.generate(), tenant_id=second_tenant, business_id=second_business, name="Visible second", status=CatalogItemStatus.ACTIVE, base_price=Money("8.00", "EUR"), location_ids=frozenset({second_location}))
+                Offering(
+                    id=OfferingId.generate(),
+                    tenant_id=second_tenant,
+                    business_id=second_business,
+                    name="Visible second",
+                    status=CatalogItemStatus.ACTIVE,
+                    base_price=Money("8.00", "EUR"),
+                    location_ids=frozenset({second_location}),
+                )
             )
             uow.commit()
-    catalog = SqlitePublicCatalog(connect=lambda: sqlite3.connect(database_path), scopes={
-        ("first", "main"): PublicCatalogScope(tenant_id=first_tenant, business_id=first_business, location_id=first_location),
-        ("second", "main"): PublicCatalogScope(tenant_id=second_tenant, business_id=second_business, location_id=second_location),
-    })
+    catalog = SqlitePublicCatalog(
+        connect=lambda: sqlite3.connect(database_path),
+        scopes={
+            ("first", "main"): PublicCatalogScope(
+                tenant_id=first_tenant,
+                business_id=first_business,
+                location_id=first_location,
+            ),
+            ("second", "main"): PublicCatalogScope(
+                tenant_id=second_tenant,
+                business_id=second_business,
+                location_id=second_location,
+            ),
+        },
+    )
     return TestClient(create_app(public_catalog=catalog))
 
 
 def test_public_catalog_only_returns_active_items_from_server_resolved_scope(tmp_path) -> None:
     client = _catalog_client(str(tmp_path / "catalog.db"))
+
     response = client.get("/api/v1/public/businesses/first/locations/main/catalog")
+
     assert response.status_code == 200
     item = response.json()["items"]
     assert len(item) == 1
@@ -58,10 +95,14 @@ def test_public_catalog_only_returns_active_items_from_server_resolved_scope(tmp
     assert item[0]["price"] == {"amount": "12.5000", "currency": "EUR"}
 
 
-def test_public_catalog_does_not_cross_business_boundaries_or_accept_unknown_scope(tmp_path) -> None:
+def test_public_catalog_does_not_cross_business_boundaries_or_accept_unknown_scope(
+    tmp_path,
+) -> None:
     client = _catalog_client(str(tmp_path / "catalog.db"))
+
     second = client.get("/api/v1/public/businesses/second/locations/main/catalog")
     unknown = client.get("/api/v1/public/businesses/first/locations/other/catalog")
+
     assert [item["name"] for item in second.json()["items"]] == ["Visible second"]
     assert "tenant_id" not in second.json()["items"][0]
     assert "business_id" not in second.json()["items"][0]
