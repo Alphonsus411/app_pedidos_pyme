@@ -21,6 +21,12 @@ emite tokens, no almacena credenciales y no es apto para producción. Siguen
 pendientes un proveedor de identidad, gestión segura de secretos, renovación y
 revocación de credenciales, auditoría, límites y configuración por entorno.
 
+Las rutas privadas disponibles son el listado de pedidos de una ubicación y el
+detalle de un pedido dentro de ese mismo ámbito. Un identificador de pedido no
+amplía permisos: si no pertenece al negocio y ubicación autorizados, responde
+como no encontrado. Son operaciones de lectura; no validan, confirman ni
+modifican pedidos.
+
 Los errores HTTP del adaptador usan `{ "error": { "code", "message",
 "request_id" } }` y devuelven el mismo UUID en `X-Request-ID`. Una cabecera
 `X-Request-ID` con UUID válido se conserva; cualquier otro valor se reemplaza.
