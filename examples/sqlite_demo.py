@@ -95,7 +95,14 @@ class DemoPublisher:
         self.events.extend(events)
 
 
-def run_demo(tmp_path, *, location_name="Local", product_name="Producto", product_price="10"):
+def run_demo(
+    tmp_path,
+    *,
+    location_name="Local",
+    product_name="Producto",
+    product_price="10",
+    additional_products=(),
+):
     path = tmp_path / "prototype.db"
     tenant, business, location = TenantId.generate(), BusinessId.generate(), LocationId.generate()
     customer, resource, offering = (
@@ -153,6 +160,17 @@ def run_demo(tmp_path, *, location_name="Local", product_name="Producto", produc
                     base_price=Money(product_price, "EUR"),
                 )
             )
+            for name, price in additional_products:
+                SqliteOfferingRepository(connection).save(
+                    Offering(
+                        id=OfferingId.generate(),
+                        tenant_id=tenant,
+                        business_id=business,
+                        name=name,
+                        status=CatalogItemStatus.ACTIVE,
+                        base_price=Money(price, "EUR"),
+                    )
+                )
             uow.commit()
         transition, line_policy = DemoTransitionPolicy(), DemoLinePolicy()
         orders = SqliteOrderExecution(

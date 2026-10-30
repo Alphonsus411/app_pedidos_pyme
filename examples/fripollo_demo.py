@@ -3,6 +3,7 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from fripollo_catalog import FRIPOLLO_CATALOG
 from sqlite_demo import run_demo
 
 
@@ -14,8 +15,9 @@ def main():
         run_demo(
             Path(temporary),
             location_name="Fripollo (ficticio)",
-            product_name="Pica pollo clásico",
-            product_price="12.50",
+            product_name=FRIPOLLO_CATALOG[0][0],
+            product_price=FRIPOLLO_CATALOG[0][1],
+            additional_products=FRIPOLLO_CATALOG[1:],
         )
     print("Base temporal eliminada; no se han enviado pedidos ni eventos externos.")
 

@@ -9,6 +9,6 @@ python -m pip install -e .
 python examples/fripollo_demo.py
 ```
 
-El ejemplo crea una base SQLite temporal, registra una oferta de pica pollo, crea un pedido de dos unidades y lo confirma. También crea y confirma una reserva ficticia; reabre la base para comprobar ambos estados y procesa seis eventos con un publicador simulado. Al terminar, elimina la base temporal.
+El ejemplo crea una base SQLite temporal, registra seis productos ficticios en el catálogo, crea un pedido de dos unidades y lo confirma. También crea y confirma una reserva ficticia; reabre la base para comprobar ambos estados y procesa seis eventos con un publicador simulado. Al terminar, elimina la base temporal.
 
 No hay interfaz conectada ni se envían pedidos, reservas o mensajes. No se cobran pagos y las políticas de descuentos, impuestos y transición son ejemplos limitados; no constituyen políticas reales ni autorización. No usar datos reales. La integración del frontend requiere una interfaz de API, autenticación y autorización, validación de extremo a extremo y decisiones del negocio.
