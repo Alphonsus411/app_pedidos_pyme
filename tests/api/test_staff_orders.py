@@ -5,10 +5,17 @@ from __future__ import annotations
 import sqlite3
 from decimal import Decimal
 
+import pytest
 from apps.api.app.main import create_app
 from apps.api.app.public_catalog import PublicCatalogScope
 from apps.api.app.public_orders import PublicOrderItem, SqlitePublicOrders
-from apps.api.app.staff_auth import StaffGrant, StaffPrincipal, StaffRole, StaticBearerAuthenticator
+from apps.api.app.staff_auth import (
+    AuthenticationRequired,
+    StaffGrant,
+    StaffPrincipal,
+    StaffRole,
+    StaticBearerAuthenticator,
+)
 from apps.api.app.staff_orders import SqliteStaffOrders
 from fastapi.testclient import TestClient
 
@@ -161,6 +168,15 @@ def test_staff_order_list_rejects_unknown_credentials_and_invalid_limits(tmp_pat
 
     assert invalid_token.status_code == 401
     assert invalid_limit.status_code == 422
+
+
+def test_static_authenticator_rejects_non_ascii_bearer_tokens() -> None:
+    authenticator = StaticBearerAuthenticator(
+        {"ascii-token": StaffPrincipal(subject="user", grants=())}
+    )
+
+    with pytest.raises(AuthenticationRequired):
+        authenticator.authenticate("Bearer café")
 
 
 def test_staff_order_list_is_unavailable_without_explicit_composition() -> None:
