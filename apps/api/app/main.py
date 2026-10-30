@@ -1,10 +1,31 @@
 """Punto de entrada del adaptador HTTP local."""
 
+from decimal import Decimal
+
 from apps.api.app.public_catalog import PublicCatalogReader, PublicCatalogUnavailable
-from fastapi import FastAPI, HTTPException
+from apps.api.app.public_orders import PublicOrderItem, PublicOrderRejected, SqlitePublicOrders
+from fastapi import FastAPI, HTTPException, Header
+from pydantic import BaseModel, ConfigDict, Field
 
 
-def create_app(*, public_catalog: PublicCatalogReader | None = None) -> FastAPI:
+class PublicOrderLineIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    offering_id: str
+    quantity: Decimal = Field(gt=0)
+
+
+class PublicOrderIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[PublicOrderLineIn] = Field(min_length=1)
+
+
+def create_app(
+    *,
+    public_catalog: PublicCatalogReader | None = None,
+    public_orders: SqlitePublicOrders | None = None,
+) -> FastAPI:
     """Construye la API local con dependencias de infraestructura explícitas."""
     app = FastAPI(
         title="Universal Business API",
@@ -31,6 +52,34 @@ def create_app(*, public_catalog: PublicCatalogReader | None = None) -> FastAPI:
         except PublicCatalogUnavailable:
             raise HTTPException(status_code=404, detail="Public catalog not found") from None
         return {"items": items}
+
+    @app.post(
+        "/api/v1/public/businesses/{business_slug}/locations/{location_slug}/orders",
+        status_code=201,
+        tags=["public-orders"],
+    )
+    def create_public_order(
+        business_slug: str,
+        location_slug: str,
+        request: PublicOrderIn,
+        idempotency_key: str = Header(alias="Idempotency-Key"),
+    ) -> dict[str, object]:
+        if public_orders is None:
+            raise HTTPException(status_code=503, detail="Public orders are not configured")
+        try:
+            return public_orders.create_draft(
+                business_slug=business_slug,
+                location_slug=location_slug,
+                idempotency_key=idempotency_key,
+                items=[
+                    PublicOrderItem(offering_id=item.offering_id, quantity=item.quantity)
+                    for item in request.items
+                ],
+            )
+        except PublicCatalogUnavailable:
+            raise HTTPException(status_code=404, detail="Public catalog not found") from None
+        except PublicOrderRejected:
+            raise HTTPException(status_code=409, detail="Order request was rejected") from None
 
     return app
 
