@@ -2,6 +2,7 @@
 
 from decimal import Decimal
 
+from apps.api.app.error_contract import install_error_contract
 from apps.api.app.public_catalog import PublicCatalogReader, PublicCatalogUnavailable
 from apps.api.app.public_orders import PublicOrderItem, PublicOrderRejected, SqlitePublicOrders
 from apps.api.app.staff_auth import AuthenticationRequired, StaticBearerAuthenticator
@@ -40,6 +41,7 @@ def create_app(
         version="0.1.0-prototype",
         description="Adaptador local del prototipo; no preparado para producción.",
     )
+    install_error_contract(app)
 
     @app.get("/health", tags=["system"])
     def health() -> dict[str, str]:
