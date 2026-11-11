@@ -108,7 +108,6 @@ def test_public_order_rejects_a_changed_request_with_the_same_idempotency_key(tm
     assert changed.status_code == 409
 
 
-
 def test_public_order_rolls_back_all_lines_on_second_line_failure(tmp_path) -> None:
     path = str(tmp_path / "rollback.db")
     client, offering_id = _orders_client(path)
