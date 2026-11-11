@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from decimal import Decimal
 from uuid import NAMESPACE_URL, uuid5
 
 from apps.api.app import public_orders
@@ -255,7 +256,7 @@ def test_public_order_replays_legacy_identifier_in_original_scope(tmp_path) -> N
         business_id=BusinessId.from_raw(business_id),
         location_id=LocationId.from_raw(location_id),
     )
-    item = PublicOrderItem(offering_id=offering_id, quantity=Money("1", "EUR").amount)
+    item = PublicOrderItem(offering_id=offering_id, quantity=Decimal("1"))
     request_key = SqlitePublicOrders._request_key(idempotency_key=key, items=[item])
     with sqlite3.connect(path) as connection:
         execution = SqliteOrderExecution(
