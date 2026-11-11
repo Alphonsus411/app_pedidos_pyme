@@ -70,3 +70,22 @@ Los nuevos ID de pedidos se derivan de tenant, negocio, ubicación y clave de id
 El endpoint POST público valida antes de persistir: máximo 50 líneas, cada offering_id con 36 caracteres, quantity positiva y <=1000 con máximo cuatro decimales y doce dígitos y una cabecera Idempotency-Key de 1–128 caracteres ASCII dentro de un patrón restringido. Los errores de validación HTTP devuelven 422 y no crean pedidos.
 
 Son límites del contrato HTTP del prototipo, no una implementación de rate limiting, autenticación de clientes o filtrado de tamaño bruto del cuerpo a nivel de proxy. Los controles de despliegue siguen pendientes; SQLite es exclusivamente de desarrollo y pruebas.
+
+## Política de cuota local optativa (F2.3.2)
+
+`create_app(public_order_limiter=LocalPublicOrderRateLimiter(limit=10, window_seconds=60))`
+permite inyectar desde el proceso de aplicación una ventana deslizante de
+solicitudes para POST público de borradores. El valor 10/60 es solo un ejemplo,
+no un umbral recomendado para producción. El componente devuelve 429 con
+`Retry-After` y conserva el contrato de error/correlación. Se identifica al
+cliente mediante `request.client.host` y la ruta pública, nunca por cabeceras
+`X-Forwarded-For` no verificadas. Los rechazos se producen antes del cuerpo y
+la escritura, y también cuentan las solicitudes fallidas que alcanzan la ruta.
+
+**No se activa en `create_app()` ni en `create_local_app()` por defecto.**
+Se puede inyectar explícitamente en tests y en una composición HTTP propia.
+Es una protección **por proceso**: no comparte contadores entre réplicas,
+no garantiza identidad real del cliente detrás de proxies, ni sustituye el
+rate limiting de gateway/CDN, la limitación de bytes de cuerpo, la autorización
+o las medidas contra abuso distribuidas. Para producción son obligatorias
+políticas centralizadas y un diseño independiente de observabilidad.
