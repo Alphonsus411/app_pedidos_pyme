@@ -8,11 +8,7 @@ from fastapi.testclient import TestClient
 
 
 def _order_payload() -> dict[str, object]:
-    return {
-        "items": [
-            {"offering_id": "00000000-0000-4000-8000-000000000099", "quantity": "1"}
-        ]
-    }
+    return {"items": [{"offering_id": "00000000-0000-4000-8000-000000000099", "quantity": "1"}]}
 
 
 def test_public_order_limiter_rejects_with_429_and_correlation_id() -> None:
@@ -72,6 +68,7 @@ def test_default_app_has_no_public_order_rate_limit() -> None:
     client = TestClient(create_app())
     url = "/api/v1/public/businesses/first/locations/main/orders"
     for _ in range(3):
-        assert client.post(
-            url, json=_order_payload(), headers={"Idempotency-Key": "test"}
-        ).status_code == 503
+        assert (
+            client.post(url, json=_order_payload(), headers={"Idempotency-Key": "test"}).status_code
+            == 503
+        )
