@@ -53,6 +53,13 @@ class LocalPublicOrderRateLimiter:
                     visits = None
             if visits is None:
                 if len(self._visits) >= self._max_clients:
+                    # Liberar claves ya caducadas antes de rechazar clientes nuevos.
+                    for old_key, old_visits in list(self._visits.items()):
+                        while old_visits and now - old_visits[0] >= self._window:
+                            old_visits.popleft()
+                        if not old_visits:
+                            del self._visits[old_key]
+                if len(self._visits) >= self._max_clients:
                     # Fail closed si se agota la capacidad local, sin evicción
                     # arbitraria de clientes activos que permita saltarse límites.
                     return max(1, math.ceil(self._window))
