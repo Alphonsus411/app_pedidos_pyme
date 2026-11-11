@@ -153,14 +153,18 @@ def test_public_order_multiline_rejects_changed_payload(tmp_path) -> None:
     client, offering_id = _orders_client(str(tmp_path / "conflict.db"))
     route = "/api/v1/public/businesses/first/locations/main/orders"
     headers = {"Idempotency-Key": "public-order-multiline-2"}
-    first = {"items": [
-        {"offering_id": offering_id, "quantity": "2"},
-        {"offering_id": offering_id, "quantity": "1"},
-    ]}
-    altered = {"items": [
-        {"offering_id": offering_id, "quantity": "2"},
-        {"offering_id": offering_id, "quantity": "3"},
-    ]}
+    first = {
+        "items": [
+            {"offering_id": offering_id, "quantity": "2"},
+            {"offering_id": offering_id, "quantity": "1"},
+        ]
+    }
+    altered = {
+        "items": [
+            {"offering_id": offering_id, "quantity": "2"},
+            {"offering_id": offering_id, "quantity": "3"},
+        ]
+    }
     assert client.post(route, json=first, headers=headers).status_code == 201
     assert client.post(route, json=altered, headers=headers).status_code == 409
 
