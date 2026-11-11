@@ -6,6 +6,7 @@ import sqlite3
 from decimal import Decimal
 from uuid import NAMESPACE_URL, uuid5
 
+import pytest
 from apps.api.app import public_orders
 from apps.api.app.main import create_app
 from apps.api.app.public_catalog import PublicCatalogScope
@@ -297,12 +298,57 @@ def test_public_order_replays_legacy_identifier_in_original_scope(tmp_path) -> N
         assert connection.execute("SELECT COUNT(*) FROM orders").fetchone()[0] == 1
 
 
+@pytest.mark.parametrize(
+    ("items", "key"),
+    [
+        ([{"offering_id": "valid", "quantity": "1000.0001"}], "valid-key"),
+        ([{"offering_id": "valid", "quantity": "0.00001"}], "valid-key"),
+        ([{"offering_id": "valid", "quantity": "NaN"}], "valid-key"),
+        ([{"offering_id": "valid", "quantity": "Infinity"}], "valid-key"),
+        ([{"offering_id": "bad", "quantity": "1"}], "valid-key"),
+        ([{"offering_id": "valid", "quantity": "1"}], "bad key"),
+        ([{"offering_id": "valid", "quantity": "1"}], "a" * 129),
+    ],
+)
+def test_public_order_rejects_unbounded_input_before_storage(tmp_path, items, key) -> None:
+    path = str(tmp_path / "bounds.db")
+    client, offering_id = _orders_client(path)
+    payload = [
+        {
+            **item,
+            "offering_id": offering_id if item["offering_id"] == "valid" else item["offering_id"],
+        }
+        for item in items
+    ]
+    response = client.post(
+        "/api/v1/public/businesses/first/locations/main/orders",
+        json={"items": payload},
+        headers={"Idempotency-Key": key},
+    )
+    assert response.status_code == 422
+    with sqlite3.connect(path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM orders").fetchone()[0] == 0
+
+
+def test_public_order_rejects_more_than_fifty_lines_before_storage(tmp_path) -> None:
+    path = str(tmp_path / "too-many-lines.db")
+    client, offering_id = _orders_client(path)
+    response = client.post(
+        "/api/v1/public/businesses/first/locations/main/orders",
+        json={"items": [{"offering_id": offering_id, "quantity": "1"}] * 51},
+        headers={"Idempotency-Key": "line-limit-test"},
+    )
+    assert response.status_code == 422
+    with sqlite3.connect(path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM orders").fetchone()[0] == 0
+
+
 def test_public_order_does_not_start_when_service_is_not_composed() -> None:
     client = TestClient(create_app())
 
     response = client.post(
         "/api/v1/public/businesses/first/locations/main/orders",
-        json={"items": [{"offering_id": "missing", "quantity": "1"}]},
+        json={"items": [{"offering_id": "00000000-0000-4000-8000-000000000099", "quantity": "1"}]},
         headers={"Idempotency-Key": "public-order-0001"},
     )
 
