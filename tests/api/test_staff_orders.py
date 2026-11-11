@@ -10,6 +10,7 @@ import pytest
 from apps.api.app.main import create_app
 from apps.api.app.public_catalog import PublicCatalogScope
 from apps.api.app.public_orders import PublicOrderItem, SqlitePublicOrders
+from apps.api.app.staff_audit import StaffAccessAuditEvent, StaffAuditSink
 from apps.api.app.staff_auth import (
     AuthenticationRequired,
     StaffAuthenticator,
@@ -42,6 +43,7 @@ def _staff_client(
     database_path: str,
     *,
     auth_wrapper: Callable[[StaticBearerAuthenticator], StaffAuthenticator] | None = None,
+    audit_sink: StaffAuditSink | None = None,
 ) -> tuple[TestClient, str, str]:
     first_tenant, second_tenant = TenantId.generate(), TenantId.generate()
     first_business, second_business = BusinessId.generate(), BusinessId.generate()
@@ -139,6 +141,7 @@ def _staff_client(
                 staff_authenticator=(
                     auth_wrapper(authenticator) if auth_wrapper else authenticator
                 ),
+                staff_audit_sink=audit_sink,
                 staff_orders=SqliteStaffOrders(
                     connect=lambda: sqlite3.connect(database_path), scopes=scopes
                 ),
@@ -248,6 +251,75 @@ def test_staff_authenticator_port_uses_injected_provider_and_server_grants(tmp_p
         None,
         "Bearer invalid",
     ]
+
+
+def test_staff_audit_sink_records_minimal_access_outcomes(tmp_path) -> None:
+    class CollectingSink:
+        def __init__(self) -> None:
+            self.events: list[StaffAccessAuditEvent] = []
+
+        def record(self, event: StaffAccessAuditEvent) -> None:
+            self.events.append(event)
+
+    sink = CollectingSink()
+    client, own_id, foreign_id = _staff_client(str(tmp_path / "audit.db"), audit_sink=sink)
+    own_route = "/api/v1/staff/businesses/first/locations/main/orders"
+    other_route = "/api/v1/staff/businesses/second/locations/main/orders"
+    headers = {"Authorization": "Bearer first-staff-token"}
+    responses = [
+        client.get(own_route, headers=headers),
+        client.get(f"{own_route}/{own_id}", headers=headers),
+        client.get(other_route, headers=headers),
+        client.get(f"{own_route}/{foreign_id}", headers=headers),
+        client.get(own_route),
+        client.get(own_route, headers={"Authorization": "Bearer invalid"}),
+    ]
+    assert [response.status_code for response in responses] == [200, 200, 403, 404, 401, 401]
+    assert [event.status_code for event in sink.events] == [200, 200, 403, 404, 401, 401]
+    assert [event.action for event in sink.events] == [
+        "list_orders",
+        "get_order",
+        "list_orders",
+        "get_order",
+        "list_orders",
+        "list_orders",
+    ]
+    assert [event.subject for event in sink.events] == [
+        "first-user",
+        "first-user",
+        "first-user",
+        "first-user",
+        None,
+        None,
+    ]
+    assert sink.events[2].business_slug == "second"
+    assert sink.events[2].location_slug == "main"
+    for event, response in zip(sink.events, responses, strict=True):
+        assert event.request_id == response.headers["X-Request-ID"]
+        assert not hasattr(event, "authorization")
+        assert not hasattr(event, "order_id")
+        assert "first-staff-token" not in str(event)
+        assert own_id not in str(event)
+        assert foreign_id not in str(event)
+
+
+def test_staff_audit_sink_failure_does_not_mask_authorization(tmp_path) -> None:
+    class BrokenSink:
+        def record(self, event: StaffAccessAuditEvent) -> None:
+            raise RuntimeError("Audit storage offline")
+
+    client, _, _ = _staff_client(str(tmp_path / "audit-failure.db"), audit_sink=BrokenSink())
+    route = "/api/v1/staff/businesses/first/locations/main/orders"
+    assert client.get(route).status_code == 401
+    assert (
+        client.get(route, headers={"Authorization": "Bearer first-staff-token"}).status_code == 200
+    )
+
+
+def test_staff_audit_is_opt_in_and_absent_when_no_sink_is_composed() -> None:
+    client = TestClient(create_app())
+    response = client.get("/api/v1/staff/businesses/first/locations/main/orders")
+    assert response.status_code == 503
 
 
 def test_staff_order_list_is_unavailable_without_explicit_composition() -> None:

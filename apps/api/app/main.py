@@ -13,6 +13,7 @@ from apps.api.app.public_catalog import (
 )
 from apps.api.app.public_orders import PublicOrderItem, PublicOrderRejected, SqlitePublicOrders
 from apps.api.app.public_rate_limit import LocalPublicOrderRateLimiter
+from apps.api.app.staff_audit import StaffAccessAuditEvent, StaffAuditSink
 from apps.api.app.staff_auth import AuthenticationRequired, StaffAuthenticator
 from apps.api.app.staff_orders import (
     SqliteStaffOrders,
@@ -47,6 +48,7 @@ def create_app(
     cors_settings: ApiCorsSettings | None = None,
     staff_authenticator: StaffAuthenticator | None = None,
     staff_orders: SqliteStaffOrders | None = None,
+    staff_audit_sink: StaffAuditSink | None = None,
     public_order_limiter: LocalPublicOrderRateLimiter | None = None,
     public_order_max_body_bytes: int | None = None,
 ) -> FastAPI:
@@ -154,6 +156,32 @@ def create_app(
         except PublicOrderRejected:
             raise HTTPException(status_code=409, detail="Order request was rejected") from None
 
+    def record_staff_access(
+        *,
+        request: Request,
+        subject: str | None,
+        business_slug: str,
+        location_slug: str,
+        action: str,
+        status_code: int,
+    ) -> None:
+        if staff_audit_sink is None:
+            return
+        event = StaffAccessAuditEvent(
+            request_id=request.state.request_id,
+            subject=subject,
+            business_slug=business_slug,
+            location_slug=location_slug,
+            action=action,
+            status_code=status_code,
+        )
+        # Registro best-effort en el prototipo. Un fallo del sink no debe
+        # convertir un 401/403 en 500 ni revelar información de identidad.
+        try:
+            staff_audit_sink.record(event)
+        except Exception:
+            pass
+
     @app.get(
         "/api/v1/staff/businesses/{business_slug}/locations/{location_slug}/orders",
         tags=["staff-orders"],
@@ -161,33 +189,52 @@ def create_app(
     def list_staff_orders(
         business_slug: str,
         location_slug: str,
+        request: Request,
         authorization: str | None = Header(default=None),
         limit: int = Query(default=50, ge=1, le=100),
     ) -> dict[str, object]:
-        if staff_authenticator is None or staff_orders is None:
-            raise HTTPException(status_code=503, detail="Staff orders are not configured")
+        subject: str | None = None
+        status_code = 500
         try:
-            principal = staff_authenticator.authenticate(authorization)
-        except AuthenticationRequired:
-            raise HTTPException(
-                status_code=401,
-                detail="Authentication is required",
-                headers={"WWW-Authenticate": "Bearer"},
-            ) from None
-        try:
-            items = staff_orders.list_for_location(
-                principal=principal,
+            if staff_authenticator is None or staff_orders is None:
+                status_code = 503
+                raise HTTPException(status_code=503, detail="Staff orders are not configured")
+            try:
+                principal = staff_authenticator.authenticate(authorization)
+                subject = principal.subject
+            except AuthenticationRequired:
+                status_code = 401
+                raise HTTPException(
+                    status_code=401,
+                    detail="Authentication is required",
+                    headers={"WWW-Authenticate": "Bearer"},
+                ) from None
+            try:
+                items = staff_orders.list_for_location(
+                    principal=principal,
+                    business_slug=business_slug,
+                    location_slug=location_slug,
+                    limit=limit,
+                )
+            except StaffOrdersUnavailable:
+                status_code = 404
+                raise HTTPException(status_code=404, detail="Staff scope not found") from None
+            except StaffOrdersForbidden:
+                status_code = 403
+                raise HTTPException(
+                    status_code=403, detail="Access to staff scope is forbidden"
+                ) from None
+            status_code = 200
+            return {"items": items}
+        finally:
+            record_staff_access(
+                request=request,
+                subject=subject,
                 business_slug=business_slug,
                 location_slug=location_slug,
-                limit=limit,
+                action="list_orders",
+                status_code=status_code,
             )
-        except StaffOrdersUnavailable:
-            raise HTTPException(status_code=404, detail="Staff scope not found") from None
-        except StaffOrdersForbidden:
-            raise HTTPException(
-                status_code=403, detail="Access to staff scope is forbidden"
-            ) from None
-        return {"items": items}
 
     @app.get(
         "/api/v1/staff/businesses/{business_slug}/locations/{location_slug}/orders/{order_id}",
@@ -197,33 +244,54 @@ def create_app(
         business_slug: str,
         location_slug: str,
         order_id: str,
+        request: Request,
         authorization: str | None = Header(default=None),
     ) -> dict[str, object]:
-        if staff_authenticator is None or staff_orders is None:
-            raise HTTPException(status_code=503, detail="Staff orders are not configured")
+        subject: str | None = None
+        status_code = 500
         try:
-            principal = staff_authenticator.authenticate(authorization)
-        except AuthenticationRequired:
-            raise HTTPException(
-                status_code=401,
-                detail="Authentication is required",
-                headers={"WWW-Authenticate": "Bearer"},
-            ) from None
-        try:
-            return staff_orders.get_for_location(
-                principal=principal,
+            if staff_authenticator is None or staff_orders is None:
+                status_code = 503
+                raise HTTPException(status_code=503, detail="Staff orders are not configured")
+            try:
+                principal = staff_authenticator.authenticate(authorization)
+                subject = principal.subject
+            except AuthenticationRequired:
+                status_code = 401
+                raise HTTPException(
+                    status_code=401,
+                    detail="Authentication is required",
+                    headers={"WWW-Authenticate": "Bearer"},
+                ) from None
+            try:
+                result = staff_orders.get_for_location(
+                    principal=principal,
+                    business_slug=business_slug,
+                    location_slug=location_slug,
+                    order_id=order_id,
+                )
+            except StaffOrdersUnavailable:
+                status_code = 404
+                raise HTTPException(status_code=404, detail="Staff scope not found") from None
+            except StaffOrdersForbidden:
+                status_code = 403
+                raise HTTPException(
+                    status_code=403, detail="Access to staff scope is forbidden"
+                ) from None
+            except StaffOrderNotFound:
+                status_code = 404
+                raise HTTPException(status_code=404, detail="Staff order not found") from None
+            status_code = 200
+            return result
+        finally:
+            record_staff_access(
+                request=request,
+                subject=subject,
                 business_slug=business_slug,
                 location_slug=location_slug,
-                order_id=order_id,
+                action="get_order",
+                status_code=status_code,
             )
-        except StaffOrdersUnavailable:
-            raise HTTPException(status_code=404, detail="Staff scope not found") from None
-        except StaffOrdersForbidden:
-            raise HTTPException(
-                status_code=403, detail="Access to staff scope is forbidden"
-            ) from None
-        except StaffOrderNotFound:
-            raise HTTPException(status_code=404, detail="Staff order not found") from None
 
     return app
 
