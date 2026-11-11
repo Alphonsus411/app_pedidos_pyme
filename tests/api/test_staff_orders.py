@@ -136,7 +136,9 @@ def _staff_client(
     return (
         TestClient(
             create_app(
-                staff_authenticator=(auth_wrapper(authenticator) if auth_wrapper else authenticator),
+                staff_authenticator=(
+                    auth_wrapper(authenticator) if auth_wrapper else authenticator
+                ),
                 staff_orders=SqliteStaffOrders(
                     connect=lambda: sqlite3.connect(database_path), scopes=scopes
                 ),
@@ -204,7 +206,6 @@ def test_staff_order_detail_is_authorized_and_cannot_cross_resource_boundaries(t
     assert malformed.status_code == 404
 
 
-
 def test_staff_authenticator_port_uses_injected_provider_and_server_grants(tmp_path) -> None:
     class DelegatedAuthenticator:
         def __init__(self, delegate: StaticBearerAuthenticator) -> None:
@@ -230,9 +231,12 @@ def test_staff_authenticator_port_uses_injected_provider_and_server_grants(tmp_p
     assert client.get(route, headers=valid).status_code == 200
     assert client.get(f"{route}/{own_id}", headers=valid).status_code == 200
     assert client.get(f"{route}/{foreign_id}", headers=valid).status_code == 404
-    assert client.get(
-        "/api/v1/staff/businesses/second/locations/main/orders", headers=valid
-    ).status_code == 403
+    assert (
+        client.get(
+            "/api/v1/staff/businesses/second/locations/main/orders", headers=valid
+        ).status_code
+        == 403
+    )
     assert client.get(route).status_code == 401
     assert client.get(route, headers={"Authorization": "Bearer invalid"}).status_code == 401
     assert len(delegates) == 1
@@ -244,7 +248,6 @@ def test_staff_authenticator_port_uses_injected_provider_and_server_grants(tmp_p
         None,
         "Bearer invalid",
     ]
-
 
 
 def test_staff_order_list_is_unavailable_without_explicit_composition() -> None:
