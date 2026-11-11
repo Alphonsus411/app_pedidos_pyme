@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hmac
 from collections.abc import Mapping
+from typing import Protocol
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -56,6 +57,18 @@ class StaffPrincipal:
             )
             for grant in self.grants
         )
+
+
+class StaffAuthenticator(Protocol):
+    """Contrato de identidad para rutas staff, inyectado en el borde HTTP.
+
+    El proveedor externo debe validar credenciales y construir permisos
+    confiables; los clientes nunca pueden definir sus propios grants.
+    """
+
+    def authenticate(self, authorization: str | None) -> StaffPrincipal:
+        """Devuelve el principal validado o lanza AuthenticationRequired."""
+        ...
 
 
 class StaticBearerAuthenticator:
