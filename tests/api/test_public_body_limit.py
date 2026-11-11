@@ -36,10 +36,13 @@ def test_bounded_public_order_preserves_previous_contract() -> None:
     )
     assert result.status_code == 503
     assert client.get("/health").status_code == 200
-    assert client.post(
-        "/api/v1/public/businesses/demo/locations/main/other",
-        content=b"x" * 512,
-    ).status_code == 404
+    assert (
+        client.post(
+            "/api/v1/public/businesses/demo/locations/main/other",
+            content=b"x" * 512,
+        ).status_code
+        == 404
+    )
 
 
 def test_rejects_real_chunked_bytes_without_content_length() -> None:
