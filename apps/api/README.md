@@ -64,3 +64,9 @@ Esta capacidad sigue siendo de desarrollo y pruebas; no confirma pedidos, no cob
 ## Aislamiento de identificadores públicos (F2.2; PR #90)
 
 Los nuevos ID de pedidos se derivan de tenant, negocio, ubicación y clave de idempotencia; reutilizar una misma clave en negocios distintos del mismo tenant no colisiona. Si existe un borrador histórico con el identificador v1 en el mismo ámbito se conserva para replay, previa comprobación de contenido y scope. No se reparan borradores históricos incompletos ni se migra la base. Esta medida no sustituye identidad ni rate limiting.
+
+## Límites de entrada de pedidos públicos (F2.3.1)
+
+El endpoint POST público valida antes de persistir: máximo 50 líneas, cada offering_id con 36 caracteres, quantity positiva y <=1000 con máximo cuatro decimales y doce dígitos y una cabecera Idempotency-Key de 1–128 caracteres ASCII dentro de un patrón restringido. Los errores de validación HTTP devuelven 422 y no crean pedidos.
+
+Son límites del contrato HTTP del prototipo, no una implementación de rate limiting, autenticación de clientes o filtrado de tamaño bruto del cuerpo a nivel de proxy. Los controles de despliegue siguen pendientes; SQLite es exclusivamente de desarrollo y pruebas.
