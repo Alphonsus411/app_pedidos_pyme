@@ -13,7 +13,7 @@ from apps.api.app.public_catalog import (
 )
 from apps.api.app.public_orders import PublicOrderItem, PublicOrderRejected, SqlitePublicOrders
 from apps.api.app.public_rate_limit import LocalPublicOrderRateLimiter
-from apps.api.app.staff_auth import AuthenticationRequired, StaticBearerAuthenticator
+from apps.api.app.staff_auth import AuthenticationRequired, StaffAuthenticator
 from apps.api.app.staff_orders import (
     SqliteStaffOrders,
     StaffOrderNotFound,
@@ -45,7 +45,7 @@ def create_app(
     public_catalog: PublicCatalogReader | None = None,
     public_orders: SqlitePublicOrders | None = None,
     cors_settings: ApiCorsSettings | None = None,
-    staff_authenticator: StaticBearerAuthenticator | None = None,
+    staff_authenticator: StaffAuthenticator | None = None,
     staff_orders: SqliteStaffOrders | None = None,
     public_order_limiter: LocalPublicOrderRateLimiter | None = None,
     public_order_max_body_bytes: int | None = None,
