@@ -36,6 +36,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[api,dev,docs]"
 
+      - name: Diagnostics (Ruff format diff; temporary)
+        run: |
+          ruff format --diff apps/api/app/public_orders.py tests/api/test_public_orders.py || true
+
       - name: Ruff (lint + format check)
         run: |
           ruff check .
