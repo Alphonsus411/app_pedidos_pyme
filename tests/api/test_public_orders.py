@@ -108,6 +108,63 @@ def test_public_order_rejects_a_changed_request_with_the_same_idempotency_key(tm
     assert changed.status_code == 409
 
 
+
+def test_public_order_rolls_back_all_lines_on_second_line_failure(tmp_path) -> None:
+    path = str(tmp_path / "rollback.db")
+    client, offering_id = _orders_client(path)
+    route = "/api/v1/public/businesses/first/locations/main/orders"
+    headers = {"Idempotency-Key": "public-order-multiline-1"}
+    bad = "00000000-0000-4000-8000-000000000099"
+    response = client.post(
+        route,
+        json={
+            "items": [
+                {"offering_id": offering_id, "quantity": "2"},
+                {"offering_id": bad, "quantity": "1"},
+            ]
+        },
+        headers=headers,
+    )
+    assert response.status_code == 409
+    with sqlite3.connect(path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM orders").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM idempotency").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM transactional_outbox").fetchone()[0] == 0
+
+    valid = {
+        "items": [
+            {"offering_id": offering_id, "quantity": "2"},
+            {"offering_id": offering_id, "quantity": "1"},
+        ]
+    }
+    success = client.post(route, json=valid, headers=headers)
+    assert success.status_code == 201
+    assert success.json()["total"] == {"amount": "37.5000", "currency": "EUR"}
+    replay = client.post(route, json=valid, headers=headers)
+    assert replay.status_code == 201
+    assert replay.json() == success.json()
+    with sqlite3.connect(path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM orders").fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM idempotency").fetchone()[0] == 3
+        assert connection.execute("SELECT COUNT(*) FROM transactional_outbox").fetchone()[0] == 3
+
+
+def test_public_order_multiline_rejects_changed_payload(tmp_path) -> None:
+    client, offering_id = _orders_client(str(tmp_path / "conflict.db"))
+    route = "/api/v1/public/businesses/first/locations/main/orders"
+    headers = {"Idempotency-Key": "public-order-multiline-2"}
+    first = {"items": [
+        {"offering_id": offering_id, "quantity": "2"},
+        {"offering_id": offering_id, "quantity": "1"},
+    ]}
+    altered = {"items": [
+        {"offering_id": offering_id, "quantity": "2"},
+        {"offering_id": offering_id, "quantity": "3"},
+    ]}
+    assert client.post(route, json=first, headers=headers).status_code == 201
+    assert client.post(route, json=altered, headers=headers).status_code == 409
+
+
 def test_public_order_does_not_start_when_service_is_not_composed() -> None:
     client = TestClient(create_app())
 
