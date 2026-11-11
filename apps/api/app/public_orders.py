@@ -102,9 +102,7 @@ class SqlitePublicOrders:
                 legacy = SqliteOrderRepository(connection).get(
                     tenant_id=scope.tenant_id, order_id=legacy_id
                 )
-                legacy_scope = (
-                    None if legacy is None else (legacy.business_id, legacy.location_id)
-                )
+                legacy_scope = None if legacy is None else (legacy.business_id, legacy.location_id)
                 if legacy_scope == (scope.business_id, scope.location_id):
                     order_id = legacy_id
                 else:
