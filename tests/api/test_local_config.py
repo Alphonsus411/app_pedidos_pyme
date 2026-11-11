@@ -89,9 +89,7 @@ def test_local_configuration_rejects_unknown_roles_before_serving(tmp_path) -> N
         ),
     ],
 )
-def test_local_configuration_rejects_orphan_staff_grants(
-    tmp_path, mutate, expected_error
-) -> None:
+def test_local_configuration_rejects_orphan_staff_grants(tmp_path, mutate, expected_error) -> None:
     config = _configuration(str(tmp_path / "prototype.db"))
     mutate(config)
     config_path = tmp_path / "local-api.json"
@@ -104,8 +102,12 @@ def test_local_configuration_rejects_conflicting_business_identity(tmp_path) -> 
     config = _configuration(str(tmp_path / "prototype.db"))
     first_scope = config["scopes"][0]
     config["scopes"].append(
-        {**first_scope, "location_slug": "other", "location_id": str(uuid4()),
-         "business_id": str(uuid4())}
+        {
+            **first_scope,
+            "location_slug": "other",
+            "location_id": str(uuid4()),
+            "business_id": str(uuid4()),
+        }
     )
     config_path = tmp_path / "local-api.json"
     config_path.write_text(json.dumps(config), encoding="utf-8")
