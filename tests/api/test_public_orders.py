@@ -348,7 +348,7 @@ def test_public_order_does_not_start_when_service_is_not_composed() -> None:
 
     response = client.post(
         "/api/v1/public/businesses/first/locations/main/orders",
-        json={"items": [{"offering_id": "missing", "quantity": "1"}]},
+        json={"items": [{"offering_id": "00000000-0000-4000-8000-000000000099", "quantity": "1"}]},
         headers={"Idempotency-Key": "public-order-0001"},
     )
 
