@@ -120,3 +120,18 @@ ubicación y rol, tanto en listado como en detalle de pedidos.
 validación contra un IdP confiable, expiración/rotación/revocación, gestión de
 secretos, sesiones, auditoría y revisión de permisos. Los clientes no deben
 aportar sus propios grants. Ninguna credencial se versiona.
+
+## Integridad de ámbitos y permisos en la composición local (F2.5)
+
+La carga del JSON local rechaza antes de levantar la aplicación cualquier
+`StaffGrant` que se refiera a un `business_slug/location_slug` no publicado.
+Asimismo, un `business_slug` no puede asociarse a distintos pares de
+`tenant_id/business_id`, ni una ubicación interna puede publicarse bajo
+dos rutas distintas. Sí se permiten varias ubicaciones de un mismo negocio
+cuando sus identificadores internos son diferentes.
+
+Las comprobaciones son solo de **integridad de la configuración local** y
+complementan la autorización por grant que ya ejerce el servidor. No verifican
+la identidad real de trabajadores, ni reemplazan IAM, auditoría, revocación,
+controles de secretos o políticas de producción. SQLite sigue restringido a
+pruebas y desarrollo.
