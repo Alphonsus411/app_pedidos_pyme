@@ -262,9 +262,7 @@ def test_staff_audit_sink_records_minimal_access_outcomes(tmp_path) -> None:
             self.events.append(event)
 
     sink = CollectingSink()
-    client, own_id, foreign_id = _staff_client(
-        str(tmp_path / "audit.db"), audit_sink=sink
-    )
+    client, own_id, foreign_id = _staff_client(str(tmp_path / "audit.db"), audit_sink=sink)
     own_route = "/api/v1/staff/businesses/first/locations/main/orders"
     other_route = "/api/v1/staff/businesses/second/locations/main/orders"
     headers = {"Authorization": "Bearer first-staff-token"}
@@ -279,10 +277,20 @@ def test_staff_audit_sink_records_minimal_access_outcomes(tmp_path) -> None:
     assert [response.status_code for response in responses] == [200, 200, 403, 404, 401, 401]
     assert [event.status_code for event in sink.events] == [200, 200, 403, 404, 401, 401]
     assert [event.action for event in sink.events] == [
-        "list_orders", "get_order", "list_orders", "get_order", "list_orders", "list_orders"
+        "list_orders",
+        "get_order",
+        "list_orders",
+        "get_order",
+        "list_orders",
+        "list_orders",
     ]
     assert [event.subject for event in sink.events] == [
-        "first-user", "first-user", "first-user", "first-user", None, None
+        "first-user",
+        "first-user",
+        "first-user",
+        "first-user",
+        None,
+        None,
     ]
     assert sink.events[2].business_slug == "second"
     assert sink.events[2].location_slug == "main"
@@ -303,7 +311,9 @@ def test_staff_audit_sink_failure_does_not_mask_authorization(tmp_path) -> None:
     client, _, _ = _staff_client(str(tmp_path / "audit-failure.db"), audit_sink=BrokenSink())
     route = "/api/v1/staff/businesses/first/locations/main/orders"
     assert client.get(route).status_code == 401
-    assert client.get(route, headers={"Authorization": "Bearer first-staff-token"}).status_code == 200
+    assert (
+        client.get(route, headers={"Authorization": "Bearer first-staff-token"}).status_code == 200
+    )
 
 
 def test_staff_audit_is_opt_in_and_absent_when_no_sink_is_composed() -> None:
