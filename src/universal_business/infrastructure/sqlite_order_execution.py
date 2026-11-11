@@ -143,6 +143,72 @@ class SqliteOrderExecution:
         )
         return self._run(command, handler, uow, store)
 
+    def create_with_lines(
+        self,
+        command: CreateOrder,
+        lines: Sequence[AddOrderLine],
+        *,
+        policy: OrderLinePolicy,
+    ) -> OrderDraftCreated:
+        """Crear borrador con todas sus líneas en una sola UoW SQLite.
+
+        Los comandos de creación y de línea mantienen sus contratos anteriores.
+        Un replay de creación no vuelve a escribir líneas; la frontera pública
+        comprueba posteriormente que el borrador recuperado sea completo.
+        """
+        if policy is None or not lines:
+            raise ValueError("Se requieren líneas y política explícita")
+        if any(
+            (line.tenant_id, line.business_id, line.location_id, line.order_id)
+            != (command.tenant_id, command.business_id, command.location_id, command.order_id)
+            for line in lines
+        ):
+            raise ValueError("Ámbito de línea incompatible con pedido")
+
+        uow = SqliteUnitOfWork(self._connection)
+        store = SqliteOrderIdempotencyStore(self._connection)
+        orders = SqliteOrderRepository(self._connection)
+        create_handler = CreateOrderHandler(
+            orders=orders,
+            locations=SqliteLocationRepository(self._connection),
+            customers=SqliteCustomerRepository(self._connection),
+            idempotency=store,
+        )
+        line_handler = AddOrderLineHandler(
+            orders=orders,
+            offerings=SqliteOfferingRepository(self._connection),
+            guard=SqliteOrderMutationGuard(uow),
+            policy=policy,
+            idempotency=store,
+        )
+
+        class DraftWithLinesHandler:
+            def handle(
+                self, input: CreateOrder, /
+            ) -> tuple[OrderDraftCreated, Sequence[DomainEvent]]:
+                created = create_handler.handle(input)
+                if isinstance(created, IdempotentReplay):
+                    return created
+                result, create_events = created
+                events: list[DomainEvent] = list(create_events)
+                for line in lines:
+                    outcome = line_handler.handle(line)
+                    if isinstance(outcome, IdempotentReplay):
+                        raise ValueError("Replay parcial de línea en borrador nuevo")
+                    line_result, line_events = outcome
+                    key = scoped_idempotency_key(
+                        business_id=line.business_id,
+                        operation=f"{type(line).__module__}.{type(line).__qualname__}",
+                        key=line.idempotency_key,
+                    )
+                    store.complete_in_uow(
+                        uow, line.tenant_id, key, request_digest(line), line_result
+                    )
+                    events.extend(line_events)
+                return result, events
+
+        return self._run(command, DraftWithLinesHandler(), uow, store)
+
     def add_line(self, command: AddOrderLine, *, policy: OrderLinePolicy) -> OrderLineResult:
         if policy is None:
             raise ValueError("Se requiere política de línea")
