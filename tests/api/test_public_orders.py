@@ -6,13 +6,12 @@ import sqlite3
 from decimal import Decimal
 from uuid import NAMESPACE_URL, uuid5
 
-import pytest
-
 from apps.api.app import public_orders
 from apps.api.app.main import create_app
 from apps.api.app.public_catalog import PublicCatalogScope
 from apps.api.app.public_orders import PublicOrderItem, SqlitePublicOrders
 from fastapi.testclient import TestClient
+import pytest
 
 from universal_business.application.events.dispatcher import DomainEventDispatcher
 from universal_business.application.idempotency import IdempotencyKey
