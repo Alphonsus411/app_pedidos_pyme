@@ -89,3 +89,19 @@ no garantiza identidad real del cliente detrás de proxies, ni sustituye el
 rate limiting de gateway/CDN, la limitación de bytes de cuerpo, la autorización
 o las medidas contra abuso distribuidas. Para producción son obligatorias
 políticas centralizadas y un diseño independiente de observabilidad.
+
+## Límite bruto del cuerpo de pedidos públicos (F2.3.3)
+
+El adaptador admite un middleware ASGI opcional mediante
+`create_app(public_order_max_body_bytes=32 * 1024)` (ejemplo de activación).
+Se aplica solo al POST de creación pública de pedidos. Comprueba la longitud
+declarada y los bytes reales recibidos por fragmentos, sin acumular más del
+límite configurado. El componente admite valores de 1 byte a 1 MiB y usa
+32 KiB por defecto cuando se instancia directamente. Una solicitud excesiva
+recibe HTTP 413 con código `payload_too_large` y correlación por
+`X-Request-ID`. Si no se configura, no cambia el comportamiento actual.
+
+No sustituye el límite bruto de un reverse proxy/CDN ni resuelve timeouts,
+clientes lentos, cargas de otras rutas o mitigación distribuida. No crea
+pedidos durante el rechazo. SQLite permanece exclusivamente en desarrollo y
+pruebas; tampoco se ha incorporado autenticación ni despliegue productivo.

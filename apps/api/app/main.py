@@ -5,6 +5,7 @@ from decimal import Decimal
 
 from apps.api.app.cors import ApiCorsSettings, install_cors
 from apps.api.app.error_contract import install_error_contract
+from apps.api.app.public_body_limit import PublicOrderBodySizeMiddleware
 from apps.api.app.public_catalog import (
     PublicCatalogCursorInvalid,
     PublicCatalogReader,
@@ -47,6 +48,7 @@ def create_app(
     staff_authenticator: StaticBearerAuthenticator | None = None,
     staff_orders: SqliteStaffOrders | None = None,
     public_order_limiter: LocalPublicOrderRateLimiter | None = None,
+    public_order_max_body_bytes: int | None = None,
 ) -> FastAPI:
     """Construye la API local con dependencias de infraestructura explícitas."""
     app = FastAPI(
@@ -84,6 +86,9 @@ def create_app(
                     )
             return await call_next(request)
 
+    if public_order_max_body_bytes is not None:
+        # Por dentro del middleware de correlación: 413 conserva X-Request-ID.
+        app.add_middleware(PublicOrderBodySizeMiddleware, max_bytes=public_order_max_body_bytes)
     install_error_contract(app)
     install_cors(app, cors_settings)
 
