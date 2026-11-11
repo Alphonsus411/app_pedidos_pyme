@@ -105,3 +105,18 @@ No sustituye el límite bruto de un reverse proxy/CDN ni resuelve timeouts,
 clientes lentos, cargas de otras rutas o mitigación distribuida. No crea
 pedidos durante el rechazo. SQLite permanece exclusivamente en desarrollo y
 pruebas; tampoco se ha incorporado autenticación ni despliegue productivo.
+
+## Contrato inyectable de identidad para personal (F2.4)
+
+La factoría HTTP `create_app(staff_authenticator=...)` acepta ahora un
+`StaffAuthenticator` estructural: su operación `authenticate(authorization)`
+devuelve un `StaffPrincipal` validado o lanza `AuthenticationRequired`.
+`StaticBearerAuthenticator` sigue disponible únicamente para desarrollo y
+pruebas, sin cambios en la composición local ni en los permisos existentes.
+El adaptador SQLite continúa comprobando cada `StaffGrant` por negocio,
+ubicación y rol, tanto en listado como en detalle de pedidos.
+
+**Esto no es una integración de identidad de producción.** Quedan pendientes
+validación contra un IdP confiable, expiración/rotación/revocación, gestión de
+secretos, sesiones, auditoría y revisión de permisos. Los clientes no deben
+aportar sus propios grants. Ninguna credencial se versiona.
