@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Callable
 from decimal import Decimal
 
 import pytest
@@ -11,6 +12,7 @@ from apps.api.app.public_catalog import PublicCatalogScope
 from apps.api.app.public_orders import PublicOrderItem, SqlitePublicOrders
 from apps.api.app.staff_auth import (
     AuthenticationRequired,
+    StaffAuthenticator,
     StaffGrant,
     StaffPrincipal,
     StaffRole,
@@ -36,7 +38,11 @@ from universal_business.infrastructure.sqlite_schema import initialize_sqlite_sc
 from universal_business.infrastructure.sqlite_unit_of_work import SqliteUnitOfWork
 
 
-def _staff_client(database_path: str) -> tuple[TestClient, str, str]:
+def _staff_client(
+    database_path: str,
+    *,
+    auth_wrapper: Callable[[StaticBearerAuthenticator], StaffAuthenticator] | None = None,
+) -> tuple[TestClient, str, str]:
     first_tenant, second_tenant = TenantId.generate(), TenantId.generate()
     first_business, second_business = BusinessId.generate(), BusinessId.generate()
     first_location, second_location = LocationId.generate(), LocationId.generate()
@@ -130,7 +136,7 @@ def _staff_client(database_path: str) -> tuple[TestClient, str, str]:
     return (
         TestClient(
             create_app(
-                staff_authenticator=authenticator,
+                staff_authenticator=(auth_wrapper(authenticator) if auth_wrapper else authenticator),
                 staff_orders=SqliteStaffOrders(
                     connect=lambda: sqlite3.connect(database_path), scopes=scopes
                 ),
@@ -196,6 +202,49 @@ def test_staff_order_detail_is_authorized_and_cannot_cross_resource_boundaries(t
     assert allowed.json()["id"] == first_order_id
     assert cross_scope.status_code == 404
     assert malformed.status_code == 404
+
+
+
+def test_staff_authenticator_port_uses_injected_provider_and_server_grants(tmp_path) -> None:
+    class DelegatedAuthenticator:
+        def __init__(self, delegate: StaticBearerAuthenticator) -> None:
+            self._delegate = delegate
+            self.calls: list[str | None] = []
+
+        def authenticate(self, authorization: str | None) -> StaffPrincipal:
+            self.calls.append(authorization)
+            return self._delegate.authenticate(authorization)
+
+    delegates: list[DelegatedAuthenticator] = []
+
+    def wrap(delegate: StaticBearerAuthenticator) -> StaffAuthenticator:
+        adapter = DelegatedAuthenticator(delegate)
+        delegates.append(adapter)
+        return adapter
+
+    client, own_id, foreign_id = _staff_client(
+        str(tmp_path / "delegated-staff.db"), auth_wrapper=wrap
+    )
+    route = "/api/v1/staff/businesses/first/locations/main/orders"
+    valid = {"Authorization": "Bearer first-staff-token"}
+    assert client.get(route, headers=valid).status_code == 200
+    assert client.get(f"{route}/{own_id}", headers=valid).status_code == 200
+    assert client.get(f"{route}/{foreign_id}", headers=valid).status_code == 404
+    assert client.get(
+        "/api/v1/staff/businesses/second/locations/main/orders", headers=valid
+    ).status_code == 403
+    assert client.get(route).status_code == 401
+    assert client.get(route, headers={"Authorization": "Bearer invalid"}).status_code == 401
+    assert len(delegates) == 1
+    assert delegates[0].calls == [
+        "Bearer first-staff-token",
+        "Bearer first-staff-token",
+        "Bearer first-staff-token",
+        "Bearer first-staff-token",
+        None,
+        "Bearer invalid",
+    ]
+
 
 
 def test_staff_order_list_is_unavailable_without_explicit_composition() -> None:
