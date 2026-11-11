@@ -36,9 +36,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[api,dev,docs]"
 
-      - name: Temporary format diagnostics
-        run: ruff format --diff tests/api/test_public_rate_limit.py || true
-
       - name: Ruff (lint + format check)
         run: |
           ruff check .
