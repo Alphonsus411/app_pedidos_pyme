@@ -219,9 +219,7 @@ def test_public_order_same_key_is_isolated_across_businesses_and_locations(tmp_p
             uow.commit()
     client = TestClient(
         create_app(
-            public_orders=SqlitePublicOrders(
-                connect=lambda: sqlite3.connect(path), scopes=scopes
-            )
+            public_orders=SqlitePublicOrders(connect=lambda: sqlite3.connect(path), scopes=scopes)
         )
     )
     headers = {"Idempotency-Key": "shared-client-key"}
