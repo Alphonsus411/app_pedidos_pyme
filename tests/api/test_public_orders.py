@@ -7,13 +7,23 @@ from uuid import NAMESPACE_URL, uuid5
 
 from apps.api.app.main import create_app
 from apps.api.app.public_catalog import PublicCatalogScope
-from apps.api.app.public_orders import SqlitePublicOrders
+from apps.api.app.public_orders import (
+    PublicOrderItem,
+    SqlitePublicOrders,
+    _NoopPublisher,
+    _PublicLinePolicy,
+    _RejectTransitions,
+)
 from fastapi.testclient import TestClient
 
+from universal_business.application.events.dispatcher import DomainEventDispatcher
+from universal_business.application.idempotency import IdempotencyKey
+from universal_business.application.orders.commands import AddOrderLine, CreateOrder
 from universal_business.domain.business.entities import Location
 from universal_business.domain.business.value_objects import Address, LocationStatus, OperatingHours
 from universal_business.domain.catalog.entities import Offering
 from universal_business.domain.catalog.value_objects import CatalogItemStatus
+from universal_business.domain.orders.value_objects import OrderChannel
 from universal_business.domain.shared.value_objects.ids import (
     BusinessId,
     LocationId,
@@ -23,6 +33,7 @@ from universal_business.domain.shared.value_objects.ids import (
 )
 from universal_business.domain.shared.value_objects.money import Money
 from universal_business.infrastructure.sqlite_locations import SqliteLocationRepository
+from universal_business.infrastructure.sqlite_order_execution import SqliteOrderExecution
 from universal_business.infrastructure.sqlite_offerings import SqliteOfferingRepository
 from universal_business.infrastructure.sqlite_schema import initialize_sqlite_schema
 from universal_business.infrastructure.sqlite_unit_of_work import SqliteUnitOfWork
@@ -249,12 +260,6 @@ def test_public_order_replays_legacy_identifier_in_original_scope(tmp_path) -> N
         assert row is not None
         tenant_id, business_id, location_id = row
     # Recreate that historical state through the old deterministic-ID code path.
-    from universal_business.application.events.dispatcher import DomainEventDispatcher
-    from universal_business.application.idempotency import IdempotencyKey
-    from universal_business.application.orders.commands import AddOrderLine, CreateOrder
-    from universal_business.domain.orders.value_objects import OrderChannel
-    from universal_business.infrastructure.sqlite_order_execution import SqliteOrderExecution
-    from apps.api.app.public_orders import PublicOrderItem, _PublicLinePolicy, _RejectTransitions, _NoopPublisher, SqlitePublicOrders
 
     scope = PublicCatalogScope(
         tenant_id=TenantId.from_raw(tenant_id),
