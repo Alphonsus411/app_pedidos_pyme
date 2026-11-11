@@ -24,14 +24,14 @@ from pydantic import BaseModel, ConfigDict, Field
 class PublicOrderLineIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    offering_id: str
-    quantity: Decimal = Field(gt=0)
+    offering_id: str = Field(min_length=36, max_length=36)
+    quantity: Decimal = Field(gt=0, le=1000, max_digits=12, decimal_places=4)
 
 
 class PublicOrderIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    items: list[PublicOrderLineIn] = Field(min_length=1)
+    items: list[PublicOrderLineIn] = Field(min_length=1, max_length=50)
 
 
 def create_app(
@@ -89,7 +89,7 @@ def create_app(
         business_slug: str,
         location_slug: str,
         request: PublicOrderIn,
-        idempotency_key: str = Header(alias="Idempotency-Key"),
+        idempotency_key: str = Header(alias="Idempotency-Key", min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$"),
     ) -> dict[str, object]:
         if public_orders is None:
             raise HTTPException(status_code=503, detail="Public orders are not configured")
