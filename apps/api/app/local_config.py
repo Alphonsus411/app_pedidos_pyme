@@ -47,10 +47,16 @@ def load_local_configuration(path: Path) -> LocalApiConfiguration:
     sqlite_path = value["sqlite_path"]
     if not isinstance(sqlite_path, str) or not sqlite_path.strip():
         raise LocalConfigurationError("sqlite_path is required")
+    scopes = _parse_scopes(value["scopes"])
+    credentials = _parse_credentials(value["staff_credentials"])
+    for principal in credentials.values():
+        for grant in principal.grants:
+            if (grant.business_slug, grant.location_slug) not in scopes:
+                raise LocalConfigurationError("Staff grant references an unknown scope")
     return LocalApiConfiguration(
         sqlite_path=sqlite_path,
-        scopes=_parse_scopes(value["scopes"]),
-        credentials=_parse_credentials(value["staff_credentials"]),
+        scopes=scopes,
+        credentials=credentials,
         cors_origins=_parse_origins(value["cors_origins"]),
     )
 
@@ -80,6 +86,8 @@ def _parse_scopes(value: Any) -> dict[tuple[str, str], PublicCatalogScope]:
     if type(value) is not list or not value:
         raise LocalConfigurationError("At least one scope is required")
     parsed: dict[tuple[str, str], PublicCatalogScope] = {}
+    business_scopes: dict[str, tuple[TenantId, BusinessId]] = {}
+    location_scopes: set[tuple[TenantId, BusinessId, LocationId]] = set()
     for item in value:
         if type(item) is not dict or set(item) != {
             "business_slug",
@@ -96,13 +104,24 @@ def _parse_scopes(value: Any) -> dict[tuple[str, str], PublicCatalogScope]:
         if key in parsed:
             raise LocalConfigurationError("Scope is duplicated")
         try:
-            parsed[key] = PublicCatalogScope(
+            scope = PublicCatalogScope(
                 tenant_id=TenantId.from_raw(item["tenant_id"]),
                 business_id=BusinessId.from_raw(item["business_id"]),
                 location_id=LocationId.from_raw(item["location_id"]),
             )
         except InvariantViolationError as exc:
             raise LocalConfigurationError("Scope identifiers are invalid") from exc
+        business_key = item["business_slug"]
+        business_identity = (scope.tenant_id, scope.business_id)
+        known_identity = business_scopes.get(business_key)
+        if known_identity is not None and known_identity != business_identity:
+            raise LocalConfigurationError("Business slug has inconsistent identity")
+        location_identity = (*business_identity, scope.location_id)
+        if location_identity in location_scopes:
+            raise LocalConfigurationError("Location is published more than once")
+        business_scopes[business_key] = business_identity
+        location_scopes.add(location_identity)
+        parsed[key] = scope
     return parsed
 
 
