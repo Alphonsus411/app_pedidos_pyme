@@ -11,9 +11,7 @@ import re
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-_PUBLIC_ORDER_PATH = re.compile(
-    r"/api/v1/public/businesses/[^/]+/locations/[^/]+/orders"
-)
+_PUBLIC_ORDER_PATH = re.compile(r"/api/v1/public/businesses/[^/]+/locations/[^/]+/orders")
 
 
 class PublicOrderBodySizeMiddleware:
