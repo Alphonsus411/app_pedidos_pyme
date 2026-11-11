@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import sqlite3
-
-import pytest
 from decimal import Decimal
 from uuid import NAMESPACE_URL, uuid5
+
+import pytest
 
 from apps.api.app import public_orders
 from apps.api.app.main import create_app
