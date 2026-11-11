@@ -129,9 +129,7 @@ class SqlitePublicOrders:
                     tenant_id=scope.tenant_id,
                     order_id=order_id,
                 )
-                expected = {
-                    line.line_id: (line.offering_id, line.quantity) for line in lines
-                }
+                expected = {line.line_id: (line.offering_id, line.quantity) for line in lines}
                 if (
                     order is None
                     or order.status != OrderStatus.DRAFT
