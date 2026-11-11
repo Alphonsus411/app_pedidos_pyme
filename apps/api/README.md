@@ -135,3 +135,21 @@ complementan la autorización por grant que ya ejerce el servidor. No verifican
 la identidad real de trabajadores, ni reemplazan IAM, auditoría, revocación,
 controles de secretos o políticas de producción. SQLite sigue restringido a
 pruebas y desarrollo.
+
+## Puerto opcional de auditoría staff (F2.6)
+
+La factoría de la API admite `create_app(staff_audit_sink=...)` para inyectar
+un `StaffAuditSink` que reciba eventos `StaffAccessAuditEvent` de las lecturas
+privadas de pedidos (lista y detalle). El evento contiene `request_id`,
+`subject` cuando pudo autenticarse, `business_slug`, `location_slug`,
+`action` y `status_code`. No contiene `Authorization`, tokens ni
+identificadores de pedidos. En las rutas ejecutadas se registran resultados
+200, 401, 403, 404, 503 y fallos inesperados con estado 500.
+
+**Alcance del prototipo:** la emisión es optativa, sin almacenamiento duradero
+incluido y de mejor esfuerzo: si falla el sink no se altera la respuesta HTTP.
+Los errores de validación 422 antes de entrar en el controlador no generan
+este evento. Tampoco se registra tráfico público u otras rutas privadas.
+No es una auditoría regulatoria ni adecuada para producción sin un sumidero
+seguro, persistencia, disponibilidad, controles de acceso, retención y
+política explícita ante fallos. SQLite sigue usándose solo en desarrollo/tests.
