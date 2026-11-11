@@ -176,7 +176,6 @@ def test_public_order_multiline_rejects_changed_payload(tmp_path) -> None:
     assert client.post(route, json=altered, headers=headers).status_code == 409
 
 
-
 def test_public_order_same_key_is_isolated_across_businesses_and_locations(tmp_path) -> None:
     path = str(tmp_path / "scopes.db")
     tenant = TenantId.generate()
@@ -255,7 +254,6 @@ def test_public_order_replays_legacy_identifier_in_original_scope(tmp_path) -> N
         assert row is not None
         tenant_id, business_id, location_id = row
     # Recreate that historical state through the old deterministic-ID code path.
-
     scope = PublicCatalogScope(
         tenant_id=TenantId.from_raw(tenant_id),
         business_id=BusinessId.from_raw(business_id),
@@ -300,7 +298,6 @@ def test_public_order_replays_legacy_identifier_in_original_scope(tmp_path) -> N
     assert replay.json()["id"] == str(legacy_id)
     with sqlite3.connect(path) as connection:
         assert connection.execute("SELECT COUNT(*) FROM orders").fetchone()[0] == 1
-
 
 
 def test_public_order_does_not_start_when_service_is_not_composed() -> None:
