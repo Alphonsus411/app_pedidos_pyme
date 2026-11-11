@@ -1,7 +1,7 @@
 """Punto de entrada del adaptador HTTP local."""
 
-from decimal import Decimal
 import re
+from decimal import Decimal
 
 from apps.api.app.cors import ApiCorsSettings, install_cors
 from apps.api.app.error_contract import install_error_contract
@@ -21,9 +21,9 @@ from apps.api.app.staff_orders import (
 )
 from fastapi import FastAPI, HTTPException, Header, Query, Request
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict, Field
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
-from pydantic import BaseModel, ConfigDict, Field
 
 
 class PublicOrderLineIn(BaseModel):
