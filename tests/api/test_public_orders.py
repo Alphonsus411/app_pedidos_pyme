@@ -298,7 +298,6 @@ def test_public_order_replays_legacy_identifier_in_original_scope(tmp_path) -> N
         assert connection.execute("SELECT COUNT(*) FROM orders").fetchone()[0] == 1
 
 
-
 @pytest.mark.parametrize(
     ("items", "key"),
     [
@@ -311,13 +310,14 @@ def test_public_order_replays_legacy_identifier_in_original_scope(tmp_path) -> N
         ([{"offering_id": "valid", "quantity": "1"}], "a" * 129),
     ],
 )
-def test_public_order_rejects_unbounded_input_before_storage(
-    tmp_path, items, key
-) -> None:
+def test_public_order_rejects_unbounded_input_before_storage(tmp_path, items, key) -> None:
     path = str(tmp_path / "bounds.db")
     client, offering_id = _orders_client(path)
     payload = [
-        {**item, "offering_id": offering_id if item["offering_id"] == "valid" else item["offering_id"]}
+        {
+            **item,
+            "offering_id": offering_id if item["offering_id"] == "valid" else item["offering_id"],
+        }
         for item in items
     ]
     response = client.post(
@@ -341,7 +341,6 @@ def test_public_order_rejects_more_than_fifty_lines_before_storage(tmp_path) -> 
     assert response.status_code == 422
     with sqlite3.connect(path) as connection:
         assert connection.execute("SELECT COUNT(*) FROM orders").fetchone()[0] == 0
-
 
 
 def test_public_order_does_not_start_when_service_is_not_composed() -> None:
