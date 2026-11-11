@@ -247,7 +247,7 @@ def test_public_order_replays_legacy_identifier_in_original_scope(tmp_path) -> N
     legacy_id = OrderId.from_raw(uuid5(NAMESPACE_URL, f"public-order-v1:{key}"))
     with sqlite3.connect(path) as connection:
         row = connection.execute(
-            "SELECT tenant_id, business_id, location_id FROM locations"
+            "SELECT tenant_id, business_id, id FROM locations"
         ).fetchone()
         assert row is not None
         tenant_id, business_id, location_id = row
