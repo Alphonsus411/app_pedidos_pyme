@@ -12,6 +12,7 @@ import hmac
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Protocol
 
 
 class AuthenticationRequired(ValueError):
@@ -56,6 +57,18 @@ class StaffPrincipal:
             )
             for grant in self.grants
         )
+
+
+class StaffAuthenticator(Protocol):
+    """Contrato de identidad para rutas staff, inyectado en el borde HTTP.
+
+    El proveedor externo debe validar credenciales y construir permisos
+    confiables; los clientes nunca pueden definir sus propios grants.
+    """
+
+    def authenticate(self, authorization: str | None) -> StaffPrincipal:
+        """Devuelve el principal validado o lanza AuthenticationRequired."""
+        ...
 
 
 class StaticBearerAuthenticator:
