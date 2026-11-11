@@ -23,7 +23,6 @@ from universal_business.domain.shared.value_objects.ids import (
 )
 from universal_business.domain.shared.value_objects.money import Money
 from universal_business.infrastructure.sqlite_locations import SqliteLocationRepository
-from universal_business.infrastructure.sqlite_orders import SqliteOrderRepository
 from universal_business.infrastructure.sqlite_offerings import SqliteOfferingRepository
 from universal_business.infrastructure.sqlite_schema import initialize_sqlite_schema
 from universal_business.infrastructure.sqlite_unit_of_work import SqliteUnitOfWork
@@ -244,11 +243,11 @@ def test_public_order_replays_legacy_identifier_in_original_scope(tmp_path) -> N
     # This is the ID that a previous version would have generated.
     legacy_id = OrderId.from_raw(uuid5(NAMESPACE_URL, f"public-order-v1:{key}"))
     with sqlite3.connect(path) as connection:
-        row = connection.execute("SELECT tenant_id, business_id, location_id FROM locations").fetchone()
+        row = connection.execute(
+            "SELECT tenant_id, business_id, location_id FROM locations"
+        ).fetchone()
         assert row is not None
         tenant_id, business_id, location_id = row
-        # A previously created draft is present; no mutation is allowed on replay.
-        # The old code path created it using its legacy ID and scoped idempotency.
     # Recreate that historical state through the old deterministic-ID code path.
     from universal_business.application.events.dispatcher import DomainEventDispatcher
     from universal_business.application.idempotency import IdempotencyKey
