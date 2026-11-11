@@ -101,36 +101,50 @@ class SqlitePublicOrders:
                     publisher=_NoopPublisher(),
                     transition_policy=_RejectTransitions(),
                 )
-                execution.create(
-                    CreateOrder(
+                command = CreateOrder(
+                    tenant_id=scope.tenant_id,
+                    business_id=scope.business_id,
+                    location_id=scope.location_id,
+                    order_id=order_id,
+                    channel=OrderChannel.WEB,
+                    idempotency_key=IdempotencyKey(value=f"create-{request_key}"),
+                )
+                lines = [
+                    AddOrderLine(
                         tenant_id=scope.tenant_id,
                         business_id=scope.business_id,
                         location_id=scope.location_id,
                         order_id=order_id,
-                        channel=OrderChannel.WEB,
-                        idempotency_key=IdempotencyKey(value=f"create-{request_key}"),
+                        offering_id=OfferingId.from_raw(item.offering_id),
+                        line_id=uuid5(order_id.raw, f"line:{index}"),
+                        quantity=item.quantity,
+                        discount=Money("0", "EUR"),
+                        tax=Money("0", "EUR"),
+                        idempotency_key=IdempotencyKey(value=f"line-{index}-{request_key}"),
                     )
-                )
-                for index, item in enumerate(items):
-                    execution.add_line(
-                        AddOrderLine(
-                            tenant_id=scope.tenant_id,
-                            business_id=scope.business_id,
-                            location_id=scope.location_id,
-                            order_id=order_id,
-                            offering_id=OfferingId.from_raw(item.offering_id),
-                            line_id=uuid5(order_id.raw, f"line:{index}"),
-                            quantity=item.quantity,
-                            discount=Money("0", "EUR"),
-                            tax=Money("0", "EUR"),
-                            idempotency_key=IdempotencyKey(value=f"line-{index}-{request_key}"),
-                        ),
-                        policy=_PublicLinePolicy(),
-                    )
+                    for index, item in enumerate(items)
+                ]
+                execution.create_with_lines(command, lines, policy=_PublicLinePolicy())
                 order = SqliteOrderRepository(connection).get(
                     tenant_id=scope.tenant_id,
                     order_id=order_id,
                 )
+                expected = {
+                    line.line_id: (line.offering_id, line.quantity) for line in lines
+                }
+                if (
+                    order is None
+                    or order.status != OrderStatus.DRAFT
+                    or (order.tenant_id, order.business_id, order.location_id)
+                    != (scope.tenant_id, scope.business_id, scope.location_id)
+                    or len(order.lines) != len(lines)
+                    or any(
+                        line.line_id not in expected
+                        or (line.offering_id, line.quantity) != expected[line.line_id]
+                        for line in order.lines
+                    )
+                ):
+                    raise PublicOrderRejected("Incomplete or incompatible historical draft")
         except (ApplicationError, InvariantViolationError, ValueError) as exc:
             raise PublicOrderRejected("Order request was rejected") from exc
         if order is None or order.total is None:
