@@ -54,3 +54,9 @@ CORS solo se activa si la composición recibe una lista cerrada de orígenes
 HTTP(S). No admite `*`, rutas ni orígenes con credenciales, y permite los
 encabezados necesarios para los contratos actuales. El valor depende del
 entorno consumidor; no hay ningún origen de Fripollo codificado en la API.
+
+## Creación atómica de borradores multilínea (F2.1; PR #90)
+
+La composición local en la rama de PR #90 crea el pedido y todas sus líneas en una sola UoW SQLite. Un fallo previo al commit revierte pedido, líneas, idempotencia y outbox; un replay idéntico devuelve el borrador persistido siempre que conserve íntegramente las líneas esperadas. Una solicitud modificada con la misma clave se rechaza. No se reparan automáticamente borradores parciales históricos.
+
+Esta capacidad sigue siendo de desarrollo y pruebas; no confirma pedidos, no cobra ni envía mensajes, y no implica preparación para producción. Las rutas privadas siguen usando identidad técnica estática de laboratorio.
