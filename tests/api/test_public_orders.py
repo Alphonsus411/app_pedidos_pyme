@@ -246,9 +246,7 @@ def test_public_order_replays_legacy_identifier_in_original_scope(tmp_path) -> N
     # This is the ID that a previous version would have generated.
     legacy_id = OrderId.from_raw(uuid5(NAMESPACE_URL, f"public-order-v1:{key}"))
     with sqlite3.connect(path) as connection:
-        row = connection.execute(
-            "SELECT tenant_id, business_id, id FROM locations"
-        ).fetchone()
+        row = connection.execute("SELECT tenant_id,business_id,id FROM locations").fetchone()
         assert row is not None
         tenant_id, business_id, location_id = row
     # Recreate that historical state through the old deterministic-ID code path.
