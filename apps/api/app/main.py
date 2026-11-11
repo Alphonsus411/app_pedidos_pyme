@@ -89,7 +89,12 @@ def create_app(
         business_slug: str,
         location_slug: str,
         request: PublicOrderIn,
-        idempotency_key: str = Header(alias="Idempotency-Key", min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$"),
+        idempotency_key: str = Header(
+            alias="Idempotency-Key",
+            min_length=1,
+            max_length=128,
+            pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+        ),
     ) -> dict[str, object]:
         if public_orders is None:
             raise HTTPException(status_code=503, detail="Public orders are not configured")
