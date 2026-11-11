@@ -4,8 +4,8 @@ import re
 from decimal import Decimal
 
 from apps.api.app.cors import ApiCorsSettings, install_cors
-from apps.api.app.public_body_limit import PublicOrderBodySizeMiddleware
 from apps.api.app.error_contract import install_error_contract
+from apps.api.app.public_body_limit import PublicOrderBodySizeMiddleware
 from apps.api.app.public_catalog import (
     PublicCatalogCursorInvalid,
     PublicCatalogReader,
