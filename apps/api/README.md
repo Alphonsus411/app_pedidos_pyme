@@ -60,3 +60,7 @@ entorno consumidor; no hay ningún origen de Fripollo codificado en la API.
 La composición local en la rama de PR #90 crea el pedido y todas sus líneas en una sola UoW SQLite. Un fallo previo al commit revierte pedido, líneas, idempotencia y outbox; un replay idéntico devuelve el borrador persistido siempre que conserve íntegramente las líneas esperadas. Una solicitud modificada con la misma clave se rechaza. No se reparan automáticamente borradores parciales históricos.
 
 Esta capacidad sigue siendo de desarrollo y pruebas; no confirma pedidos, no cobra ni envía mensajes, y no implica preparación para producción. Las rutas privadas siguen usando identidad técnica estática de laboratorio.
+
+## Aislamiento de identificadores públicos (F2.2; PR #90)
+
+Los nuevos ID de pedidos se derivan de tenant, negocio, ubicación y clave de idempotencia; reutilizar una misma clave en negocios distintos del mismo tenant no colisiona. Si existe un borrador histórico con el identificador v1 en el mismo ámbito se conserva para replay, previa comprobación de contenido y scope. No se reparan borradores históricos incompletos ni se migra la base. Esta medida no sustituye identidad ni rate limiting.
