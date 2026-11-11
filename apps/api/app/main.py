@@ -1,5 +1,6 @@
 """Punto de entrada del adaptador HTTP local."""
 
+import re
 from decimal import Decimal
 
 from apps.api.app.cors import ApiCorsSettings, install_cors
@@ -10,6 +11,7 @@ from apps.api.app.public_catalog import (
     PublicCatalogUnavailable,
 )
 from apps.api.app.public_orders import PublicOrderItem, PublicOrderRejected, SqlitePublicOrders
+from apps.api.app.public_rate_limit import LocalPublicOrderRateLimiter
 from apps.api.app.staff_auth import AuthenticationRequired, StaticBearerAuthenticator
 from apps.api.app.staff_orders import (
     SqliteStaffOrders,
@@ -17,8 +19,11 @@ from apps.api.app.staff_orders import (
     StaffOrdersForbidden,
     StaffOrdersUnavailable,
 )
-from fastapi import FastAPI, HTTPException, Header, Query
+from fastapi import FastAPI, HTTPException, Header, Query, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
+from starlette.middleware.base import RequestResponseEndpoint
+from starlette.responses import Response
 
 
 class PublicOrderLineIn(BaseModel):
@@ -41,6 +46,7 @@ def create_app(
     cors_settings: ApiCorsSettings | None = None,
     staff_authenticator: StaticBearerAuthenticator | None = None,
     staff_orders: SqliteStaffOrders | None = None,
+    public_order_limiter: LocalPublicOrderRateLimiter | None = None,
 ) -> FastAPI:
     """Construye la API local con dependencias de infraestructura explícitas."""
     app = FastAPI(
@@ -48,6 +54,36 @@ def create_app(
         version="0.1.0-prototype",
         description="Adaptador local del prototipo; no preparado para producción.",
     )
+    # Registrar primero el limiter: el middleware de correlación exterior
+    # instala request_id y conserva X-Request-ID incluso en respuestas 429.
+    if public_order_limiter is not None:
+
+        @app.middleware("http")
+        async def limit_public_order_requests(
+            request: Request, call_next: RequestResponseEndpoint
+        ) -> Response:
+            if request.method == "POST" and re.fullmatch(
+                r"/api/v1/public/businesses/[^/]+/locations/[^/]+/orders",
+                request.url.path,
+            ):
+                client = request.client.host if request.client is not None else "unknown"
+                key = f"{client}:{request.url.path}"
+                retry = public_order_limiter.retry_after(key)
+                if retry is not None:
+                    request_id = getattr(request.state, "request_id", "")
+                    return JSONResponse(
+                        status_code=429,
+                        headers={"Retry-After": str(retry)},
+                        content={
+                            "error": {
+                                "code": "rate_limited",
+                                "message": "Too many public order requests",
+                                "request_id": request_id,
+                            }
+                        },
+                    )
+            return await call_next(request)
+
     install_error_contract(app)
     install_cors(app, cors_settings)
 
