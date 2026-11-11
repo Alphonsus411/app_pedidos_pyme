@@ -5,15 +5,10 @@ from __future__ import annotations
 import sqlite3
 from uuid import NAMESPACE_URL, uuid5
 
+from apps.api.app import public_orders
 from apps.api.app.main import create_app
 from apps.api.app.public_catalog import PublicCatalogScope
-from apps.api.app.public_orders import (
-    PublicOrderItem,
-    SqlitePublicOrders,
-    _NoopPublisher,
-    _PublicLinePolicy,
-    _RejectTransitions,
-)
+from apps.api.app.public_orders import PublicOrderItem, SqlitePublicOrders
 from fastapi.testclient import TestClient
 
 from universal_business.application.events.dispatcher import DomainEventDispatcher
@@ -33,8 +28,8 @@ from universal_business.domain.shared.value_objects.ids import (
 )
 from universal_business.domain.shared.value_objects.money import Money
 from universal_business.infrastructure.sqlite_locations import SqliteLocationRepository
-from universal_business.infrastructure.sqlite_order_execution import SqliteOrderExecution
 from universal_business.infrastructure.sqlite_offerings import SqliteOfferingRepository
+from universal_business.infrastructure.sqlite_order_execution import SqliteOrderExecution
 from universal_business.infrastructure.sqlite_schema import initialize_sqlite_schema
 from universal_business.infrastructure.sqlite_unit_of_work import SqliteUnitOfWork
 
@@ -272,8 +267,8 @@ def test_public_order_replays_legacy_identifier_in_original_scope(tmp_path) -> N
         execution = SqliteOrderExecution(
             connection,
             dispatcher=DomainEventDispatcher(),
-            publisher=_NoopPublisher(),
-            transition_policy=_RejectTransitions(),
+            publisher=public_orders._NoopPublisher(),
+            transition_policy=public_orders._RejectTransitions(),
         )
         execution.create_with_lines(
             CreateOrder(
@@ -298,7 +293,7 @@ def test_public_order_replays_legacy_identifier_in_original_scope(tmp_path) -> N
                     idempotency_key=IdempotencyKey(value=f"line-0-{request_key}"),
                 )
             ],
-            policy=_PublicLinePolicy(),
+            policy=public_orders._PublicLinePolicy(),
         )
     replay = client.post(url, json=body, headers={"Idempotency-Key": key})
     assert replay.status_code == 201
