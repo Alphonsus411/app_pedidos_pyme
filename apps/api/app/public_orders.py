@@ -91,10 +91,30 @@ class SqlitePublicOrders:
         if not items:
             raise PublicOrderRejected("At least one item is required")
         request_key = self._request_key(idempotency_key=idempotency_key, items=items)
-        order_id = OrderId.from_raw(uuid5(NAMESPACE_URL, f"public-order-v1:{idempotency_key}"))
         try:
             with closing(self._connect()) as connection:
                 initialize_sqlite_schema(connection)
+                # Compatibilidad: antes el ID dependía solo de la key.
+                # Recuperar el histórico únicamente si pertenece al mismo ámbito.
+                legacy_id = OrderId.from_raw(
+                    uuid5(NAMESPACE_URL, f"public-order-v1:{idempotency_key}")
+                )
+                legacy = SqliteOrderRepository(connection).get(
+                    tenant_id=scope.tenant_id, order_id=legacy_id
+                )
+                if legacy is not None and (
+                    legacy.business_id, legacy.location_id
+                ) == (scope.business_id, scope.location_id):
+                    order_id = legacy_id
+                else:
+                    order_id = OrderId.from_raw(
+                        uuid5(
+                            NAMESPACE_URL,
+                            "public-order-v2:"
+                            f"{scope.tenant_id}:{scope.business_id}:{scope.location_id}:"
+                            f"{idempotency_key}",
+                        )
+                    )
                 execution = SqliteOrderExecution(
                     connection,
                     dispatcher=DomainEventDispatcher(),
