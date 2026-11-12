@@ -13,11 +13,11 @@ from contextlib import closing
 from apps.api.app.public_catalog import PublicCatalogScope
 from apps.api.app.staff_auth import StaffPrincipal, StaffRole
 from apps.api.app.staff_order_management import (
+    _ACTION_TARGETS,
     ManagementForbidden,
     ManagementScopeNotFound,
     ManagementTransitionRejected,
     OrderManagementAction,
-    _ACTION_TARGETS,
     authorize_order_transition,
 )
 
