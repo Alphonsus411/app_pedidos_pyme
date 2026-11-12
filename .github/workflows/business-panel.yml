@@ -27,6 +27,12 @@ jobs:
       - name: HTTP contract tests
         working-directory: apps/business_panel
         run: npm test
+      - name: Install Playwright Chromium
+        working-directory: apps/business_panel
+        run: npx playwright install --with-deps chromium
+      - name: Browser E2E regression tests
+        working-directory: apps/business_panel
+        run: npm run test:e2e
       - name: Production bundle smoke build
         working-directory: apps/business_panel
         run: npm run build
