@@ -39,12 +39,17 @@ SECOND_ROUTE = "/api/v1/staff/businesses/second/locations/main/orders"
 
 
 class ApproveLaboratoryTransitions:
+    def __init__(self, *, allowed: bool = True) -> None:
+        self.allowed = allowed
+
     def approve(self, *, order: Order, target: OrderStatus) -> bool:
         del order, target
-        return True
+        return self.allowed
 
 
-def _setup(path: str) -> tuple[TestClient, LocalOpaqueStaffSessions, StaffMutationCsrf, str, str]:
+def _setup(
+    path: str, *, allow_transitions: bool = True
+) -> tuple[TestClient, LocalOpaqueStaffSessions, StaffMutationCsrf, str, str]:
     scopes = {}
     offerings = {}
     with sqlite3.connect(path) as connection:
@@ -108,7 +113,7 @@ def _setup(path: str) -> tuple[TestClient, LocalOpaqueStaffSessions, StaffMutati
         staff_order_transitions=SqliteStaffOrderTransitions(
             connect=lambda: sqlite3.connect(path),
             scopes=scopes,
-            policy=ApproveLaboratoryTransitions(),
+            policy=ApproveLaboratoryTransitions(allowed=allow_transitions),
         ),
     )
     return TestClient(app), sessions, csrf, str(first_id), str(second_id)
@@ -274,3 +279,15 @@ def test_config_missing_is_503_and_no_static_bearer_fallback() -> None:
         headers={"Idempotency-Key": "transition-0001", "Authorization": "Bearer test"},
     )
     assert result.status_code == 503
+
+
+def test_policy_denial_rolls_back_idempotency_and_outbox(tmp_path) -> None:
+    path = str(tmp_path / "policy-denial.db")
+    client, sessions, csrf, order_id, _ = _setup(path, allow_transitions=False)
+    token = _authenticate(client, sessions, roles=frozenset({StaffRole.MANAGE_ORDERS}))
+    route = f"{FIRST_ROUTE}/{order_id}/transitions"
+    before = _counts(path)
+    denied = client.post(route, json={"action": "validate"}, headers=_headers(csrf, token))
+    assert denied.status_code == 409
+    assert _counts(path) == before
+    assert _status(path, order_id) == "draft"
