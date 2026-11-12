@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import sqlite3
+from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
+from threading import Barrier
 
 import pytest
 from apps.api.app.local_staff_sessions import COOKIE_NAME, LocalOpaqueStaffSessions
@@ -309,3 +311,89 @@ def test_revoked_session_has_no_bearer_fallback_or_side_effects(tmp_path) -> Non
     assert result.status_code == 401
     assert _status(path, first_id) == "draft"
     assert _counts(path) == before
+
+
+@pytest.mark.parametrize("same_key", [True, False])
+def test_simultaneous_staff_transitions_are_serialized_and_idempotent(
+    tmp_path, same_key: bool
+) -> None:
+    """Dos conexiones SQLite llegan a la misma orden en paralelo."""
+    path = str(tmp_path / "concurrent-order.db")
+    client, sessions, csrf, first_id, second_id = _setup(path)
+    token = _authenticate(client, sessions, roles=frozenset({StaffRole.MANAGE_ORDERS}))
+    route = f"{FIRST_ROUTE}/{first_id}/transitions"
+    before = _counts(path)
+    barrier = Barrier(2, timeout=10)
+
+    def attempt(index: int) -> int:
+        headers = _headers(
+            csrf, token, key="concurrent-0001" if same_key else f"concurrent-000{index + 1}"
+        )
+        with TestClient(client.app) as concurrent_client:
+            concurrent_client.cookies.set(COOKIE_NAME, token, path="/")
+            barrier.wait()
+            result = concurrent_client.post(route, json={"action": "validate"}, headers=headers)
+            return result.status_code
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(attempt, index) for index in range(2)]
+        codes = [future.result(timeout=15) for future in futures]
+
+    assert codes.count(200) >= 1
+    assert all(code in (200, 409) for code in codes)
+    if not same_key:
+        assert sorted(codes) == [200, 409]
+    assert _status(path, first_id) == "validated"
+    assert _status(path, second_id) == "draft"
+    assert _counts(path) == (before[0] + 1, before[1] + 1)
+
+    # Un replay, también después de la carrera, no vuelve a escribir.
+    assert (
+        client.post(
+            route,
+            json={"action": "validate"},
+            headers=_headers(csrf, token, key="concurrent-0001"),
+        ).status_code
+        == 200
+    )
+    assert _counts(path) == (before[0] + 1, before[1] + 1)
+
+
+def test_parallel_transitions_different_tenants_preserve_isolation(tmp_path) -> None:
+    """Dos negocios pueden cambiar pedidos propios sin cruzar sus efectos."""
+    path = str(tmp_path / "parallel-businesses.db")
+    client, sessions, csrf, first_id, second_id = _setup(path)
+    first_token = _authenticate(
+        client, sessions, roles=frozenset({StaffRole.MANAGE_ORDERS})
+    )
+    second_token = sessions.issue_for_trusted_server(
+        StaffPrincipal(
+            subject="second-operator",
+            grants=(StaffGrant("second", "main", frozenset({StaffRole.MANAGE_ORDERS})),),
+        )
+    )
+    before = _counts(path)
+    barrier = Barrier(2, timeout=10)
+
+    def change(business: str, token: str, order_id: str) -> int:
+        with TestClient(client.app) as worker_client:
+            worker_client.cookies.set(COOKIE_NAME, token, path="/")
+            barrier.wait()
+            response = worker_client.post(
+                f"/api/v1/staff/businesses/{business}/locations/main/orders/{order_id}/transitions",
+                json={"action": "validate"},
+                headers=_headers(csrf, token, business=business, key=f"{business}-parallel-0001"),
+            )
+            return response.status_code
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [
+            executor.submit(change, "first", first_token, first_id),
+            executor.submit(change, "second", second_token, second_id),
+        ]
+        codes = [future.result(timeout=15) for future in futures]
+
+    assert codes == [200, 200]
+    assert _status(path, first_id) == "validated"
+    assert _status(path, second_id) == "validated"
+    assert _counts(path) == (before[0] + 2, before[1] + 2)
