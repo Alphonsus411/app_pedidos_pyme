@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ApiRequestError, getPublicCatalog } from "./api.mjs";
 import { PRIVATE_READ_DISABLED, readableScopes } from "./privateOrders.mjs";
 

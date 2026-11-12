@@ -71,3 +71,26 @@ cookies emitidas ni credenciales en el frontend. Las pruebas HTTP con dobles
 de `fetch` validan falta de red para ámbitos prohibidos, errores y ausencia
 de tokens Bearer. Queda pendiente E2E real con sesiones seguras antes de
 habilitar lectura de pedidos. SQLite exclusivamente desarrollo/pruebas.
+
+## F3.7 — Pruebas de navegador Chromium (laboratorio)
+
+Las pruebas `e2e/panel.spec.js` ejecutan la UI React en Chromium mediante
+Playwright. Las respuestas del catálogo público se interceptan con datos
+sintéticos en el navegador: **no se conecta a un backend real**. Se verifica
+el renderizado de catálogo con artículos, estado vacío, error 503, selector
+privado deshabilitado, vista móvil y que ninguna petición de la UI se dirija
+a `/api/v1/staff`. También se comprueba que las solicitudes públicas
+no envíen Authorization y que no haya tokens en cookies ni storage.
+
+```bash
+cd apps/business_panel
+npm install
+npx playwright install chromium
+npm run test:e2e
+```
+
+La CI instala Chromium con dependencias y ejecuta estas pruebas además de
+las comprobaciones JavaScript y la compilación existentes. Este nivel es
+**E2E del navegador/UI con API pública simulada**, no E2E con IdP, sesión
+productiva, API y base de datos reales. La interfaz privada permanece
+inhabilitada. No guarda capturas ni trazas salvo las de fallos de test.
