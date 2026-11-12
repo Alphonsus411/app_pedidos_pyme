@@ -16,7 +16,9 @@ from universal_business.domain.orders.lifecycle import allowed_order_transitions
 from universal_business.domain.orders.value_objects import OrderStatus
 
 
-def _principal(*, role: StaffRole, business: str = "first", location: str = "main") -> StaffPrincipal:
+def _principal(
+    *, role: StaffRole, business: str = "first", location: str = "main"
+) -> StaffPrincipal:
     return StaffPrincipal(
         subject="synthetic-operator",
         grants=(StaffGrant(business, location, frozenset({role})),),
@@ -25,16 +27,12 @@ def _principal(*, role: StaffRole, business: str = "first", location: str = "mai
 
 def test_manage_orders_role_is_distinct_from_read_orders() -> None:
     reader = _principal(role=StaffRole.READ_ORDERS)
-    assert reader.allows(
-        business_slug="first", location_slug="main", role=StaffRole.READ_ORDERS
-    )
+    assert reader.allows(business_slug="first", location_slug="main", role=StaffRole.READ_ORDERS)
     assert not reader.allows(
         business_slug="first", location_slug="main", role=StaffRole.MANAGE_ORDERS
     )
     writer = _principal(role=StaffRole.MANAGE_ORDERS)
-    assert writer.allows(
-        business_slug="first", location_slug="main", role=StaffRole.MANAGE_ORDERS
-    )
+    assert writer.allows(business_slug="first", location_slug="main", role=StaffRole.MANAGE_ORDERS)
     assert not writer.allows(
         business_slug="first", location_slug="main", role=StaffRole.READ_ORDERS
     )
