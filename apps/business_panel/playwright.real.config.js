@@ -14,7 +14,7 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: "python ../../tests/integration/f3_browser_api.py",
+      command: "PYTHONPATH=../..:../../src python ../../tests/integration/f3_browser_api.py",
       url: "http://127.0.0.1:8000/health",
       reuseExistingServer: false,
       timeout: 60_000,
