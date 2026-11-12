@@ -51,12 +51,12 @@ test("rejects invalid or injected slugs without making network requests", async 
   let count = 0;
   const fetchImpl = async () => { count += 1; throw Error("unexpected request"); };
   for (const slug of ["", "../admin", "other/../../staff", "UPPER", "demo?admin=true"]) {
-    await assert.rejects(
-      getPublicCatalog({ businessSlug: slug, locationSlug: "main", fetchImpl }),
+    assert.throws(
+      () => getPublicCatalog({ businessSlug: slug, locationSlug: "main", fetchImpl }),
       /Ámbito inválido/,
     );
-    await assert.rejects(
-      getStaffOrders({ businessSlug: "demo", locationSlug: slug, fetchImpl }),
+    assert.throws(
+      () => getStaffOrders({ businessSlug: "demo", locationSlug: slug, fetchImpl }),
       /Ámbito inválido/,
     );
   }
