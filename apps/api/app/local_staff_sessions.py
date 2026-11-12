@@ -90,7 +90,10 @@ class LocalOpaqueStaffSessions:
             token is None
             or not token.isascii()
             or not 40 <= len(token) <= 128
-            or any(c not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_" for c in token)
+            or any(
+                c not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+                for c in token
+            )
         ):
             raise AuthenticationRequired
         now = self._clock()
@@ -112,12 +115,12 @@ def session_cookie_header(token: str, *, max_age: int = 900) -> str:
     if (
         not token.isascii()
         or len(token) != 43
-        or any(c not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_" for c in token)
+        or any(
+                c not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+                for c in token
+            )
         or type(max_age) is not int
         or not 1 <= max_age <= 86400
     ):
         raise ValueError("Invalid cookie parameters")
-    return (
-        f"{COOKIE_NAME}={token}; Path=/; Max-Age={max_age}; "
-        "Secure; HttpOnly; SameSite=Strict"
-    )
+    return f"{COOKIE_NAME}={token}; Path=/; Max-Age={max_age}; Secure; HttpOnly; SameSite=Strict"
