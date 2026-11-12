@@ -132,8 +132,12 @@ def _authenticate(
 
 
 def _headers(
-    csrf: StaffMutationCsrf, token: str, *,
-    business: str = "first", action: str = "validate", key: str = "transition-0001"
+    csrf: StaffMutationCsrf,
+    token: str,
+    *,
+    business: str = "first",
+    action: str = "validate",
+    key: str = "transition-0001"
 ) -> dict[str, str]:
     return {
         "Origin": ORIGIN,
@@ -157,9 +161,7 @@ def _counts(path: str) -> tuple[int, int]:
 
 def _status(path: str, order_id: str) -> str:
     with sqlite3.connect(path) as connection:
-        return connection.execute(
-            "SELECT status FROM orders WHERE id=?", (order_id,)
-        ).fetchone()[0]
+        return connection.execute("SELECT status FROM orders WHERE id=?", (order_id,)).fetchone()[0]
 
 
 def test_successful_transition_is_atomic_and_replay_has_no_extra_events(tmp_path) -> None:
@@ -183,9 +185,16 @@ def test_successful_transition_is_atomic_and_replay_has_no_extra_events(tmp_path
 @pytest.mark.parametrize(
     "case",
     [
-        "no-session", "read-only", "other-business", "cross-order",
-        "no-origin", "bad-csrf", "no-csrf", "changed-action",
-        "invalid-action", "no-idempotency",
+        "no-session",
+        "read-only",
+        "other-business",
+        "cross-order",
+        "no-origin",
+        "bad-csrf",
+        "no-csrf",
+        "changed-action",
+        "invalid-action",
+        "no-idempotency",
     ],
 )
 def test_rejected_request_does_not_write(tmp_path, case: str) -> None:
@@ -222,9 +231,15 @@ def test_rejected_request_does_not_write(tmp_path, case: str) -> None:
         json={"action": "not-an-action" if case == "invalid-action" else "validate"},
         headers=headers,
     )
-    expected = 401 if case == "no-session" else 422 if case in {
-        "invalid-action", "no-idempotency"
-    } else 404 if case == "cross-order" else 403
+    expected = (
+        401
+        if case == "no-session"
+        else 422
+        if case in {"invalid-action", "no-idempotency"}
+        else 404
+        if case == "cross-order"
+        else 403
+    )
     assert result.status_code == expected
     assert _counts(path) == before
     assert _status(path, first_id) == "draft"
@@ -236,7 +251,10 @@ def test_repeated_action_new_key_is_conflict_and_no_duplicate_event(tmp_path) ->
     client, sessions, csrf, first_id, _ = _setup(path)
     token = _authenticate(client, sessions, roles=frozenset({StaffRole.MANAGE_ORDERS}))
     route = f"{FIRST_ROUTE}/{first_id}/transitions"
-    assert client.post(route, json={"action": "validate"}, headers=_headers(csrf, token)).status_code == 200
+    assert (
+        client.post(route, json={"action": "validate"}, headers=_headers(csrf, token)).status_code
+        == 200
+    )
     counts = _counts(path)
     conflict = client.post(
         route,
