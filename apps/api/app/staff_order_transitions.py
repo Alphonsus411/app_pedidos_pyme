@@ -7,7 +7,7 @@ permiso, ámbito y pedido antes de ejecutar el caso de uso transaccional.
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from contextlib import closing
 
 from apps.api.app.public_catalog import PublicCatalogScope
@@ -17,6 +17,7 @@ from apps.api.app.staff_order_management import (
     ManagementScopeNotFound,
     ManagementTransitionRejected,
     OrderManagementAction,
+    _ACTION_TARGETS,
     authorize_order_transition,
 )
 
@@ -55,7 +56,7 @@ class _OutboxOnlyPublisher:
     def publish(self, event: DomainEvent, /) -> None:
         del event
 
-    def publish_many(self, events: list[DomainEvent], /) -> None:
+    def publish_many(self, events: Iterable[DomainEvent], /) -> None:
         del events
 
 
@@ -128,8 +129,6 @@ class SqliteStaffOrderTransitions:
             if action not in _COMMANDS:
                 raise StaffTransitionConflict
             from_status = order.status
-            from apps.api.app.staff_order_management import _ACTION_TARGETS
-
             target = _ACTION_TARGETS[action]
             if from_status != target:
                 try:
