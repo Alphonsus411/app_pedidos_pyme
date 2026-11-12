@@ -32,7 +32,12 @@ test("rendered catalog and disabled staff controls use public GET only", async (
     items: [{ id: "item-synthetic", name: "Artículo sintético", base_price: { amount: "12.50", currency: "EUR" } }],
     next_cursor: null,
   });
-  await page.goto("/");
+  page.on("pageerror", (error) => console.log("BROWSER_JS_ERROR:", error.message));
+  page.on("console", (message) => {
+    if (message.type() === "error") console.log("BROWSER_CONSOLE_ERROR:", message.text());
+  });
+  const navigation = await page.goto("/");
+  console.log("BROWSER_DIAG", navigation?.status(), page.url(), await page.title(), (await page.locator("body").innerText()).slice(0, 300));
   await expect(page.getByRole("heading", { name: "Panel de negocio" })).toBeVisible();
   await expect(page.getByText("Artículo sintético")).toBeVisible();
   await expect(page.getByLabel("Negocio y ubicación autorizados")).toBeDisabled();
