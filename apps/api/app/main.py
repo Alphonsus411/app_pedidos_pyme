@@ -5,6 +5,7 @@ from decimal import Decimal
 
 from apps.api.app.cors import ApiCorsSettings, install_cors
 from apps.api.app.error_contract import install_error_contract
+from apps.api.app.local_staff_sessions import COOKIE_NAME
 from apps.api.app.public_body_limit import PublicOrderBodySizeMiddleware
 from apps.api.app.public_catalog import (
     PublicCatalogCursorInvalid,
@@ -15,9 +16,17 @@ from apps.api.app.public_orders import PublicOrderItem, PublicOrderRejected, Sql
 from apps.api.app.public_rate_limit import LocalPublicOrderRateLimiter
 from apps.api.app.staff_audit import StaffAccessAuditEvent, StaffAuditSink
 from apps.api.app.staff_csrf import CsrfRejected, StaffMutationCsrf
-from apps.api.app.local_staff_sessions import COOKIE_NAME
-from apps.api.app.staff_auth import AuthenticationRequired, StaffAuthenticator, StaffPrincipal, StaffRole
-from apps.api.app.staff_order_management import ManagementForbidden, ManagementScopeNotFound, OrderManagementAction
+from apps.api.app.staff_auth import (
+    AuthenticationRequired,
+    StaffAuthenticator,
+    StaffPrincipal,
+    StaffRole,
+)
+from apps.api.app.staff_order_management import (
+    ManagementForbidden,
+    ManagementScopeNotFound,
+    OrderManagementAction,
+)
 from apps.api.app.staff_order_transitions import (
     SqliteStaffOrderTransitions,
     StaffTransitionConflict,
@@ -412,7 +421,9 @@ def create_app(
                 action=body.action.value,
             )
         except CsrfRejected:
-            raise HTTPException(status_code=403, detail="CSRF protection rejected request") from None
+            raise HTTPException(
+                status_code=403, detail="CSRF protection rejected request"
+            ) from None
         try:
             return staff_order_transitions.change_status(
                 principal=principal,
@@ -425,7 +436,9 @@ def create_app(
         except ManagementScopeNotFound:
             raise HTTPException(status_code=404, detail="Staff scope not found") from None
         except ManagementForbidden:
-            raise HTTPException(status_code=403, detail="Staff write permission is required") from None
+            raise HTTPException(
+                status_code=403, detail="Staff write permission is required"
+            ) from None
         except StaffTransitionNotFound:
             raise HTTPException(status_code=404, detail="Staff order not found") from None
         except StaffTransitionConflict:
