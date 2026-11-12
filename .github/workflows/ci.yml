@@ -36,6 +36,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[api,dev,docs]"
 
+      - name: Temporary format diff for session contract
+        run: ruff format --diff apps/api/app/main.py || true
+
       - name: Ruff (lint + format check)
         run: |
           ruff check .
