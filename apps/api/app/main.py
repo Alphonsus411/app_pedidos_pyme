@@ -15,6 +15,7 @@ from apps.api.app.public_orders import PublicOrderItem, PublicOrderRejected, Sql
 from apps.api.app.public_rate_limit import LocalPublicOrderRateLimiter
 from apps.api.app.staff_audit import StaffAccessAuditEvent, StaffAuditSink
 from apps.api.app.staff_auth import AuthenticationRequired, StaffAuthenticator
+from apps.api.app.staff_session import StaffSessionReader, authorized_staff_scopes
 from apps.api.app.staff_orders import (
     SqliteStaffOrders,
     StaffOrderNotFound,
@@ -49,6 +50,8 @@ def create_app(
     staff_authenticator: StaffAuthenticator | None = None,
     staff_orders: SqliteStaffOrders | None = None,
     staff_audit_sink: StaffAuditSink | None = None,
+    staff_session_reader: StaffSessionReader | None = None,
+    staff_published_scopes: frozenset[tuple[str, str]] | None = None,
     public_order_limiter: LocalPublicOrderRateLimiter | None = None,
     public_order_max_body_bytes: int | None = None,
 ) -> FastAPI:
@@ -181,6 +184,24 @@ def create_app(
             staff_audit_sink.record(event)
         except Exception:
             pass
+
+    @app.get("/api/v1/staff/session", tags=["staff-session"])
+    def read_staff_session(request: Request, response: Response) -> dict[str, object]:
+        # No se cachea identidad ni permisos. El endpoint no crea sesiones,
+        # no recibe grants del navegador y no usa tokens estáticos del lab.
+        response.headers["Cache-Control"] = "no-store"
+        if staff_session_reader is None or staff_published_scopes is None:
+            raise HTTPException(status_code=503, detail="Staff session is not configured")
+        try:
+            principal = staff_session_reader.current_principal(request)
+        except AuthenticationRequired:
+            raise HTTPException(status_code=401, detail="Authentication is required") from None
+        return {
+            "subject": principal.subject,
+            "scopes": authorized_staff_scopes(
+                principal, published_scopes=staff_published_scopes
+            ),
+        }
 
     @app.get(
         "/api/v1/staff/businesses/{business_slug}/locations/{location_slug}/orders",
