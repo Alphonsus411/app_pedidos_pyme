@@ -36,9 +36,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[api,dev,docs]"
 
-      - name: Temporary format diagnosis
-        run: ruff format --diff apps/api/app/main.py tests/api/test_staff_orders.py || true
-
       - name: Ruff (lint + format check)
         run: |
           ruff check .
