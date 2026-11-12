@@ -15,3 +15,9 @@ p { line-height: 1.6; color: #46576c; }
 .catalog li { padding: 14px 0; border-top: 1px solid #ecf0f5; display: flex; justify-content: space-between; gap: 16px; }
 footer { margin-top: 30px; font-size: .8rem; color: #64748b; }
 @media(max-width: 600px) { .layout { padding: 20px 16px 50px; } .panel { padding: 20px; } }
+
+.private-readiness { margin-top: 24px; display: grid; gap: 8px; max-width: 440px; }
+.private-readiness label { color: #33475d; font-weight: 600; font-size: .9rem; }
+.private-readiness select { padding: 11px 12px; background: #f1f5f9; color: #64748b; border: 1px solid #ccd8e4; border-radius: 8px; font: inherit; }
+.private-readiness select:disabled { cursor: not-allowed; opacity: .8; }
+.private-help { font-size: .84rem; margin: 4px 0 0; }
