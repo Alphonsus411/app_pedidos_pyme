@@ -15,13 +15,13 @@ from apps.api.app.public_catalog import (
 from apps.api.app.public_orders import PublicOrderItem, PublicOrderRejected, SqlitePublicOrders
 from apps.api.app.public_rate_limit import LocalPublicOrderRateLimiter
 from apps.api.app.staff_audit import StaffAccessAuditEvent, StaffAuditSink
-from apps.api.app.staff_csrf import CsrfRejected, StaffMutationCsrf
 from apps.api.app.staff_auth import (
     AuthenticationRequired,
     StaffAuthenticator,
     StaffPrincipal,
     StaffRole,
 )
+from apps.api.app.staff_csrf import CsrfRejected, StaffMutationCsrf
 from apps.api.app.staff_order_management import (
     ManagementForbidden,
     ManagementScopeNotFound,
