@@ -153,3 +153,22 @@ este evento. Tampoco se registra tráfico público u otras rutas privadas.
 No es una auditoría regulatoria ni adecuada para producción sin un sumidero
 seguro, persistencia, disponibilidad, controles de acceso, retención y
 política explícita ante fallos. SQLite sigue usándose solo en desarrollo/tests.
+
+## Descubrimiento optativo de sesión staff (F3.2, solo contrato)
+
+`GET /api/v1/staff/session` devuelve `{subject, scopes:[{business_slug, location_slug, roles}]}`
+únicamente si la composición HTTP inyecta un `StaffSessionReader` confiable y
+un registro `staff_published_scopes` obtenido del servidor. Cada ámbito
+devuelto es la **intersección** de permisos del sujeto autenticado y ámbitos
+publicados. Se deduplican grants y se normaliza el orden. Los ámbitos no
+publicados y los permisos no concedidos no se exponen.
+
+Sin proveedor o registro devuelve 503; sin sesión válida, 401. Una respuesta
+válida lleva `Cache-Control: no-store`. Esta ruta **no concede permisos**
+ni evita la autorización propia de cada operación privada, no inicia sesión,
+no guarda cookies, no emite credenciales ni usa tokens estáticos.
+
+**No está conectada en `create_local_app` ni activada en la UI**. La integración
+real exige proveedor de identidad, gestión de sesiones y cookies con políticas
+seguras, protección CSRF cuando se habiliten mutaciones, revocación, auditoría
+y pruebas entre negocios. SQLite solo desarrollo y tests; no publicar el panel.

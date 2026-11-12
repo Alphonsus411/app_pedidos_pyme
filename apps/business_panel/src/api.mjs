@@ -44,3 +44,34 @@ export function getStaffOrders({ businessSlug, locationSlug, fetchImpl = fetch }
     `/api/v1/staff/businesses/${businessSlug}/locations/${locationSlug}/orders`,
   );
 }
+
+/** Descubrimiento de ámbito desde sesión HTTP gestionada por el servidor.
+ * Solo contrato; la UI no lo invoca hasta componer un IdP/sesión real.
+ */
+export async function getStaffSession({ fetchImpl = fetch } = {}) {
+  const response = await fetchImpl("/api/v1/staff/session", {
+    method: "GET",
+    headers: { Accept: "application/json" },
+    credentials: "same-origin",
+  });
+  if (!response.ok) throw new ApiRequestError(response.status);
+  const payload = await response.json();
+  if (
+    !payload ||
+    typeof payload.subject !== "string" ||
+    !Array.isArray(payload.scopes) ||
+    !payload.scopes.every(
+      (scope) =>
+        scope &&
+        typeof scope.business_slug === "string" &&
+        SLUG.test(scope.business_slug) &&
+        typeof scope.location_slug === "string" &&
+        SLUG.test(scope.location_slug) &&
+        Array.isArray(scope.roles) &&
+        scope.roles.every((role) => typeof role === "string"),
+    )
+  ) {
+    throw new Error("Respuesta de sesión inválida");
+  }
+  return payload;
+}

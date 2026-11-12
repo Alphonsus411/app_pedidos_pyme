@@ -44,3 +44,11 @@ y resultado vacío; no permite crear/modificar pedidos o editar catálogo.
 
 Siguiente incremento: comprobar el contrato real de lectura staff y diseñar
 una sesión segura en el backend antes de activar su consumo desde la UI.
+
+## Contrato de sesión preparado (F3.2)
+
+El cliente `getStaffSession()` solo lee `GET /api/v1/staff/session` con
+`credentials: "same-origin"` y sin token Bearer o IDs de negocio indicados
+por el navegador. Valida la estructura recibida y rechaza estados 401/403/503.
+No lo usa aún `App.jsx`: faltan identidad/cookies gestionadas por el servidor
+y mecanismos de revocación. **No es un login** y no concede acceso privado.
