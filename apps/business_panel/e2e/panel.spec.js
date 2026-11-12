@@ -1,7 +1,5 @@
 import { expect, test } from "@playwright/test";
 
-const CATALOG = "**/api/v1/public/businesses/demo/locations/main/catalog";
-
 async function watchApi(page, response = { items: [], next_cursor: null }) {
   const requests = [];
   await page.route("**/api/v1/**", async (route) => {
