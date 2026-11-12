@@ -202,8 +202,11 @@ def create_app(
         }
 
     def authenticate_staff_order_reader(
-        *, request: Request, authorization: str | None,
-        business_slug: str, location_slug: str,
+        *,
+        request: Request,
+        authorization: str | None,
+        business_slug: str,
+        location_slug: str,
     ) -> StaffPrincipal:
         # Una sesión configurada es la ÚNICA fuente de identidad privada.
         # No hay fallback a Bearer al fallar/expirar/revocar la cookie.
