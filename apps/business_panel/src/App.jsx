@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { ApiRequestError, getPublicCatalog } from "./api.mjs";
+import { PRIVATE_READ_DISABLED, readableScopes } from "./privateOrders.mjs";
 
 // Ámbito sintético de la demo: no representa permisos de un trabajador.
 const DEMO = { businessSlug: "demo", locationSlug: "main" };
@@ -37,15 +38,8 @@ export function App() {
         <p>Base de consulta, sin funciones de administración ni identidad productiva.</p>
       </header>
 
-      <section className="panel" aria-labelledby="identity">
-        <h2 id="identity">Acceso privado pendiente</h2>
-        <p>
-          La API ya exige autorización para consultar pedidos. Esta interfaz no almacena
-          tokens, no simula sesiones ni habilita consultas privadas hasta disponer
-          de un mecanismo de identidad y sesión validado.
-        </p>
-        <span className="status">Gestión de pedidos deshabilitada</span>
-      </section>
+      <PrivateReadiness />
+
 
       <section className="panel" aria-labelledby="catalog-title" aria-live="polite">
         <div className="section-heading">
@@ -70,5 +64,40 @@ export function App() {
       </section>
       <footer>Consulta únicamente · Sin pagos, pedidos confirmados ni operaciones privadas.</footer>
     </main>
+  );
+}
+
+/** Preparación visual de sesión/ámbitos, sin peticiones privadas ni sesiones ficticias. */
+function PrivateReadiness({ session = null }) {
+  const scopes = readableScopes(session);
+  const blocked = PRIVATE_READ_DISABLED;
+  return (
+    <section className="panel" aria-labelledby="identity">
+      <h2 id="identity">Acceso privado pendiente</h2>
+      <p>
+        La API ya exige autorización para consultar pedidos. Todavía no existe
+        un inicio de sesión real para este panel, por lo que no se consultan
+        pedidos ni se aceptan permisos suministrados desde el navegador.
+      </p>
+      <p role="status" className="status">Sesión de personal no configurada</p>
+      <div className="private-readiness">
+        <label htmlFor="private-scope">Negocio y ubicación autorizados</label>
+        <select id="private-scope" disabled={blocked || scopes.length === 0} defaultValue="">
+          <option value="">Sin ámbitos disponibles</option>
+          {scopes.map((scope) => (
+            <option
+              key={`${scope.business_slug}/${scope.location_slug}`}
+              value={`${scope.business_slug}/${scope.location_slug}`}
+            >
+              {`${scope.business_slug} / ${scope.location_slug}`}
+            </option>
+          ))}
+        </select>
+        <p className="private-help">
+          La selección y lectura privada se habilitarán únicamente cuando el
+          servidor gestione la identidad, la sesión y los permisos reales.
+        </p>
+      </div>
+    </section>
   );
 }
