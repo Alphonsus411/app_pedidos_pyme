@@ -109,7 +109,13 @@ def session_cookie_header(token: str, *, max_age: int = 900) -> str:
 
     El helper NO emite sesiones ni instala una cookie desde un endpoint.
     """
-    if not token or not token.isascii() or type(max_age) is not int or not 1 <= max_age <= 86400:
+    if (
+        not token.isascii()
+        or len(token) != 43
+        or any(c not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_" for c in token)
+        or type(max_age) is not int
+        or not 1 <= max_age <= 86400
+    ):
         raise ValueError("Invalid cookie parameters")
     return (
         f"{COOKIE_NAME}={token}; Path=/; Max-Age={max_age}; "
