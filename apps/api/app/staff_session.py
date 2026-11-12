@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from apps.api.app.staff_auth import AuthenticationRequired, StaffPrincipal
+from apps.api.app.staff_auth import StaffPrincipal
 from starlette.requests import Request
 
 
