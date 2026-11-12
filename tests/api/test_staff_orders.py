@@ -7,6 +7,7 @@ from collections.abc import Callable
 from decimal import Decimal
 
 import pytest
+from apps.api.app.local_staff_sessions import COOKIE_NAME, LocalOpaqueStaffSessions
 from apps.api.app.main import create_app
 from apps.api.app.public_catalog import PublicCatalogScope
 from apps.api.app.public_orders import PublicOrderItem, SqlitePublicOrders
@@ -20,6 +21,7 @@ from apps.api.app.staff_auth import (
     StaticBearerAuthenticator,
 )
 from apps.api.app.staff_orders import SqliteStaffOrders
+from apps.api.app.staff_session import StaffSessionReader
 from fastapi.testclient import TestClient
 
 from universal_business.domain.business.entities import Location
@@ -44,6 +46,8 @@ def _staff_client(
     *,
     auth_wrapper: Callable[[StaticBearerAuthenticator], StaffAuthenticator] | None = None,
     audit_sink: StaffAuditSink | None = None,
+    session_reader: StaffSessionReader | None = None,
+    published_scopes: frozenset[tuple[str, str]] | None = None,
 ) -> tuple[TestClient, str, str]:
     first_tenant, second_tenant = TenantId.generate(), TenantId.generate()
     first_business, second_business = BusinessId.generate(), BusinessId.generate()
@@ -142,6 +146,8 @@ def _staff_client(
                     auth_wrapper(authenticator) if auth_wrapper else authenticator
                 ),
                 staff_audit_sink=audit_sink,
+                staff_session_reader=session_reader,
+                staff_published_scopes=published_scopes,
                 staff_orders=SqliteStaffOrders(
                     connect=lambda: sqlite3.connect(database_path), scopes=scopes
                 ),
@@ -328,3 +334,67 @@ def test_staff_order_list_is_unavailable_without_explicit_composition() -> None:
     response = client.get("/api/v1/staff/businesses/first/locations/main/orders")
 
     assert response.status_code == 503
+
+
+def test_staff_orders_share_session_identity_with_scope_discovery(tmp_path) -> None:
+    clock = [0.0]
+    sessions = LocalOpaqueStaffSessions(lifetime_seconds=30, clock=lambda: clock[0])
+    client, own_id, foreign_id = _staff_client(
+        str(tmp_path / "staff-session.db"),
+        session_reader=sessions,
+        published_scopes=frozenset({("first", "main"), ("second", "main")}),
+    )
+    first = "/api/v1/staff/businesses/first/locations/main/orders"
+    second = "/api/v1/staff/businesses/second/locations/main/orders"
+    token = sessions.issue_for_trusted_server(
+        StaffPrincipal(
+            subject="cookie-operator",
+            grants=(StaffGrant("first", "main", frozenset({StaffRole.READ_ORDERS})),),
+        )
+    )
+    # El Bearer antiguo no permite evitar la sesión ausente.
+    bearer = {"Authorization": "Bearer first-staff-token"}
+    assert client.get("/api/v1/staff/session", headers=bearer).status_code == 401
+    assert client.get(first, headers=bearer).status_code == 401
+    client.cookies.set(COOKIE_NAME, token, path="/")
+    discovery = client.get("/api/v1/staff/session")
+    assert discovery.status_code == 200
+    assert discovery.json()["subject"] == "cookie-operator"
+    assert discovery.json()["scopes"] == [
+        {"business_slug": "first", "location_slug": "main", "roles": ["read_orders"]}
+    ]
+    assert client.get(first).status_code == 200
+    assert client.get(f"{first}/{own_id}").status_code == 200
+    assert client.get(second).status_code == 403
+    assert client.get(f"{first}/{foreign_id}").status_code == 404
+    assert client.get(second, headers=bearer).status_code == 403
+    sessions.revoke(token)
+    assert client.get("/api/v1/staff/session").status_code == 401
+    assert client.get(first, headers=bearer).status_code == 401
+    token = sessions.issue_for_trusted_server(
+        StaffPrincipal(
+            subject="cookie-operator",
+            grants=(StaffGrant("first", "main", frozenset({StaffRole.READ_ORDERS})),),
+        )
+    )
+    client.cookies.set(COOKIE_NAME, token, path="/")
+    assert client.get(first).status_code == 200
+    clock[0] = 30.0
+    assert client.get(first, headers=bearer).status_code == 401
+    assert client.get("/api/v1/staff/session").status_code == 401
+
+
+def test_staff_session_mode_fails_closed_if_published_scopes_missing(tmp_path) -> None:
+    sessions = LocalOpaqueStaffSessions()
+    client, _, _ = _staff_client(
+        str(tmp_path / "no-scopes.db"),
+        session_reader=sessions,
+    )
+    token = sessions.issue_for_trusted_server(
+        StaffPrincipal(
+            subject="synthetic-user",
+            grants=(StaffGrant("first", "main", frozenset({StaffRole.READ_ORDERS})),),
+        )
+    )
+    client.cookies.set(COOKIE_NAME, token, path="/")
+    assert client.get("/api/v1/staff/businesses/first/locations/main/orders").status_code == 503

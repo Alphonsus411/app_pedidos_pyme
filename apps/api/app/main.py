@@ -14,7 +14,7 @@ from apps.api.app.public_catalog import (
 from apps.api.app.public_orders import PublicOrderItem, PublicOrderRejected, SqlitePublicOrders
 from apps.api.app.public_rate_limit import LocalPublicOrderRateLimiter
 from apps.api.app.staff_audit import StaffAccessAuditEvent, StaffAuditSink
-from apps.api.app.staff_auth import AuthenticationRequired, StaffAuthenticator
+from apps.api.app.staff_auth import AuthenticationRequired, StaffAuthenticator, StaffPrincipal
 from apps.api.app.staff_orders import (
     SqliteStaffOrders,
     StaffOrderNotFound,
@@ -201,6 +201,36 @@ def create_app(
             "scopes": authorized_staff_scopes(principal, published_scopes=staff_published_scopes),
         }
 
+    def authenticate_staff_order_reader(
+        *,
+        request: Request,
+        authorization: str | None,
+        business_slug: str,
+        location_slug: str,
+    ) -> StaffPrincipal:
+        # Una sesión configurada es la ÚNICA fuente de identidad privada.
+        # No hay fallback a Bearer al fallar/expirar/revocar la cookie.
+        if staff_session_reader is not None:
+            if staff_published_scopes is None:
+                raise HTTPException(status_code=503, detail="Staff scopes are not configured")
+            try:
+                principal = staff_session_reader.current_principal(request)
+            except AuthenticationRequired:
+                raise HTTPException(status_code=401, detail="Authentication is required") from None
+            if (business_slug, location_slug) not in staff_published_scopes:
+                raise HTTPException(status_code=404, detail="Staff scope not found")
+            return principal
+        if staff_authenticator is None:
+            raise HTTPException(status_code=503, detail="Staff orders are not configured")
+        try:
+            return staff_authenticator.authenticate(authorization)
+        except AuthenticationRequired:
+            raise HTTPException(
+                status_code=401,
+                detail="Authentication is required",
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from None
+
     @app.get(
         "/api/v1/staff/businesses/{business_slug}/locations/{location_slug}/orders",
         tags=["staff-orders"],
@@ -215,19 +245,20 @@ def create_app(
         subject: str | None = None
         status_code = 500
         try:
-            if staff_authenticator is None or staff_orders is None:
+            if staff_orders is None:
                 status_code = 503
                 raise HTTPException(status_code=503, detail="Staff orders are not configured")
             try:
-                principal = staff_authenticator.authenticate(authorization)
+                principal = authenticate_staff_order_reader(
+                    request=request,
+                    authorization=authorization,
+                    business_slug=business_slug,
+                    location_slug=location_slug,
+                )
                 subject = principal.subject
-            except AuthenticationRequired:
-                status_code = 401
-                raise HTTPException(
-                    status_code=401,
-                    detail="Authentication is required",
-                    headers={"WWW-Authenticate": "Bearer"},
-                ) from None
+            except HTTPException as exc:
+                status_code = exc.status_code
+                raise
             try:
                 items = staff_orders.list_for_location(
                     principal=principal,
@@ -269,19 +300,20 @@ def create_app(
         subject: str | None = None
         status_code = 500
         try:
-            if staff_authenticator is None or staff_orders is None:
+            if staff_orders is None:
                 status_code = 503
                 raise HTTPException(status_code=503, detail="Staff orders are not configured")
             try:
-                principal = staff_authenticator.authenticate(authorization)
+                principal = authenticate_staff_order_reader(
+                    request=request,
+                    authorization=authorization,
+                    business_slug=business_slug,
+                    location_slug=location_slug,
+                )
                 subject = principal.subject
-            except AuthenticationRequired:
-                status_code = 401
-                raise HTTPException(
-                    status_code=401,
-                    detail="Authentication is required",
-                    headers={"WWW-Authenticate": "Bearer"},
-                ) from None
+            except HTTPException as exc:
+                status_code = exc.status_code
+                raise
             try:
                 result = staff_orders.get_for_location(
                     principal=principal,
