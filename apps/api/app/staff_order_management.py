@@ -83,9 +83,7 @@ def authorize_order_transition(
         role=StaffRole.MANAGE_ORDERS,
     ):
         raise ManagementForbidden
-    if not isinstance(action, OrderManagementAction) or not isinstance(
-        current_status, OrderStatus
-    ):
+    if not isinstance(action, OrderManagementAction) or not isinstance(current_status, OrderStatus):
         raise ManagementTransitionRejected
     target = _ACTION_TARGETS[action]
     if target not in allowed_order_transitions(current_status):
