@@ -69,7 +69,10 @@ class StaffMutationCsrf:
             not isinstance(session_token, str)
             or not 40 <= len(session_token) <= 128
             or not session_token.isascii()
-            or any(c not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_" for c in session_token)
+            or any(
+                c not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+                for c in session_token
+            )
             or any(
                 not isinstance(value, str) or not value or len(value) > 128
                 for value in (business_slug, location_slug, action)
@@ -79,8 +82,7 @@ class StaffMutationCsrf:
         # Delimitación no ambigua: longitud de cada campo antes de sus bytes.
         parts = (session_token, business_slug, location_slug, action)
         message = b"staff-csrf-v1\0" + b"".join(
-            len(value.encode("utf-8")).to_bytes(4, "big") + value.encode("utf-8")
-            for value in parts
+            len(value.encode("utf-8")).to_bytes(4, "big") + value.encode("utf-8") for value in parts
         )
         mac = hmac.new(self._secret, message, hashlib.sha256).digest()
         return base64.urlsafe_b64encode(mac).decode("ascii").rstrip("=")
