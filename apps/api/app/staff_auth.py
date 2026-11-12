@@ -23,6 +23,7 @@ class StaffRole(StrEnum):
     """Permisos mínimos publicados para el primer endpoint privado."""
 
     READ_ORDERS = "read_orders"
+    MANAGE_ORDERS = "manage_orders"
 
 
 @dataclass(frozen=True)
