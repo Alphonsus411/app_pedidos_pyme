@@ -116,9 +116,9 @@ def session_cookie_header(token: str, *, max_age: int = 900) -> str:
         not token.isascii()
         or len(token) != 43
         or any(
-                c not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
-                for c in token
-            )
+            c not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+            for c in token
+        )
         or type(max_age) is not int
         or not 1 <= max_age <= 86400
     ):
