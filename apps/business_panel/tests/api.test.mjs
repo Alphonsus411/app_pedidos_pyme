@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getPublicCatalog, getStaffOrders, ApiRequestError } from "../src/api.mjs";
+import { getPublicCatalog, getStaffOrders, getStaffSession, ApiRequestError } from "../src/api.mjs";
 
 test("public catalogue sends only versioned GET, never bearer or direct DB calls", async () => {
   const calls = [];
@@ -70,5 +70,48 @@ test("does not accept silently malformed API responses", async () => {
       fetchImpl: async () => ({ ok: true, json: async () => ({ bogus: true }) }),
     }),
     /Respuesta API inválida/,
+  );
+});
+
+test("staff session contract uses only same-origin cookie transport", async () => {
+  const calls = [];
+  const session = await getStaffSession({
+    fetchImpl: async (url, init) => {
+      calls.push({ url, init });
+      return {
+        ok: true,
+        json: async () => ({
+          subject: "synthetic-operator",
+          scopes: [{ business_slug: "alpha", location_slug: "main", roles: ["read_orders"] }],
+        }),
+      };
+    },
+  });
+  assert.equal(session.subject, "synthetic-operator");
+  assert.deepEqual(calls, [{
+    url: "/api/v1/staff/session",
+    init: { method: "GET", headers: { Accept: "application/json" }, credentials: "same-origin" },
+  }]);
+  assert.equal("Authorization" in calls[0].init.headers, false);
+});
+
+test("staff session contract fails closed on auth failure and invalid scopes", async () => {
+  for (const status of [401, 403, 503]) {
+    await assert.rejects(
+      getStaffSession({ fetchImpl: async () => ({ ok: false, status }) }),
+      (error) => error instanceof ApiRequestError && error.status === status,
+    );
+  }
+  await assert.rejects(
+    getStaffSession({
+      fetchImpl: async () => ({
+        ok: true,
+        json: async () => ({
+          subject: "synthetic-operator",
+          scopes: [{ business_slug: "../other", location_slug: "main", roles: ["read_orders"] }],
+        }),
+      }),
+    }),
+    /Respuesta de sesión inválida/,
   );
 });
