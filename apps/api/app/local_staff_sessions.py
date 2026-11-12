@@ -7,7 +7,6 @@ confianza que emita una sesión deberá validar previamente al usuario.
 from __future__ import annotations
 
 import hashlib
-import hmac
 import math
 import secrets
 from collections.abc import Callable
