@@ -198,9 +198,7 @@ def create_app(
             raise HTTPException(status_code=401, detail="Authentication is required") from None
         return {
             "subject": principal.subject,
-            "scopes": authorized_staff_scopes(
-                principal, published_scopes=staff_published_scopes
-            ),
+            "scopes": authorized_staff_scopes(principal, published_scopes=staff_published_scopes),
         }
 
     @app.get(
