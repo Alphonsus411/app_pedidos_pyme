@@ -94,3 +94,20 @@ las comprobaciones JavaScript y la compilación existentes. Este nivel es
 **E2E del navegador/UI con API pública simulada**, no E2E con IdP, sesión
 productiva, API y base de datos reales. La interfaz privada permanece
 inhabilitada. No guarda capturas ni trazas salvo las de fallos de test.
+
+## F3.8 — Chromium con FastAPI y SQLite reales de laboratorio
+
+El comando `npm run test:e2e:real` inicia un servidor FastAPI local con
+SQLite temporal y catálogos sintéticos de dos negocios, además de Vite en
+127.0.0.1:4175. Chromium consulta la API real mediante el proxy de Vite;
+**no intercepta las respuestas HTTP**. Se comprueban catálogo y precios,
+separación de negocios, error 404, ausencia de credenciales y acceso privado
+inaccesible (503 sin proveedor). La CI instala Python 3.11, dependencias API,
+Node 22 y Chromium en un job independiente.
+
+Ejecutar desde la raíz del repositorio tras instalar dependencias Python
+`python -m pip install -e ".[api,dev]"` y `uvicorn`, y desde
+`apps/business_panel` instalar Node y Chromium antes de llamar al comando.
+Es una prueba con backend real **solo local y sintético**, no un despliegue,
+no un IdP ni una prueba de acceso privado autorizado. No se habilitan
+operaciones staff en el frontend.

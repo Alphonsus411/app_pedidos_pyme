@@ -36,3 +36,27 @@ jobs:
       - name: Production bundle smoke build
         working-directory: apps/business_panel
         run: npm run build
+
+  browser-real-api:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Python API laboratory
+        run: |
+          python -m pip install -e ".[api,dev]"
+          python -m pip install "uvicorn>=0.30,<1"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install frontend dependencies
+        working-directory: apps/business_panel
+        run: npm install --no-audit --no-fund
+      - name: Install Chromium
+        working-directory: apps/business_panel
+        run: npx playwright install --with-deps chromium
+      - name: Browser against real FastAPI + SQLite synthetic backend
+        working-directory: apps/business_panel
+        run: npm run test:e2e:real
