@@ -363,9 +363,7 @@ def test_parallel_transitions_different_tenants_preserve_isolation(tmp_path) -> 
     """Dos negocios pueden cambiar pedidos propios sin cruzar sus efectos."""
     path = str(tmp_path / "parallel-businesses.db")
     client, sessions, csrf, first_id, second_id = _setup(path)
-    first_token = _authenticate(
-        client, sessions, roles=frozenset({StaffRole.MANAGE_ORDERS})
-    )
+    first_token = _authenticate(client, sessions, roles=frozenset({StaffRole.MANAGE_ORDERS}))
     second_token = sessions.issue_for_trusted_server(
         StaffPrincipal(
             subject="second-operator",
