@@ -198,3 +198,28 @@ escritura, rotación, observabilidad/auditoría duradera y despliegue detrás de
 HTTPS confiable. El tiempo de vida de la cookie deberá alinearse con el
 tiempo de vida de sesión cuando exista un emisor real. El frontend aún no
 tiene acceso staff habilitado. SQLite solo desarrollo/pruebas.
+
+## Sesión única para descubrimiento y lecturas staff (F3.4; opt-in)
+
+Si `create_app(staff_session_reader=..., staff_published_scopes=...,
+staff_orders=...)` recibe un lector de sesión, el mismo principal autenticado
+por cookie de servidor es usado para `GET /api/v1/staff/session` y
+`GET /api/v1/staff/businesses/{business_slug}/locations/{location_slug}/orders`
+(lista y detalle). El endpoint comprueba primero que el ámbito exista en la
+lista publicada por el servidor; el adaptador `staff_orders` vuelve a exigir
+`read_orders` y resuelve los identificadores internos en servidor.
+
+**No existe fallback a Bearer en modo sesión.** Una cookie caducada, revocada
+o inválida produce 401 aunque el cliente presente simultáneamente
+`Authorization: Bearer ...`. Si no se suministra el registro de ámbitos,
+la consulta privada falla con 503. La composición anterior de tokens estáticos
+se conserva únicamente cuando **no** se inyecta `staff_session_reader`,
+para mantener los tests y el laboratorio previo; no constituye IAM.
+
+Es un incremento de autorización del prototipo, no un login ni una sesión
+productiva. `create_local_app` sigue sin habilitar cookies de sesión;
+tampoco se conectan pedidos privados a React. La cookie solo puede emitirse
+fuera de HTTP por código servidor de confianza, y los contadores de sesión
+continúan en memoria por proceso. Antes de exponerlo se precisan IdP,
+almacenamiento de sesiones compartido, protección CSRF para escrituras,
+auditoría durable y políticas de cookies/HTTPS verificadas.
