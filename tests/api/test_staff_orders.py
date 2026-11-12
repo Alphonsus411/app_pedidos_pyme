@@ -398,3 +398,98 @@ def test_staff_session_mode_fails_closed_if_published_scopes_missing(tmp_path) -
     )
     client.cookies.set(COOKIE_NAME, token, path="/")
     assert client.get("/api/v1/staff/businesses/first/locations/main/orders").status_code == 503
+
+
+def test_f3_end_to_end_two_operators_are_isolated_and_revocable(tmp_path) -> None:
+    """API HTTP real + SQLite: la sesión determina el ámbito, no el navegador."""
+    now = [100.0]
+    sessions = LocalOpaqueStaffSessions(lifetime_seconds=20, clock=lambda: now[0])
+    client, first_order_id, second_order_id = _staff_client(
+        str(tmp_path / "f3-end-to-end.db"),
+        session_reader=sessions,
+        published_scopes=frozenset({("first", "main"), ("second", "main")}),
+    )
+    first = "/api/v1/staff/businesses/first/locations/main/orders"
+    second = "/api/v1/staff/businesses/second/locations/main/orders"
+    cookie_first = sessions.issue_for_trusted_server(
+        StaffPrincipal(
+            subject="operator-first",
+            grants=(StaffGrant("first", "main", frozenset({StaffRole.READ_ORDERS})),),
+        )
+    )
+    cookie_second = sessions.issue_for_trusted_server(
+        StaffPrincipal(
+            subject="operator-second",
+            grants=(StaffGrant("second", "main", frozenset({StaffRole.READ_ORDERS})),),
+        )
+    )
+    # Ninguna cabecera inventada o Bearer del laboratorio concede acceso.
+    spoofed = {
+        "X-User-Id": "operator-second",
+        "X-Roles": "read_orders",
+        "Authorization": "Bearer second-staff-token",
+    }
+    assert client.get("/api/v1/staff/session", headers=spoofed).status_code == 401
+    assert client.get(first, headers=spoofed).status_code == 401
+
+    client.cookies.set(COOKIE_NAME, cookie_first, path="/")
+    discovery_first = client.get("/api/v1/staff/session")
+    assert discovery_first.status_code == 200
+    assert discovery_first.headers["Cache-Control"] == "no-store"
+    assert discovery_first.json() == {
+        "subject": "operator-first",
+        "scopes": [{"business_slug": "first", "location_slug": "main", "roles": ["read_orders"]}],
+    }
+    result_first = client.get(first)
+    assert result_first.status_code == 200
+    assert [order["id"] for order in result_first.json()["items"]] == [first_order_id]
+    assert client.get(f"{first}/{first_order_id}").status_code == 200
+    assert client.get(second, headers=spoofed).status_code == 403
+    assert client.get(f"{first}/{second_order_id}").status_code == 404
+    assert cookie_first not in result_first.text
+    assert cookie_first not in discovery_first.text
+
+    client.cookies.set(COOKIE_NAME, cookie_second, path="/")
+    discovery_second = client.get("/api/v1/staff/session")
+    assert discovery_second.status_code == 200
+    assert discovery_second.json() == {
+        "subject": "operator-second",
+        "scopes": [{"business_slug": "second", "location_slug": "main", "roles": ["read_orders"]}],
+    }
+    result_second = client.get(second)
+    assert result_second.status_code == 200
+    assert [order["id"] for order in result_second.json()["items"]] == [second_order_id]
+    assert client.get(f"{second}/{second_order_id}").status_code == 200
+    assert client.get(first).status_code == 403
+    assert client.get(f"{second}/{first_order_id}").status_code == 404
+
+    # Revocar una sesión no afecta a la otra. Tampoco permite fallback a Bearer.
+    sessions.revoke(cookie_second)
+    assert client.get("/api/v1/staff/session", headers=spoofed).status_code == 401
+    assert client.get(second, headers=spoofed).status_code == 401
+    client.cookies.set(COOKIE_NAME, cookie_first, path="/")
+    assert client.get(first).status_code == 200
+    now[0] = 120.0
+    assert client.get(first, headers=spoofed).status_code == 401
+    assert client.get("/api/v1/staff/session").status_code == 401
+
+
+def test_f3_end_to_end_location_without_grant_stays_forbidden(tmp_path) -> None:
+    sessions = LocalOpaqueStaffSessions(clock=lambda: 1.0)
+    client, _, _ = _staff_client(
+        str(tmp_path / "f3-location-denial.db"),
+        session_reader=sessions,
+        published_scopes=frozenset({("first", "main"), ("second", "main")}),
+    )
+    token = sessions.issue_for_trusted_server(
+        StaffPrincipal(
+            subject="staff-without-grants",
+            grants=(StaffGrant("first", "main", frozenset()),),
+        )
+    )
+    client.cookies.set(COOKIE_NAME, token, path="/")
+    discovery = client.get("/api/v1/staff/session")
+    assert discovery.status_code == 200
+    assert discovery.json()["scopes"] == []
+    assert client.get("/api/v1/staff/businesses/first/locations/main/orders").status_code == 403
+    assert client.get("/api/v1/staff/businesses/first/locations/unknown/orders").status_code == 404
