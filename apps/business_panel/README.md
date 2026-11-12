@@ -52,3 +52,22 @@ El cliente `getStaffSession()` solo lee `GET /api/v1/staff/session` con
 por el navegador. Valida la estructura recibida y rechaza estados 401/403/503.
 No lo usa aún `App.jsx`: faltan identidad/cookies gestionadas por el servidor
 y mecanismos de revocación. **No es un login** y no concede acceso privado.
+
+## F3.5 — Preparación de la lectura privada, sin activarla
+
+`src/privateOrders.mjs` prepara el estado de presentación del personal:
+`readableScopes(session)` filtra únicamente los ámbitos que declaran
+`read_orders`, elimina duplicados y rechaza sesiones malformadas;
+`prepareStaffOrdersRead(...)` está diseñado para una futura UI autorizada,
+con estados explícitos `ready`, `empty`, `forbidden`, `session-expired`,
+`unavailable` y `error`. Sin un ámbito autorizado, ni siquiera inicia
+la solicitud HTTP. Cuando se use, el backend **revalidará siempre** la
+identidad y permisos; filtrar opciones en React no autoriza accesos.
+
+`App.jsx` muestra la sesión no configurada y un selector **deshabilitado**.
+La constante `PRIVATE_READ_DISABLED` permanece activa y la UI **no llama**
+a `getStaffSession` ni `getStaffOrders`; no hay autenticación ficticia,
+cookies emitidas ni credenciales en el frontend. Las pruebas HTTP con dobles
+de `fetch` validan falta de red para ámbitos prohibidos, errores y ausencia
+de tokens Bearer. Queda pendiente E2E real con sesiones seguras antes de
+habilitar lectura de pedidos. SQLite exclusivamente desarrollo/pruebas.
