@@ -84,9 +84,7 @@ def test_forged_header_bearer_and_cookie_are_rejected() -> None:
 
 def test_capacity_is_bounded_and_recovers_after_expiration() -> None:
     now = [0.0]
-    store = LocalOpaqueStaffSessions(
-        lifetime_seconds=10, max_sessions=1, clock=lambda: now[0]
-    )
+    store = LocalOpaqueStaffSessions(lifetime_seconds=10, max_sessions=1, clock=lambda: now[0])
     store.issue_for_trusted_server(_principal())
     with pytest.raises(RuntimeError, match="capacity"):
         store.issue_for_trusted_server(_principal())
