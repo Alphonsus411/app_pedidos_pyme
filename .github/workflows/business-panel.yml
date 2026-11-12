@@ -3,6 +3,7 @@ name: Business panel (F3 prototype)
 on:
   push:
     branches:
+      - master
       - feat/f3-business-panel-readonly-shell
     paths:
       - "apps/business_panel/**"
