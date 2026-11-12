@@ -398,4 +398,3 @@ def test_staff_session_mode_fails_closed_if_published_scopes_missing(tmp_path) -
     )
     client.cookies.set(COOKIE_NAME, token, path="/")
     assert client.get("/api/v1/staff/businesses/first/locations/main/orders").status_code == 503
-
