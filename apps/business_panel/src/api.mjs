@@ -6,7 +6,7 @@ function locationPath(businessSlug, locationSlug) {
   if (!SLUG.test(businessSlug) || !SLUG.test(locationSlug)) {
     throw new Error("Ámbito inválido");
   }
-  return `/api/v1/${"public"}/businesses/${businessSlug}/locations/${locationSlug}`;
+  return `/api/v1/public/businesses/${businessSlug}/locations/${locationSlug}`;
 }
 
 export class ApiRequestError extends Error {
