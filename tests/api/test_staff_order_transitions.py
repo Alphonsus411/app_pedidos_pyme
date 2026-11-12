@@ -137,7 +137,7 @@ def _headers(
     *,
     business: str = "first",
     action: str = "validate",
-    key: str = "transition-0001"
+    key: str = "transition-0001",
 ) -> dict[str, str]:
     return {
         "Origin": ORIGIN,
