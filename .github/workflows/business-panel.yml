@@ -1,0 +1,32 @@
+name: Business panel (F3 prototype)
+
+on:
+  push:
+    branches:
+      - master
+      - feat/f3-business-panel-readonly-shell
+    paths:
+      - "apps/business_panel/**"
+      - ".github/workflows/business-panel.yml"
+  pull_request:
+    paths:
+      - "apps/business_panel/**"
+      - ".github/workflows/business-panel.yml"
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install frontend dependencies
+        working-directory: apps/business_panel
+        run: npm install --no-audit --no-fund
+      - name: HTTP contract tests
+        working-directory: apps/business_panel
+        run: npm test
+      - name: Production bundle smoke build
+        working-directory: apps/business_panel
+        run: npm run build
