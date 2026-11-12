@@ -172,3 +172,29 @@ no guarda cookies, no emite credenciales ni usa tokens estáticos.
 real exige proveedor de identidad, gestión de sesiones y cookies con políticas
 seguras, protección CSRF cuando se habiliten mutaciones, revocación, auditoría
 y pruebas entre negocios. SQLite solo desarrollo y tests; no publicar el panel.
+
+## Sesiones opacas de servidor, implementación solo de laboratorio (F3.3)
+
+`LocalOpaqueStaffSessions` implementa el puerto `StaffSessionReader` de F3.2
+sin tocar el núcleo Python ni SQLite. Emite un token de alta entropía **solo
+por llamada de código del servidor confiable**
+(`issue_for_trusted_server(principal)`), guarda su huella SHA-256 y permite
+caducidad absoluta y revocación inmediata en el mismo proceso. No crea
+usuarios, no valida contraseñas y **no incluye endpoint de login ni emisión**.
+La capacidad de sesiones se acota y falla cerrada si está llena.
+
+El helper `session_cookie_header` prepara una futura cabecera con nombre
+`__Host-ub_session`, `Secure`, `HttpOnly`, `SameSite=Strict` y `Path=/`.
+Ningún endpoint de la API añade hoy esa cookie. El lector solo admite el
+identificador de sesión opaco, no acepta cabeceras arbitrarias de roles o
+identidad y no revela el token en la respuesta de descubrimiento. La
+aplicación `create_app()` y `create_local_app()` siguen sin componer sesiones
+por defecto; las pruebas inyectan explícitamente el componente.
+
+**No apto para producción**: almacenamiento en memoria por proceso sin
+persistencia compartida, revocación entre réplicas ni recuperación al
+reiniciar. Pendientes IdP, login confiable, protección CSRF de operaciones de
+escritura, rotación, observabilidad/auditoría duradera y despliegue detrás de
+HTTPS confiable. El tiempo de vida de la cookie deberá alinearse con el
+tiempo de vida de sesión cuando exista un emisor real. El frontend aún no
+tiene acceso staff habilitado. SQLite solo desarrollo/pruebas.
