@@ -5,6 +5,7 @@ from decimal import Decimal
 
 from apps.api.app.cors import ApiCorsSettings, install_cors
 from apps.api.app.error_contract import install_error_contract
+from apps.api.app.local_staff_sessions import COOKIE_NAME
 from apps.api.app.public_body_limit import PublicOrderBodySizeMiddleware
 from apps.api.app.public_catalog import (
     PublicCatalogCursorInvalid,
@@ -14,7 +15,23 @@ from apps.api.app.public_catalog import (
 from apps.api.app.public_orders import PublicOrderItem, PublicOrderRejected, SqlitePublicOrders
 from apps.api.app.public_rate_limit import LocalPublicOrderRateLimiter
 from apps.api.app.staff_audit import StaffAccessAuditEvent, StaffAuditSink
-from apps.api.app.staff_auth import AuthenticationRequired, StaffAuthenticator, StaffPrincipal
+from apps.api.app.staff_auth import (
+    AuthenticationRequired,
+    StaffAuthenticator,
+    StaffPrincipal,
+    StaffRole,
+)
+from apps.api.app.staff_csrf import CsrfRejected, StaffMutationCsrf
+from apps.api.app.staff_order_management import (
+    ManagementForbidden,
+    ManagementScopeNotFound,
+    OrderManagementAction,
+)
+from apps.api.app.staff_order_transitions import (
+    SqliteStaffOrderTransitions,
+    StaffTransitionConflict,
+    StaffTransitionNotFound,
+)
 from apps.api.app.staff_orders import (
     SqliteStaffOrders,
     StaffOrderNotFound,
@@ -36,6 +53,12 @@ class PublicOrderLineIn(BaseModel):
     quantity: Decimal = Field(gt=0, le=1000, max_digits=12, decimal_places=4)
 
 
+class StaffOrderTransitionIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action: OrderManagementAction
+
+
 class PublicOrderIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -49,6 +72,8 @@ def create_app(
     cors_settings: ApiCorsSettings | None = None,
     staff_authenticator: StaffAuthenticator | None = None,
     staff_orders: SqliteStaffOrders | None = None,
+    staff_order_transitions: SqliteStaffOrderTransitions | None = None,
+    staff_mutation_csrf: StaffMutationCsrf | None = None,
     staff_audit_sink: StaffAuditSink | None = None,
     staff_session_reader: StaffSessionReader | None = None,
     staff_published_scopes: frozenset[tuple[str, str]] | None = None,
@@ -343,6 +368,81 @@ def create_app(
                 action="get_order",
                 status_code=status_code,
             )
+
+    @app.post(
+        "/api/v1/staff/businesses/{business_slug}/locations/{location_slug}/orders/{order_id}/transitions",
+        tags=["staff-order-transitions-laboratory"],
+    )
+    def transition_staff_order(
+        business_slug: str,
+        location_slug: str,
+        order_id: str,
+        request: Request,
+        body: StaffOrderTransitionIn,
+        response: Response,
+        idempotency_key: str = Header(
+            alias="Idempotency-Key",
+            min_length=8,
+            max_length=128,
+            pattern=r"^[A-Za-z0-9_-]{8,128}$",
+        ),
+        csrf_token: str | None = Header(default=None, alias="X-CSRF-Token"),
+        origin: str | None = Header(default=None, alias="Origin"),
+    ) -> dict[str, str]:
+        response.headers["Cache-Control"] = "no-store"
+        # No se permite nunca autenticación Bearer para mutaciones. Es
+        # imprescindible componer explícitamente todas las dependencias.
+        if (
+            staff_session_reader is None
+            or staff_published_scopes is None
+            or staff_order_transitions is None
+            or staff_mutation_csrf is None
+        ):
+            raise HTTPException(status_code=503, detail="Staff mutations are not configured")
+        try:
+            principal = staff_session_reader.current_principal(request)
+        except AuthenticationRequired:
+            raise HTTPException(status_code=401, detail="Authentication is required") from None
+        if (business_slug, location_slug) not in staff_published_scopes:
+            raise HTTPException(status_code=404, detail="Staff scope not found")
+        if not principal.allows(
+            business_slug=business_slug,
+            location_slug=location_slug,
+            role=StaffRole.MANAGE_ORDERS,
+        ):
+            raise HTTPException(status_code=403, detail="Staff write permission is required")
+        try:
+            staff_mutation_csrf.verify(
+                origin=origin,
+                session_token=request.cookies.get(COOKIE_NAME, ""),
+                csrf_token=csrf_token,
+                business_slug=business_slug,
+                location_slug=location_slug,
+                action=body.action.value,
+            )
+        except CsrfRejected:
+            raise HTTPException(
+                status_code=403, detail="CSRF protection rejected request"
+            ) from None
+        try:
+            return staff_order_transitions.change_status(
+                principal=principal,
+                business_slug=business_slug,
+                location_slug=location_slug,
+                order_id=order_id,
+                action=body.action,
+                idempotency_key=idempotency_key,
+            )
+        except ManagementScopeNotFound:
+            raise HTTPException(status_code=404, detail="Staff scope not found") from None
+        except ManagementForbidden:
+            raise HTTPException(
+                status_code=403, detail="Staff write permission is required"
+            ) from None
+        except StaffTransitionNotFound:
+            raise HTTPException(status_code=404, detail="Staff order not found") from None
+        except StaffTransitionConflict:
+            raise HTTPException(status_code=409, detail="Order transition rejected") from None
 
     return app
 
