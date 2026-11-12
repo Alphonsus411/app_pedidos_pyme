@@ -325,7 +325,7 @@ def test_simultaneous_staff_transitions_are_serialized_and_idempotent(
     before = _counts(path)
     barrier = Barrier(2, timeout=10)
 
-    def attempt(index: int) -> int:
+    def attempt(index: int) -> tuple[int, int]:
         headers = _headers(
             csrf, token, key="concurrent-0001" if same_key else f"concurrent-000{index + 1}"
         )
@@ -333,11 +333,12 @@ def test_simultaneous_staff_transitions_are_serialized_and_idempotent(
             concurrent_client.cookies.set(COOKIE_NAME, token, path="/")
             barrier.wait()
             result = concurrent_client.post(route, json={"action": "validate"}, headers=headers)
-            return result.status_code
+            return index, result.status_code
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         futures = [executor.submit(attempt, index) for index in range(2)]
-        codes = [future.result(timeout=15) for future in futures]
+        outcomes = [future.result(timeout=15) for future in futures]
+    codes = [code for _, code in outcomes]
 
     assert codes.count(200) >= 1
     assert all(code in (200, 409) for code in codes)
@@ -347,15 +348,27 @@ def test_simultaneous_staff_transitions_are_serialized_and_idempotent(
     assert _status(path, second_id) == "draft"
     assert _counts(path) == (before[0] + 1, before[1] + 1)
 
-    # Un replay, también después de la carrera, no vuelve a escribir.
+    # La clave que ganó debe ser la única susceptible de replay.
+    winning_index = next(index for index, code in outcomes if code == 200)
+    winning_key = "concurrent-0001" if same_key else f"concurrent-000{winning_index + 1}"
     assert (
         client.post(
             route,
             json={"action": "validate"},
-            headers=_headers(csrf, token, key="concurrent-0001"),
+            headers=_headers(csrf, token, key=winning_key),
         ).status_code
         == 200
     )
+    if not same_key:
+        losing_index = next(index for index, code in outcomes if code == 409)
+        assert (
+            client.post(
+                route,
+                json={"action": "validate"},
+                headers=_headers(csrf, token, key=f"concurrent-000{losing_index + 1}"),
+            ).status_code
+            == 409
+        )
     assert _counts(path) == (before[0] + 1, before[1] + 1)
 
 
