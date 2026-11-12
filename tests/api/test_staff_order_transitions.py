@@ -291,3 +291,21 @@ def test_policy_denial_rolls_back_idempotency_and_outbox(tmp_path) -> None:
     assert denied.status_code == 409
     assert _counts(path) == before
     assert _status(path, order_id) == "draft"
+
+
+def test_revoked_session_has_no_bearer_fallback_or_side_effects(tmp_path) -> None:
+    path = str(tmp_path / "revoked.db")
+    client, sessions, csrf, first_id, _ = _setup(path)
+    token = _authenticate(client, sessions, roles=frozenset({StaffRole.MANAGE_ORDERS}))
+    headers = _headers(csrf, token)
+    headers["Authorization"] = "Bearer development-staff-token"
+    before = _counts(path)
+    sessions.revoke(token)
+    result = client.post(
+        f"{FIRST_ROUTE}/{first_id}/transitions",
+        json={"action": "validate"},
+        headers=headers,
+    )
+    assert result.status_code == 401
+    assert _status(path, first_id) == "draft"
+    assert _counts(path) == before
