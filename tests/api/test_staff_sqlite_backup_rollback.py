@@ -66,7 +66,7 @@ def _verify_latest(
         raise ValueError("Backup MAC mismatch")
     if number != trusted_sequence or identity != trusted_backup_id:
         raise ValueError("Stale or unexpected backup checkpoint")
-    _checkdigest_support._manifest(path, manifest)
+    digest_support._check_manifest(path, manifest)
 
 
 def _snapshots(tmp_path: Path) -> tuple[Path, Path, Path, str, str]:
@@ -90,8 +90,8 @@ def _snapshots(tmp_path: Path) -> tuple[Path, Path, Path, str, str]:
 
 def test_valid_old_hmac_is_rejected_after_newer_checkpoint(tmp_path: Path) -> None:
     older, newer, source, order_id, other_id = _snapshots(tmp_path)
-    first = _signbackup_support._backup(older, "backup-one", 1)
-    second = _signbackup_support._backup(newer, "backup-two", 2)
+    first = _sign_backup(older, "backup-one", 1)
+    second = _sign_backup(newer, "backup-two", 2)
     # The older backup is valid and authentic under its original checkpoint.
     _verify_latest(older, first, trusted_sequence=1, trusted_backup_id="backup-one")
     _verify_latest(newer, second, trusted_sequence=2, trusted_backup_id="backup-two")
@@ -114,7 +114,7 @@ def test_valid_old_hmac_is_rejected_after_newer_checkpoint(tmp_path: Path) -> No
 @pytest.mark.parametrize("tamper", ("sequence", "backup-id", "missing-checkpoint"))
 def test_rollback_metadata_cannot_be_forged(tmp_path: Path, tamper: str) -> None:
     _older, newer, _source, _order_id, _other_id = _snapshots(tmp_path)
-    signed = _signbackup_support._backup(newer, "backup-two", 2)
+    signed = _sign_backup(newer, "backup-two", 2)
     if tamper == "sequence":
         signed["sequence"] = 3
     elif tamper == "backup-id":
@@ -129,7 +129,7 @@ def test_rollback_metadata_cannot_be_forged(tmp_path: Path, tamper: str) -> None
 
 def test_equal_sequence_rejects_different_signed_backup_id(tmp_path: Path) -> None:
     _older, newer, _source, _order_id, _other_id = _snapshots(tmp_path)
-    different = _signbackup_support._backup(newer, "other-signed-backup", 2)
+    different = _sign_backup(newer, "other-signed-backup", 2)
     with pytest.raises(ValueError, match="unexpected"):
         _verify_latest(
             newer,
