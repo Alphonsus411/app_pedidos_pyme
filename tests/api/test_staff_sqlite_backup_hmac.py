@@ -23,7 +23,8 @@ def _sign(snapshot: Path, key_id: str, secret: bytes) -> dict[str, str | int]:
     if not key_id or len(secret) < 32:
         raise ValueError("Invalid synthetic signing configuration")
     manifest = {**_manifest(snapshot), "key_id": key_id}
-    manifest["mac"] = hmac.new(secret, _payload(manifest), hashlib.sha256).hexdigest()
+    computed_mac = hmac.new(secret, _payload(manifest), hashlib.sha256)
+    manifest["mac"] = computed_mac.hexdigest()
     return manifest
 
 
