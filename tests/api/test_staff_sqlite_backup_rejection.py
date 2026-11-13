@@ -36,9 +36,7 @@ def _validate_candidate(path: Path) -> None:
 def _restore_in_test(candidate: Path, destination: Path) -> None:
     """Test-only staging: do not replace a destination before verification."""
     _validate_candidate(candidate)
-    handle, name = tempfile.mkstemp(
-        prefix="sqlite-restore-", suffix=".db", dir=destination.parent
-    )
+    handle, name = tempfile.mkstemp(prefix="sqlite-restore-", suffix=".db", dir=destination.parent)
     os.close(handle)
     staging = Path(name)
     try:
@@ -55,7 +53,7 @@ def _restore_in_test(candidate: Path, destination: Path) -> None:
     "damage",
     ["missing", "empty", "invalid-header", "truncated", "missing-schema", "wrong-version"],
 )
-def test_invalid_backup_never_replaces_healthy_database(tmp_path: Path, damage: str) -> None:
+def test_bad_backup_preserves_destination(tmp_path: Path, damage: str) -> None:
     source = tmp_path / "source.db"
     backup = tmp_path / "backup.db"
     destination = tmp_path / "destination.db"
