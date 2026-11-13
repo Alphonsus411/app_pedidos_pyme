@@ -29,6 +29,7 @@ from apps.api.app.staff_order_management import (
 )
 from apps.api.app.staff_order_transitions import (
     SqliteStaffOrderTransitions,
+    StaffTransitionBusy,
     StaffTransitionConflict,
     StaffTransitionNotFound,
 )
@@ -390,59 +391,85 @@ def create_app(
         origin: str | None = Header(default=None, alias="Origin"),
     ) -> dict[str, str]:
         response.headers["Cache-Control"] = "no-store"
-        # No se permite nunca autenticación Bearer para mutaciones. Es
-        # imprescindible componer explícitamente todas las dependencias.
-        if (
-            staff_session_reader is None
-            or staff_published_scopes is None
-            or staff_order_transitions is None
-            or staff_mutation_csrf is None
-        ):
-            raise HTTPException(status_code=503, detail="Staff mutations are not configured")
+        subject: str | None = None
+        status_code = 500
         try:
-            principal = staff_session_reader.current_principal(request)
-        except AuthenticationRequired:
-            raise HTTPException(status_code=401, detail="Authentication is required") from None
-        if (business_slug, location_slug) not in staff_published_scopes:
-            raise HTTPException(status_code=404, detail="Staff scope not found")
-        if not principal.allows(
-            business_slug=business_slug,
-            location_slug=location_slug,
-            role=StaffRole.MANAGE_ORDERS,
-        ):
-            raise HTTPException(status_code=403, detail="Staff write permission is required")
-        try:
-            staff_mutation_csrf.verify(
-                origin=origin,
-                session_token=request.cookies.get(COOKIE_NAME, ""),
-                csrf_token=csrf_token,
+            # No se permite nunca autenticación Bearer para mutaciones. Es
+            # imprescindible componer explícitamente todas las dependencias.
+            if (
+                staff_session_reader is None
+                or staff_published_scopes is None
+                or staff_order_transitions is None
+                or staff_mutation_csrf is None
+            ):
+                raise HTTPException(status_code=503, detail="Staff mutations are not configured")
+            try:
+                principal = staff_session_reader.current_principal(request)
+            except AuthenticationRequired:
+                raise HTTPException(status_code=401, detail="Authentication is required") from None
+            subject = principal.subject
+            if (business_slug, location_slug) not in staff_published_scopes:
+                raise HTTPException(status_code=404, detail="Staff scope not found")
+            if not principal.allows(
                 business_slug=business_slug,
                 location_slug=location_slug,
-                action=body.action.value,
-            )
-        except CsrfRejected:
-            raise HTTPException(
-                status_code=403, detail="CSRF protection rejected request"
-            ) from None
-        try:
-            return staff_order_transitions.change_status(
-                principal=principal,
+                role=StaffRole.MANAGE_ORDERS,
+            ):
+                raise HTTPException(status_code=403, detail="Staff write permission is required")
+            try:
+                staff_mutation_csrf.verify(
+                    origin=origin,
+                    session_token=request.cookies.get(COOKIE_NAME, ""),
+                    csrf_token=csrf_token,
+                    business_slug=business_slug,
+                    location_slug=location_slug,
+                    action=body.action.value,
+                )
+            except CsrfRejected:
+                raise HTTPException(
+                    status_code=403, detail="CSRF protection rejected request"
+                ) from None
+            try:
+                result = staff_order_transitions.change_status(
+                    principal=principal,
+                    business_slug=business_slug,
+                    location_slug=location_slug,
+                    order_id=order_id,
+                    action=body.action,
+                    idempotency_key=idempotency_key,
+                )
+                status_code = 200
+                return result
+            except ManagementScopeNotFound:
+                raise HTTPException(status_code=404, detail="Staff scope not found") from None
+            except ManagementForbidden:
+                raise HTTPException(
+                    status_code=403, detail="Staff write permission is required"
+                ) from None
+            except StaffTransitionNotFound:
+                raise HTTPException(status_code=404, detail="Staff order not found") from None
+            except StaffTransitionBusy:
+                # Respuesta transitoria; el cliente debe recuperar el resultado
+                # usando la misma clave, sin asumir que el commit no ocurrió.
+                raise HTTPException(
+                    status_code=503,
+                    detail="Staff transition temporarily unavailable",
+                    headers={"Retry-After": "1"},
+                ) from None
+            except StaffTransitionConflict:
+                raise HTTPException(status_code=409, detail="Order transition rejected") from None
+        except HTTPException as exc:
+            status_code = exc.status_code
+            raise
+        finally:
+            record_staff_access(
+                request=request,
+                subject=subject,
                 business_slug=business_slug,
                 location_slug=location_slug,
-                order_id=order_id,
-                action=body.action,
-                idempotency_key=idempotency_key,
+                action="transition_order",
+                status_code=status_code,
             )
-        except ManagementScopeNotFound:
-            raise HTTPException(status_code=404, detail="Staff scope not found") from None
-        except ManagementForbidden:
-            raise HTTPException(
-                status_code=403, detail="Staff write permission is required"
-            ) from None
-        except StaffTransitionNotFound:
-            raise HTTPException(status_code=404, detail="Staff order not found") from None
-        except StaffTransitionConflict:
-            raise HTTPException(status_code=409, detail="Order transition rejected") from None
 
     return app
 

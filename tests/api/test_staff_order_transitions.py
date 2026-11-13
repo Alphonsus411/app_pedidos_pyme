@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 import sqlite3
+from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
+from threading import Barrier
 
 import pytest
 from apps.api.app.local_staff_sessions import COOKIE_NAME, LocalOpaqueStaffSessions
 from apps.api.app.main import create_app
 from apps.api.app.public_catalog import PublicCatalogScope
 from apps.api.app.public_orders import PublicOrderItem, SqlitePublicOrders
+from apps.api.app.staff_audit import StaffAccessAuditEvent, StaffAuditSink
 from apps.api.app.staff_auth import StaffGrant, StaffPrincipal, StaffRole
 from apps.api.app.staff_csrf import StaffMutationCsrf
 from apps.api.app.staff_order_transitions import SqliteStaffOrderTransitions
+from apps.api.app.staff_orders import SqliteStaffOrders
 from fastapi.testclient import TestClient
 
 from universal_business.domain.business.entities import Location
@@ -48,7 +52,11 @@ class ApproveLaboratoryTransitions:
 
 
 def _setup(
-    path: str, *, allow_transitions: bool = True
+    path: str,
+    *,
+    allow_transitions: bool = True,
+    audit_sink: StaffAuditSink | None = None,
+    transition_timeout: float = 5.0,
 ) -> tuple[TestClient, LocalOpaqueStaffSessions, StaffMutationCsrf, str, str]:
     scopes = {}
     offerings = {}
@@ -107,11 +115,13 @@ def _setup(
     sessions = LocalOpaqueStaffSessions()
     csrf = StaffMutationCsrf(secret=b"s" * 32, allowed_origins=[ORIGIN])
     app = create_app(
+        staff_audit_sink=audit_sink,
         staff_session_reader=sessions,
         staff_published_scopes=frozenset(scopes),
         staff_mutation_csrf=csrf,
+        staff_orders=SqliteStaffOrders(connect=lambda: sqlite3.connect(path), scopes=scopes),
         staff_order_transitions=SqliteStaffOrderTransitions(
-            connect=lambda: sqlite3.connect(path),
+            connect=lambda: sqlite3.connect(path, timeout=transition_timeout),
             scopes=scopes,
             policy=ApproveLaboratoryTransitions(allowed=allow_transitions),
         ),
@@ -309,3 +319,292 @@ def test_revoked_session_has_no_bearer_fallback_or_side_effects(tmp_path) -> Non
     assert result.status_code == 401
     assert _status(path, first_id) == "draft"
     assert _counts(path) == before
+
+
+def test_transition_audit_records_safe_outcomes_and_replays(tmp_path) -> None:
+    class Sink:
+        def __init__(self) -> None:
+            self.events: list[StaffAccessAuditEvent] = []
+
+        def record(self, event: StaffAccessAuditEvent) -> None:
+            self.events.append(event)
+
+    sink = Sink()
+    path = str(tmp_path / "audit-transitions.db")
+    client, sessions, csrf, first_id, second_id = _setup(path, audit_sink=sink)
+    route = f"{FIRST_ROUTE}/{first_id}/transitions"
+    unauthenticated = client.post(
+        route, json={"action": "validate"}, headers={"Idempotency-Key": "transition-0001"}
+    )
+    token = _authenticate(client, sessions, roles=frozenset({StaffRole.READ_ORDERS}))
+    forbidden = client.post(route, json={"action": "validate"}, headers=_headers(csrf, token))
+    token = _authenticate(client, sessions, roles=frozenset({StaffRole.MANAGE_ORDERS}))
+    csrf_denied = client.post(
+        route,
+        json={"action": "validate"},
+        headers={**_headers(csrf, token), "X-CSRF-Token": "Z" * 43},
+    )
+    foreign = client.post(
+        f"{FIRST_ROUTE}/{second_id}/transitions",
+        json={"action": "validate"},
+        headers=_headers(csrf, token),
+    )
+    success = client.post(route, json={"action": "validate"}, headers=_headers(csrf, token))
+    replay = client.post(route, json={"action": "validate"}, headers=_headers(csrf, token))
+    conflict = client.post(
+        route, json={"action": "validate"}, headers=_headers(csrf, token, key="transition-0002")
+    )
+    responses = [unauthenticated, forbidden, csrf_denied, foreign, success, replay, conflict]
+    assert [r.status_code for r in responses] == [401, 403, 403, 404, 200, 200, 409]
+    assert [e.status_code for e in sink.events] == [401, 403, 403, 404, 200, 200, 409]
+    assert sink.events[0].subject is None
+    assert all(event.subject == "operator" for event in sink.events[1:])
+    assert all(e.action == "transition_order" for e in sink.events)
+    for event, response in zip(sink.events, responses, strict=True):
+        assert event.request_id == response.headers["X-Request-ID"]
+        assert event.business_slug == "first" and event.location_slug == "main"
+        serialized = str(event)
+        for secret in (token, first_id, second_id, "transition-0001", "transition-0002"):
+            assert secret not in serialized
+        assert not hasattr(event, "csrf_token")
+        assert not hasattr(event, "idempotency_key")
+        assert not hasattr(event, "order_id")
+
+
+def test_transition_audit_sink_failure_does_not_mask_result(tmp_path) -> None:
+    class FailingSink:
+        def record(self, event: StaffAccessAuditEvent) -> None:
+            raise RuntimeError("synthetic sink failure")
+
+    client, sessions, csrf, first_id, _ = _setup(
+        str(tmp_path / "audit-failure.db"), audit_sink=FailingSink()
+    )
+    route = f"{FIRST_ROUTE}/{first_id}/transitions"
+    unauthenticated = client.post(
+        route, json={"action": "validate"}, headers={"Idempotency-Key": "transition-0001"}
+    )
+    assert unauthenticated.status_code == 401
+    token = _authenticate(client, sessions, roles=frozenset({StaffRole.MANAGE_ORDERS}))
+    accepted = client.post(route, json={"action": "validate"}, headers=_headers(csrf, token))
+    assert accepted.status_code == 200
+
+
+@pytest.mark.parametrize("same_key", [True, False], ids=["replay", "different-keys"])
+def test_parallel_transition_same_order_is_atomic(tmp_path, same_key: bool) -> None:
+    """Two independent HTTP clients race for one SQLite order."""
+    path = str(tmp_path / "parallel-order.db")
+    base_client, sessions, csrf, order_id, _ = _setup(path)
+    token = sessions.issue_for_trusted_server(
+        StaffPrincipal(
+            subject="operator",
+            grants=(StaffGrant("first", "main", frozenset({StaffRole.MANAGE_ORDERS})),),
+        )
+    )
+    route = f"{FIRST_ROUTE}/{order_id}/transitions"
+    initial = _counts(path)
+    gate = Barrier(2)
+
+    def request_transition(index: int) -> tuple[int, dict[str, str]]:
+        # Each request gets its own client and cookie jar. The shared app uses
+        # separate SQLite connections per request, not a shared connection.
+        with TestClient(base_client.app) as client:
+            client.cookies.set(COOKIE_NAME, token, path="/")
+            key = "parallel-key-001" if same_key else f"parallel-key-00{index + 1}"
+            headers = _headers(csrf, token, key=key)
+            gate.wait(timeout=10)
+            response = client.post(route, json={"action": "validate"}, headers=headers)
+            return response.status_code, response.json()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(request_transition, index) for index in range(2)]
+        outcomes = [future.result(timeout=20) for future in futures]
+
+    statuses = sorted(status for status, _ in outcomes)
+    assert statuses == ([200, 200] if same_key else [200, 409])
+    assert all(
+        payload == {"id": order_id, "status": "validated"}
+        for status, payload in outcomes
+        if status == 200
+    )
+    assert _status(path, order_id) == "validated"
+    assert _counts(path) == (initial[0] + 1, initial[1] + 1)
+
+    # Preserve PR #109's additional post-race verification: the winning
+    # idempotency key must replay; the losing key must remain rejected.
+    base_client.cookies.set(COOKIE_NAME, token, path="/")
+    for index, (status, _) in enumerate(outcomes):
+        key = "parallel-key-001" if same_key else f"parallel-key-00{index + 1}"
+        replay = base_client.post(
+            route, json={"action": "validate"}, headers=_headers(csrf, token, key=key)
+        )
+        assert replay.status_code == (200 if same_key or status == 200 else 409)
+    assert _counts(path) == (initial[0] + 1, initial[1] + 1)
+
+
+def test_parallel_transitions_remain_scoped_to_separate_businesses(tmp_path) -> None:
+    path = str(tmp_path / "parallel-businesses.db")
+    base_client, sessions, csrf, first_id, second_id = _setup(path)
+    gate = Barrier(2)
+    before = _counts(path)
+
+    def transition(business: str, order_id: str) -> tuple[int, dict[str, str]]:
+        token = sessions.issue_for_trusted_server(
+            StaffPrincipal(
+                subject=f"operator-{business}",
+                grants=(StaffGrant(business, "main", frozenset({StaffRole.MANAGE_ORDERS})),),
+            )
+        )
+        route = f"/api/v1/staff/businesses/{business}/locations/main/orders/{order_id}/transitions"
+        with TestClient(base_client.app) as client:
+            client.cookies.set(COOKIE_NAME, token, path="/")
+            headers = _headers(csrf, token, business=business, key=f"parallel-{business}-001")
+            gate.wait(timeout=10)
+            response = client.post(route, json={"action": "validate"}, headers=headers)
+            return response.status_code, response.json()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(transition, "first", first_id)
+        second = pool.submit(transition, "second", second_id)
+        responses = [first.result(timeout=20), second.result(timeout=20)]
+
+    assert responses == [
+        (200, {"id": first_id, "status": "validated"}),
+        (200, {"id": second_id, "status": "validated"}),
+    ]
+    assert _status(path, first_id) == _status(path, second_id) == "validated"
+    assert _counts(path) == (before[0] + 2, before[1] + 2)
+
+
+def test_sqlite_writer_timeout_is_503_without_writes_and_recovers(tmp_path) -> None:
+    path = str(tmp_path / "busy-transition.db")
+    client, sessions, csrf, order_id, _ = _setup(path, transition_timeout=0.05)
+    token = _authenticate(client, sessions, roles=frozenset({StaffRole.MANAGE_ORDERS}))
+    route = f"{FIRST_ROUTE}/{order_id}/transitions"
+    headers = _headers(csrf, token, key="busy-transition-0001")
+    before = _counts(path)
+
+    # Hold a separate writer transaction past the request's SQLite timeout.
+    with sqlite3.connect(path) as blocker:
+        blocker.execute("BEGIN IMMEDIATE")
+        blocked = client.post(route, json={"action": "validate"}, headers=headers)
+        assert blocked.status_code == 503
+        assert blocked.headers["Retry-After"] == "1"
+        assert blocked.headers["X-Request-ID"]
+        assert blocked.json()["error"]["code"] == "service_unavailable"
+        assert "locked" not in blocked.text.lower()
+        blocker.rollback()
+
+    assert _status(path, order_id) == "draft"
+    assert _counts(path) == before
+
+    # Retry with the exact same request key, not a fresh mutation key.
+    retry = client.post(route, json={"action": "validate"}, headers=headers)
+    assert retry.status_code == 200
+    assert retry.json() == {"id": order_id, "status": "validated"}
+    assert _counts(path) == (before[0] + 1, before[1] + 1)
+    replay = client.post(route, json={"action": "validate"}, headers=headers)
+    assert replay.status_code == 200
+    assert _counts(path) == (before[0] + 1, before[1] + 1)
+
+
+def test_sqlite_contention_does_not_leak_exception_into_staff_audit(tmp_path) -> None:
+    class Sink:
+        def __init__(self) -> None:
+            self.events: list[StaffAccessAuditEvent] = []
+
+        def record(self, event: StaffAccessAuditEvent) -> None:
+            self.events.append(event)
+
+    path = str(tmp_path / "busy-audit.db")
+    sink = Sink()
+    client, sessions, csrf, order_id, _ = _setup(path, audit_sink=sink, transition_timeout=0.05)
+    token = _authenticate(client, sessions, roles=frozenset({StaffRole.MANAGE_ORDERS}))
+    route = f"{FIRST_ROUTE}/{order_id}/transitions"
+    with sqlite3.connect(path) as blocker:
+        blocker.execute("BEGIN IMMEDIATE")
+        result = client.post(route, json={"action": "validate"}, headers=_headers(csrf, token))
+        blocker.rollback()
+
+    assert result.status_code == 503
+    assert len(sink.events) == 1
+    event = sink.events[0]
+    assert event.action == "transition_order"
+    assert event.status_code == 503
+    assert event.request_id == result.headers["X-Request-ID"]
+    assert event.subject == "operator"
+    assert order_id not in str(event)
+    assert token not in str(event)
+    assert _status(path, order_id) == "draft"
+
+
+def test_lost_transition_response_reconciles_by_read_and_same_key(tmp_path) -> None:
+    """A client discards the 200 after the database commit, then reconnects."""
+    path = str(tmp_path / "response-lost.db")
+    base_client, sessions, csrf, order_id, foreign_id = _setup(path)
+    token = sessions.issue_for_trusted_server(
+        StaffPrincipal(
+            subject="reconciling-operator",
+            grants=(
+                StaffGrant(
+                    "first",
+                    "main",
+                    frozenset({StaffRole.READ_ORDERS, StaffRole.MANAGE_ORDERS}),
+                ),
+            ),
+        )
+    )
+    route = f"{FIRST_ROUTE}/{order_id}/transitions"
+    headers = _headers(csrf, token, key="reconcile-0001")
+    before = _counts(path)
+
+    # The HTTP response is deliberately discarded AFTER the real FastAPI
+    # handler commits. This is not a TCP disconnect or a crash injection.
+    with TestClient(base_client.app) as original:
+        original.cookies.set(COOKIE_NAME, token, path="/")
+        original.post(route, json={"action": "validate"}, headers=headers)
+
+    assert _status(path, order_id) == "validated"
+    committed = _counts(path)
+    assert committed == (before[0] + 1, before[1] + 1)
+
+    with TestClient(base_client.app) as restored:
+        restored.cookies.set(COOKIE_NAME, token, path="/")
+        detail = restored.get(f"{FIRST_ROUTE}/{order_id}")
+        assert detail.status_code == 200
+        assert detail.json()["status"] == "validated"
+        # Read-only state alone does NOT prove that this request committed.
+        replay = restored.post(route, json={"action": "validate"}, headers=headers)
+        assert replay.status_code == 200
+        assert replay.json() == {"id": order_id, "status": "validated"}
+        assert _counts(path) == committed
+        # A new idempotency key must not claim the already-applied transition.
+        different_key = restored.post(
+            route, json={"action": "validate"}, headers=_headers(csrf, token, key="reconcile-0002")
+        )
+        assert different_key.status_code == 409
+        assert _counts(path) == committed
+        # The same operator cannot reconcile a foreign resource.
+        foreign = restored.get(f"{FIRST_ROUTE}/{foreign_id}")
+        assert foreign.status_code == 404
+
+
+def test_reconciliation_requires_read_grant_and_valid_session(tmp_path) -> None:
+    path = str(tmp_path / "reconcile-permissions.db")
+    client, sessions, csrf, order_id, _ = _setup(path)
+    token = _authenticate(client, sessions, roles=frozenset({StaffRole.MANAGE_ORDERS}))
+    route = f"{FIRST_ROUTE}/{order_id}/transitions"
+    headers = _headers(csrf, token, key="reconcile-grant-0001")
+    accepted = client.post(route, json={"action": "validate"}, headers=headers)
+    assert accepted.status_code == 200
+    committed = _counts(path)
+
+    # manage_orders alone must not implicitly allow read_orders.
+    assert client.get(f"{FIRST_ROUTE}/{order_id}").status_code == 403
+    replay = client.post(route, json={"action": "validate"}, headers=headers)
+    assert replay.status_code == 200
+    assert _counts(path) == committed
+
+    sessions.revoke(token)
+    assert client.get(f"{FIRST_ROUTE}/{order_id}").status_code == 401
+    assert client.post(route, json={"action": "validate"}, headers=headers).status_code == 401
+    assert _counts(path) == committed
