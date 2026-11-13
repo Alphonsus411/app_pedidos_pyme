@@ -49,16 +49,13 @@ def test_backup_restore_reconciles_without_duplicate_writes(
     client, sessions, csrf, first_id, second_id = _setup(str(source))
     initial = _counts(str(source))
     key = "backup-restore-0001"
-    first_token = _authenticate(
-        client, sessions, roles=frozenset({StaffRole.MANAGE_ORDERS})
-    )
+    roles = frozenset({StaffRole.MANAGE_ORDERS})
+    first_token = _authenticate(client, sessions, roles=roles)
     first_route = f"{FIRST_ROUTE}/{first_id}/transitions"
     first_headers = _headers(csrf, first_token, key=key)
 
     if snapshot_after_commit:
-        first = client.post(
-            first_route, json={"action": "validate"}, headers=first_headers
-        )
+        first = client.post(first_route, json={"action": "validate"}, headers=first_headers)
         assert first.status_code == 200
 
     _backup(source, snapshot)
@@ -77,17 +74,10 @@ def test_backup_restore_reconciles_without_duplicate_writes(
             first_route, json={"action": "validate"}, headers=first_headers
         )
         assert first.status_code == 200
-    second_token = _authenticate(
-        client,
-        sessions,
-        roles=frozenset({StaffRole.MANAGE_ORDERS}),
-        business="second",
-    )
-    second = client.post(
-        f"/api/v1/staff/businesses/second/locations/main/orders/{second_id}/transitions",
-        json={"action": "validate"},
-        headers=_headers(csrf, second_token, business="second", key="backup-second-0001"),
-    )
+    second_token = _authenticate(client, sessions, roles=roles, business="second")
+    second_route = f"/api/v1/staff/businesses/second/locations/main/orders/{second_id}/transitions"
+    second_headers = _headers(csrf, second_token, business="second", key="backup-second-0001")
+    second = client.post(second_route, json={"action": "validate"}, headers=second_headers)
     assert second.status_code == 200
     assert _status(str(source), first_id) == "validated"
     assert _status(str(source), second_id) == "validated"
