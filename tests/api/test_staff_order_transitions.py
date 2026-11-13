@@ -49,7 +49,10 @@ class ApproveLaboratoryTransitions:
 
 
 def _setup(
-    path: str, *, allow_transitions: bool = True, audit_sink: StaffAuditSink | None = None
+    path: str,
+    *,
+    allow_transitions: bool = True,
+    audit_sink: StaffAuditSink | None = None,
 ) -> tuple[TestClient, LocalOpaqueStaffSessions, StaffMutationCsrf, str, str]:
     scopes = {}
     offerings = {}
