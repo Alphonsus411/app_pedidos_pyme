@@ -5,6 +5,8 @@ from __future__ import annotations
 import sqlite3
 
 import pytest
+from apps.api.app.local_staff_sessions import COOKIE_NAME
+from apps.api.app.staff_auth import StaffRole
 from fastapi.testclient import TestClient
 from test_staff_order_transitions import (
     FIRST_ROUTE,
@@ -15,7 +17,6 @@ from test_staff_order_transitions import (
     _status,
 )
 
-from apps.api.app.staff_auth import StaffRole
 
 
 @pytest.mark.parametrize(
@@ -51,7 +52,7 @@ def test_same_key_reconciliation_after_uncertain_commit(
     before = _counts(path)
 
     with TestClient(base.app, raise_server_exceptions=False) as client:
-        client.cookies.set("staff_session", token, path="/")
+        client.cookies.set(COOKIE_NAME, token, path="/")
         uncertain = client.post(route, json={"action": "validate"}, headers=headers)
         assert uncertain.status_code == 500
         assert uncertain.json()["error"]["code"] == "internal_error"
