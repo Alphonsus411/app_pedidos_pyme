@@ -117,8 +117,8 @@ def test_backup_publication_windows_are_not_conflated(tmp_path: Path) -> None:
     _finalize(ledger, 1, "backup-one")
     assert _state(ledger, checkpoint, snapshot) == "confirmed"
     with sqlite3.connect(snapshot) as connection:
-        count = connection.execute("SELECT COUNT(*) FROM synthetic_orders").fetchone()[0]
-        assert count == 1
+        rows = connection.execute("SELECT COUNT(*) FROM synthetic_orders")
+        assert rows.fetchone()[0] == 1
 
 
 def test_checkpoint_failure_preserves_pending(tmp_path: Path) -> None:
