@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sqlite3
 import subprocess
 import sys
@@ -631,12 +632,16 @@ def test_subprocess_interruption_reconciles_without_duplicate_outbox(
     before = _counts(path)
 
     worker = Path(__file__).with_name("staff_transition_process_worker.py")
+    root = Path(__file__).resolve().parents[2]
+    env = {**os.environ, "PYTHONPATH": str(root) + os.pathsep + os.environ.get("PYTHONPATH", "")}
     process = subprocess.run(
         [sys.executable, str(worker), mode, path, order_id, "interrupted-0001"],
         capture_output=True,
         text=True,
         timeout=20,
         check=False,
+        cwd=root,
+        env=env,
     )
     assert process.returncode == expected_exit, process.stderr
     # Verify durable SQLite state via a new connection, not child memory.
