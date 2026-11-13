@@ -875,4 +875,4 @@ def test_sqlite_integrity_and_replay_across_process_restarts(
         # Independent connections observe persisted rows without duplicates.
         assert connection.execute(
             "SELECT COUNT(*) FROM idempotency WHERE key=?", (key,)
-        ).fetchone()[0] <= 1
+        ).fetchone()[0] == 1
