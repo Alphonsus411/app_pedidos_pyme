@@ -349,7 +349,9 @@ def test_transition_audit_records_safe_outcomes_and_replays(tmp_path) -> None:
     responses = [unauthenticated, forbidden, csrf_denied, foreign, success, replay, conflict]
     assert [r.status_code for r in responses] == [401, 403, 403, 404, 200, 200, 409]
     assert [e.status_code for e in sink.events] == [401, 403, 403, 404, 200, 200, 409]
-    assert [e.subject for e in sink.events] == [None, "operator", "operator", "operator", "operator", "operator", "operator"]
+    assert [e.subject for e in sink.events] == [
+        None, "operator", "operator", "operator", "operator", "operator", "operator"
+    ]
     assert all(e.action == "transition_order" for e in sink.events)
     for event, response in zip(sink.events, responses, strict=True):
         assert event.request_id == response.headers["X-Request-ID"]
