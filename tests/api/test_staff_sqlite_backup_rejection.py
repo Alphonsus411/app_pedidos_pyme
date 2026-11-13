@@ -20,12 +20,8 @@ def _validate_candidate(path: Path) -> None:
         integrity = connection.execute("PRAGMA integrity_check").fetchall()
         foreign_keys = connection.execute("PRAGMA foreign_key_check").fetchall()
         version = connection.execute("PRAGMA user_version").fetchone()[0]
-        tables = {
-            row[0]
-            for row in connection.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
-        }
+        sql = "SELECT name FROM sqlite_master WHERE type='table'"
+        tables = {row[0] for row in connection.execute(sql)}
     required = {"orders", "idempotency", "transactional_outbox"}
     if integrity != [("ok",)] or foreign_keys:
         raise ValueError("Backup candidate failed SQLite integrity validation")
