@@ -814,9 +814,7 @@ def test_uncertain_commit_http_audit(tmp_path, after_commit: bool) -> None:
 
 
 @pytest.mark.parametrize("commit_before_restart", [False, True], ids=["rollback", "committed"])
-def test_sqlite_integrity_and_replay_across_process_restarts(
-    tmp_path, commit_before_restart: bool
-) -> None:
+def test_sqlite_restarts_keep_one_transition(tmp_path, commit_before_restart: bool) -> None:
     """New server processes must see one durable transition, never two."""
     path = str(tmp_path / "restart-lab.db")
     client, sessions, csrf, order_id, other_id = _setup(path)
@@ -873,6 +871,7 @@ def test_sqlite_integrity_and_replay_across_process_restarts(
 
     with sqlite3.connect(path) as connection:
         # Independent connections observe persisted rows without duplicates.
-        assert connection.execute(
+        row = connection.execute(
             "SELECT COUNT(*) FROM idempotency WHERE key=?", (key,)
-        ).fetchone()[0] == 1
+        ).fetchone()
+        assert row[0] == 1
