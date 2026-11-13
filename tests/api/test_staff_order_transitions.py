@@ -10,6 +10,7 @@ from apps.api.app.local_staff_sessions import COOKIE_NAME, LocalOpaqueStaffSessi
 from apps.api.app.main import create_app
 from apps.api.app.public_catalog import PublicCatalogScope
 from apps.api.app.public_orders import PublicOrderItem, SqlitePublicOrders
+from apps.api.app.staff_audit import StaffAccessAuditEvent, StaffAuditSink
 from apps.api.app.staff_auth import StaffGrant, StaffPrincipal, StaffRole
 from apps.api.app.staff_csrf import StaffMutationCsrf
 from apps.api.app.staff_order_transitions import SqliteStaffOrderTransitions
@@ -48,7 +49,7 @@ class ApproveLaboratoryTransitions:
 
 
 def _setup(
-    path: str, *, allow_transitions: bool = True
+    path: str, *, allow_transitions: bool = True, audit_sink: StaffAuditSink | None = None
 ) -> tuple[TestClient, LocalOpaqueStaffSessions, StaffMutationCsrf, str, str]:
     scopes = {}
     offerings = {}
@@ -107,6 +108,7 @@ def _setup(
     sessions = LocalOpaqueStaffSessions()
     csrf = StaffMutationCsrf(secret=b"s" * 32, allowed_origins=[ORIGIN])
     app = create_app(
+        staff_audit_sink=audit_sink,
         staff_session_reader=sessions,
         staff_published_scopes=frozenset(scopes),
         staff_mutation_csrf=csrf,
@@ -309,3 +311,70 @@ def test_revoked_session_has_no_bearer_fallback_or_side_effects(tmp_path) -> Non
     assert result.status_code == 401
     assert _status(path, first_id) == "draft"
     assert _counts(path) == before
+
+
+def test_transition_audit_records_safe_outcomes_and_replays(tmp_path) -> None:
+    class Sink:
+        def __init__(self) -> None:
+            self.events: list[StaffAccessAuditEvent] = []
+
+        def record(self, event: StaffAccessAuditEvent) -> None:
+            self.events.append(event)
+
+    sink = Sink()
+    path = str(tmp_path / "audit-transitions.db")
+    client, sessions, csrf, first_id, second_id = _setup(path, audit_sink=sink)
+    route = f"{FIRST_ROUTE}/{first_id}/transitions"
+    unauthenticated = client.post(
+        route, json={"action": "validate"}, headers={"Idempotency-Key": "transition-0001"}
+    )
+    token = _authenticate(client, sessions, roles=frozenset({StaffRole.READ_ORDERS}))
+    forbidden = client.post(route, json={"action": "validate"}, headers=_headers(csrf, token))
+    token = _authenticate(client, sessions, roles=frozenset({StaffRole.MANAGE_ORDERS}))
+    csrf_denied = client.post(
+        route,
+        json={"action": "validate"},
+        headers={**_headers(csrf, token), "X-CSRF-Token": "Z" * 43},
+    )
+    foreign = client.post(
+        f"{FIRST_ROUTE}/{second_id}/transitions",
+        json={"action": "validate"},
+        headers=_headers(csrf, token),
+    )
+    success = client.post(route, json={"action": "validate"}, headers=_headers(csrf, token))
+    replay = client.post(route, json={"action": "validate"}, headers=_headers(csrf, token))
+    conflict = client.post(
+        route, json={"action": "validate"}, headers=_headers(csrf, token, key="transition-0002")
+    )
+    responses = [unauthenticated, forbidden, csrf_denied, foreign, success, replay, conflict]
+    assert [r.status_code for r in responses] == [401, 403, 403, 404, 200, 200, 409]
+    assert [e.status_code for e in sink.events] == [401, 403, 403, 404, 200, 200, 409]
+    assert [e.subject for e in sink.events] == [None, "operator", "operator", "operator", "operator", "operator", "operator"]
+    assert all(e.action == "transition_order" for e in sink.events)
+    for event, response in zip(sink.events, responses, strict=True):
+        assert event.request_id == response.headers["X-Request-ID"]
+        assert event.business_slug == "first" and event.location_slug == "main"
+        serialized = str(event)
+        for secret in (token, first_id, second_id, "transition-0001", "transition-0002"):
+            assert secret not in serialized
+        assert not hasattr(event, "csrf_token")
+        assert not hasattr(event, "idempotency_key")
+        assert not hasattr(event, "order_id")
+
+
+def test_transition_audit_sink_failure_does_not_mask_result(tmp_path) -> None:
+    class FailingSink:
+        def record(self, event: StaffAccessAuditEvent) -> None:
+            raise RuntimeError("synthetic sink failure")
+
+    client, sessions, csrf, first_id, _ = _setup(
+        str(tmp_path / "audit-failure.db"), audit_sink=FailingSink()
+    )
+    route = f"{FIRST_ROUTE}/{first_id}/transitions"
+    assert client.post(
+        route, json={"action": "validate"}, headers={"Idempotency-Key": "transition-0001"}
+    ).status_code == 401
+    token = _authenticate(client, sessions, roles=frozenset({StaffRole.MANAGE_ORDERS}))
+    assert client.post(
+        route, json={"action": "validate"}, headers=_headers(csrf, token)
+    ).status_code == 200
