@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 
 import pytest
+
 import test_staff_order_transitions as staff
 from test_staff_sqlite_backup_digest import _check_manifest, _manifest
 from test_staff_sqlite_backup_restore import _backup, _verify_database
