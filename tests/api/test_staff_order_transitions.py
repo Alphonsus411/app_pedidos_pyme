@@ -375,10 +375,10 @@ def test_transition_audit_sink_failure_does_not_mask_result(tmp_path) -> None:
         str(tmp_path / "audit-failure.db"), audit_sink=FailingSink()
     )
     route = f"{FIRST_ROUTE}/{first_id}/transitions"
-    assert client.post(
+    unauthenticated = client.post(
         route, json={"action": "validate"}, headers={"Idempotency-Key": "transition-0001"}
-    ).status_code == 401
+    )
+    assert unauthenticated.status_code == 401
     token = _authenticate(client, sessions, roles=frozenset({StaffRole.MANAGE_ORDERS}))
-    assert client.post(
-        route, json={"action": "validate"}, headers=_headers(csrf, token)
-    ).status_code == 200
+    accepted = client.post(route, json={"action": "validate"}, headers=_headers(csrf, token))
+    assert accepted.status_code == 200
