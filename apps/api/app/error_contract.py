@@ -42,10 +42,12 @@ def _error_response(
     request_id = getattr(request.state, "request_id", None)
     if not isinstance(request_id, str):
         request_id = _request_id(None)
+    response_headers = dict(headers or {})
+    response_headers["X-Request-ID"] = request_id
     return JSONResponse(
         status_code=status_code,
         content={"error": {"code": code, "message": message, "request_id": request_id}},
-        headers=headers,
+        headers=response_headers,
     )
 
 
