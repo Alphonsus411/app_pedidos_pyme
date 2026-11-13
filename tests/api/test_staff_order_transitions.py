@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import os
 import sqlite3
+import subprocess
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
+from pathlib import Path
 from threading import Barrier
 
 import pytest
@@ -608,3 +612,51 @@ def test_reconciliation_requires_read_grant_and_valid_session(tmp_path) -> None:
     assert client.get(f"{FIRST_ROUTE}/{order_id}").status_code == 401
     assert client.post(route, json={"action": "validate"}, headers=headers).status_code == 401
     assert _counts(path) == committed
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected_exit", "expected_status", "expected_delta"),
+    [
+        ("before", 17, "draft", 0),
+        ("after", 18, "validated", 1),
+    ],
+)
+def test_subprocess_interruption_reconciles_without_duplicate_outbox(
+    tmp_path, mode: str, expected_exit: int, expected_status: str, expected_delta: int
+) -> None:
+    path = str(tmp_path / "interrupted.db")
+    client, sessions, csrf, order_id, foreign_id = _setup(path)
+    token = _authenticate(client, sessions, roles=frozenset({StaffRole.MANAGE_ORDERS}))
+    route = f"{FIRST_ROUTE}/{order_id}/transitions"
+    headers = _headers(csrf, token, key="interrupted-0001")
+    before = _counts(path)
+
+    worker = Path(__file__).with_name("staff_transition_process_worker.py")
+    root = Path(__file__).resolve().parents[2]
+    env = {**os.environ, "PYTHONPATH": str(root) + os.pathsep + os.environ.get("PYTHONPATH", "")}
+    process = subprocess.run(
+        [sys.executable, str(worker), mode, path, order_id, "interrupted-0001"],
+        capture_output=True,
+        text=True,
+        timeout=20,
+        check=False,
+        cwd=root,
+        env=env,
+    )
+    assert process.returncode == expected_exit, process.stderr
+    # Verify durable SQLite state via a new connection, not child memory.
+    assert _status(path, order_id) == expected_status
+    assert _status(path, foreign_id) == "draft"
+    assert _counts(path) == (
+        before[0] + expected_delta,
+        before[1] + expected_delta,
+    )
+    # On either side of the commit boundary, identical request/key must be
+    # safe to retry and must produce exactly one committed transition/event.
+    retry = client.post(route, json={"action": "validate"}, headers=headers)
+    assert retry.status_code == 200
+    assert retry.json() == {"id": order_id, "status": "validated"}
+    assert _counts(path) == (before[0] + 1, before[1] + 1)
+    replay = client.post(route, json={"action": "validate"}, headers=headers)
+    assert replay.status_code == 200
+    assert _counts(path) == (before[0] + 1, before[1] + 1)
