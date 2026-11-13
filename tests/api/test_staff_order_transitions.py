@@ -16,6 +16,7 @@ from apps.api.app.staff_audit import StaffAccessAuditEvent, StaffAuditSink
 from apps.api.app.staff_auth import StaffGrant, StaffPrincipal, StaffRole
 from apps.api.app.staff_csrf import StaffMutationCsrf
 from apps.api.app.staff_order_transitions import SqliteStaffOrderTransitions
+from apps.api.app.staff_orders import SqliteStaffOrders
 from fastapi.testclient import TestClient
 
 from universal_business.domain.business.entities import Location
@@ -118,6 +119,7 @@ def _setup(
         staff_session_reader=sessions,
         staff_published_scopes=frozenset(scopes),
         staff_mutation_csrf=csrf,
+        staff_orders=SqliteStaffOrders(connect=lambda: sqlite3.connect(path), scopes=scopes),
         staff_order_transitions=SqliteStaffOrderTransitions(
             connect=lambda: sqlite3.connect(path, timeout=transition_timeout),
             scopes=scopes,
@@ -522,3 +524,76 @@ def test_sqlite_contention_does_not_leak_exception_into_staff_audit(tmp_path) ->
     assert order_id not in str(event)
     assert token not in str(event)
     assert _status(path, order_id) == "draft"
+
+
+def test_lost_transition_response_reconciles_by_read_and_same_key(tmp_path) -> None:
+    """A client discards the 200 after the database commit, then reconnects."""
+    path = str(tmp_path / "response-lost.db")
+    base_client, sessions, csrf, order_id, foreign_id = _setup(path)
+    token = sessions.issue_for_trusted_server(
+        StaffPrincipal(
+            subject="reconciling-operator",
+            grants=(
+                StaffGrant(
+                    "first",
+                    "main",
+                    frozenset({StaffRole.READ_ORDERS, StaffRole.MANAGE_ORDERS}),
+                ),
+            ),
+        )
+    )
+    route = f"{FIRST_ROUTE}/{order_id}/transitions"
+    headers = _headers(csrf, token, key="reconcile-0001")
+    before = _counts(path)
+
+    # The HTTP response is deliberately discarded AFTER the real FastAPI
+    # handler commits. This is not a TCP disconnect or a crash injection.
+    with TestClient(base_client.app) as original:
+        original.cookies.set(COOKIE_NAME, token, path="/")
+        original.post(route, json={"action": "validate"}, headers=headers)
+
+    assert _status(path, order_id) == "validated"
+    committed = _counts(path)
+    assert committed == (before[0] + 1, before[1] + 1)
+
+    with TestClient(base_client.app) as restored:
+        restored.cookies.set(COOKIE_NAME, token, path="/")
+        detail = restored.get(f"{FIRST_ROUTE}/{order_id}")
+        assert detail.status_code == 200
+        assert detail.json()["status"] == "validated"
+        # Read-only state alone does NOT prove that this request committed.
+        replay = restored.post(route, json={"action": "validate"}, headers=headers)
+        assert replay.status_code == 200
+        assert replay.json() == {"id": order_id, "status": "validated"}
+        assert _counts(path) == committed
+        # A new idempotency key must not claim the already-applied transition.
+        different_key = restored.post(
+            route, json={"action": "validate"}, headers=_headers(csrf, token, key="reconcile-0002")
+        )
+        assert different_key.status_code == 409
+        assert _counts(path) == committed
+        # The same operator cannot reconcile a foreign resource.
+        foreign = restored.get(f"{FIRST_ROUTE}/{foreign_id}")
+        assert foreign.status_code == 404
+
+
+def test_reconciliation_requires_read_grant_and_valid_session(tmp_path) -> None:
+    path = str(tmp_path / "reconcile-permissions.db")
+    client, sessions, csrf, order_id, _ = _setup(path)
+    token = _authenticate(client, sessions, roles=frozenset({StaffRole.MANAGE_ORDERS}))
+    route = f"{FIRST_ROUTE}/{order_id}/transitions"
+    headers = _headers(csrf, token, key="reconcile-grant-0001")
+    accepted = client.post(route, json={"action": "validate"}, headers=headers)
+    assert accepted.status_code == 200
+    committed = _counts(path)
+
+    # manage_orders alone must not implicitly allow read_orders.
+    assert client.get(f"{FIRST_ROUTE}/{order_id}").status_code == 403
+    replay = client.post(route, json={"action": "validate"}, headers=headers)
+    assert replay.status_code == 200
+    assert _counts(path) == committed
+
+    sessions.revoke(token)
+    assert client.get(f"{FIRST_ROUTE}/{order_id}").status_code == 401
+    assert client.post(route, json={"action": "validate"}, headers=headers).status_code == 401
+    assert _counts(path) == committed
