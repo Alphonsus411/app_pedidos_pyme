@@ -115,3 +115,33 @@ test("staff session contract fails closed on auth failure and invalid scopes", a
     /Respuesta de sesión inválida/,
   );
 });
+
+test("public pagination requests only an opaque validated cursor and no credentials", async () => {
+  const calls = [];
+  const result = await getPublicCatalog({
+    businessSlug: "demo",
+    locationSlug: "main",
+    cursor: "bmV4dC1wYWdl",
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      return { ok: true, json: async () => ({ items: [{ id: "next" }], next_cursor: null }) };
+    },
+  });
+  assert.equal(result.items[0].id, "next");
+  assert.equal(calls[0].url, "/api/v1/public/businesses/demo/locations/main/catalog?cursor=bmV4dC1wYWdl");
+  assert.equal(calls[0].options.method, "GET");
+  assert.deepEqual(calls[0].options.headers, { Accept: "application/json" });
+  assert.equal(calls[0].options.credentials, "same-origin");
+});
+
+test("rejects malformed catalog cursors before network requests", () => {
+  let requests = 0;
+  const fetchImpl = async () => { requests += 1; throw Error("unexpected"); };
+  for (const cursor of ["", "../staff", "?token=x", "abc=", "a".repeat(513), 123]) {
+    assert.throws(
+      () => getPublicCatalog({ businessSlug: "demo", locationSlug: "main", cursor, fetchImpl }),
+      /Cursor de catálogo inválido/,
+    );
+  }
+  assert.equal(requests, 0);
+});
