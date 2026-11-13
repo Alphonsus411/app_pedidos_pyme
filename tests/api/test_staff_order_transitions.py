@@ -429,6 +429,16 @@ def test_parallel_transition_same_order_is_atomic(tmp_path, same_key: bool) -> N
     assert _status(path, order_id) == "validated"
     assert _counts(path) == (initial[0] + 1, initial[1] + 1)
 
+    # Preserve PR #109's additional post-race verification: the winning
+    # idempotency key must replay; the losing key must remain rejected.
+    for index, (status, _) in enumerate(outcomes):
+        key = "parallel-key-001" if same_key else f"parallel-key-00{index + 1}"
+        replay = base_client.post(
+            route, json={"action": "validate"}, headers=_headers(csrf, token, key=key)
+        )
+        assert replay.status_code == (200 if same_key or status == 200 else 409)
+    assert _counts(path) == (initial[0] + 1, initial[1] + 1)
+
 
 def test_parallel_transitions_remain_scoped_to_separate_businesses(tmp_path) -> None:
     path = str(tmp_path / "parallel-businesses.db")
