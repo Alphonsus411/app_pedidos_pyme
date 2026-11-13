@@ -8,10 +8,10 @@ Se inyecta un fallo **una sola vez** en el método `sqlite3.Connection.commit()`
 
 1. **Excepción antes del commit real:** el método de prueba lanza `sqlite3.OperationalError` sin ejecutar `super().commit()`; la UoW intenta rollback. Una conexión nueva observa pedido en `draft` y los contadores de idempotencia/outbox sin cambios.
 2. **Excepción después del commit real:** el método llama a `super().commit()` y después lanza `sqlite3.OperationalError`. La UoW observa la excepción, pero una conexión nueva encuentra `validated`, una clave idempotente y un único evento outbox.
-3. **Respuesta HTTP indistinguible:** ambos escenarios responden con 500 sanitizado y `X-Request-ID`; el cuerpo no revela causa, detalles SQLite ni si el commit se aplicó.
-4. **Reconciliación:** una repetición del POST **idéntico** con la misma `Idempotency-Key` recupera 200 sin duplicados, en ambos casos. Un intento posterior con clave nueva da 409. El pedido del otro negocio permanece intacto.
+3. **Excepción indistinguible en el adaptador:** ambos escenarios generan el mismo `sqlite3.OperationalError` inyectado, aunque uno deja la transacción revertida y el otro confirmada. La prueba **no** atraviesa el borde HTTP durante la inyección; no acredita el código HTTP de ese fallo.
+4. **Reconciliación HTTP posterior:** el cliente autenticado repite el POST con la misma acción, ámbito y `Idempotency-Key` y obtiene 200 sin duplicados, en ambos casos. El pedido del otro negocio permanece intacto.
 
-La excepción se inyecta exclusivamente mediante un `sqlite3.Connection` de pruebas en una base temporal, y se desactiva antes del reintento. No se cambia `SqliteUnitOfWork` ni se introduce retry automático. El objetivo es comprobar una **indeterminación observable por el cliente**, no convertir HTTP 500 en un protocolo de idempotencia.
+La excepción se inyecta exclusivamente mediante un `sqlite3.Connection` de pruebas en una base temporal, y se desactiva antes del reintento. No se cambia `SqliteUnitOfWork` ni se introduce retry automático. El objetivo es comprobar el caso de **confirmación indeterminada desde la excepción del adaptador**, sin equiparar una excepción a un rollback garantizado. Faltan pruebas del contrato HTTP en la ruta inyectada, de fallos físicos y de respuesta interrumpida.
 
 ## Límites y condiciones
 
