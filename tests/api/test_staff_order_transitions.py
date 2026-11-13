@@ -504,9 +504,7 @@ def test_sqlite_contention_does_not_leak_exception_into_staff_audit(tmp_path) ->
 
     path = str(tmp_path / "busy-audit.db")
     sink = Sink()
-    client, sessions, csrf, order_id, _ = _setup(
-        path, audit_sink=sink, transition_timeout=0.05
-    )
+    client, sessions, csrf, order_id, _ = _setup(path, audit_sink=sink, transition_timeout=0.05)
     token = _authenticate(client, sessions, roles=frozenset({StaffRole.MANAGE_ORDERS}))
     route = f"{FIRST_ROUTE}/{order_id}/transitions"
     with sqlite3.connect(path) as blocker:
