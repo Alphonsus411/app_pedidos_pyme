@@ -53,9 +53,7 @@ def _verify(
     "tamper",
     ("file", "size", "digest", "key-id", "mac", "missing-mac", "wrong-key"),
 )
-def test_hmac_rejects_tampering_without_touching_destination(
-    tmp_path: Path, tamper: str
-) -> None:
+def test_hmac_tampering_preserves_destination(tmp_path: Path, tamper: str) -> None:
     source = tmp_path / "source.db"
     snapshot = tmp_path / "snapshot.db"
     destination = tmp_path / "destination.db"
@@ -113,7 +111,7 @@ def test_rotation_accepts_old_and_new_then_retires_old(tmp_path: Path) -> None:
     _verify(backup, newer, after_retirement)
 
 
-def test_recomputed_unsigned_digest_cannot_replace_valid_mac(tmp_path: Path) -> None:
+def test_recomputed_digest_cannot_forge_mac(tmp_path: Path) -> None:
     source = tmp_path / "source.db"
     original = tmp_path / "original.db"
     modified = tmp_path / "modified.db"
