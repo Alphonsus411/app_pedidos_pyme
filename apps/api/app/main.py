@@ -29,6 +29,7 @@ from apps.api.app.staff_order_management import (
 )
 from apps.api.app.staff_order_transitions import (
     SqliteStaffOrderTransitions,
+    StaffTransitionBusy,
     StaffTransitionConflict,
     StaffTransitionNotFound,
 )
@@ -447,6 +448,14 @@ def create_app(
                 ) from None
             except StaffTransitionNotFound:
                 raise HTTPException(status_code=404, detail="Staff order not found") from None
+            except StaffTransitionBusy:
+                # Respuesta transitoria; el cliente debe recuperar el resultado
+                # usando la misma clave, sin asumir que el commit no ocurrió.
+                raise HTTPException(
+                    status_code=503,
+                    detail="Staff transition temporarily unavailable",
+                    headers={"Retry-After": "1"},
+                ) from None
             except StaffTransitionConflict:
                 raise HTTPException(status_code=409, detail="Order transition rejected") from None
         except HTTPException as exc:
