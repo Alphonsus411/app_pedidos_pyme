@@ -437,9 +437,7 @@ def test_parallel_transitions_remain_scoped_to_separate_businesses(tmp_path) -> 
         token = sessions.issue_for_trusted_server(
             StaffPrincipal(
                 subject=f"operator-{business}",
-                grants=(
-                    StaffGrant(business, "main", frozenset({StaffRole.MANAGE_ORDERS})),
-                ),
+                grants=(StaffGrant(business, "main", frozenset({StaffRole.MANAGE_ORDERS})),),
             )
         )
         route = f"/api/v1/staff/businesses/{business}/locations/main/orders/{order_id}/transitions"
