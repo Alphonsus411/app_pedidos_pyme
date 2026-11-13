@@ -4,7 +4,7 @@
 
 ## Comprobaciones
 
-La prueba parametrizada `test_sqlite_integrity_and_replay_across_process_restarts` cubre dos puntos de partida: una transacción de escritor abandonada al morir el proceso (rollback) y una transición ya confirmada con HTTP 200. En ambos casos inicia después **dos procesos Python independientes** que reconstruyen un adaptador staff de laboratorio y emiten el mismo POST de validación con idéntica clave de idempotencia.
+La prueba parametrizada `tests/api/test_staff_restart_integrity.py::test_restart_integrity` cubre dos puntos de partida: una transacción de escritor abandonada al morir el proceso (rollback) y una transición ya confirmada con HTTP 200. En ambos casos inicia después **dos procesos Python independientes** que reconstruyen un adaptador staff de laboratorio y emiten el mismo POST de validación con idéntica clave de idempotencia.
 
 Tras cada proceso se abre una conexión nueva y se comprueba `PRAGMA integrity_check = ok`, `PRAGMA foreign_key_check` sin infracciones y `PRAGMA user_version = 3`. Al final se exige estado persistido `validated` en el pedido, el otro pedido `draft`, y un solo incremento de filas de idempotencia y outbox. Se comprueba la ausencia de claves persistidas duplicadas y un único incremento global de idempotencia; el valor almacenado puede estar derivado de la clave HTTP y no se presume idéntico al texto proporcionado por el cliente.
 
