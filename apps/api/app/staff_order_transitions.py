@@ -52,6 +52,10 @@ class StaffTransitionConflict(ValueError):
     """Transición/política/idempotencia incompatible con la solicitud."""
 
 
+class StaffTransitionBusy(RuntimeError):
+    """SQLite no pudo adquirir el bloqueo antes del timeout de laboratorio."""
+
+
 class _OutboxOnlyPublisher:
     def publish(self, event: DomainEvent, /) -> None:
         del event
@@ -114,64 +118,72 @@ class SqliteStaffOrderTransitions:
         except ValueError as exc:
             raise StaffTransitionConflict from exc
 
-        with closing(self._connect()) as connection:
-            initialize_sqlite_schema(connection)
-            order = SqliteOrderRepository(connection).get(
-                tenant_id=scope.tenant_id, order_id=parsed_order_id
-            )
-            if order is None or (
-                order.business_id,
-                order.location_id,
-            ) != (scope.business_id, scope.location_id):
-                raise StaffTransitionNotFound
-            # Si el estado ya coincide, solo el caso de uso podrá acreditar un
-            # replay con exactamente la misma clave y digest.
-            if action not in _COMMANDS:
-                raise StaffTransitionConflict
-            from_status = order.status
-            target = _ACTION_TARGETS[action]
-            if from_status != target:
+        try:
+            with closing(self._connect()) as connection:
+                initialize_sqlite_schema(connection)
+                order = SqliteOrderRepository(connection).get(
+                    tenant_id=scope.tenant_id, order_id=parsed_order_id
+                )
+                if order is None or (
+                    order.business_id,
+                    order.location_id,
+                ) != (scope.business_id, scope.location_id):
+                    raise StaffTransitionNotFound
+                # Si el estado ya coincide, solo el caso de uso podrá acreditar un
+                # replay con exactamente la misma clave y digest.
+                if action not in _COMMANDS:
+                    raise StaffTransitionConflict
+                from_status = order.status
+                target = _ACTION_TARGETS[action]
+                if from_status != target:
+                    try:
+                        authorize_order_transition(
+                            principal=principal,
+                            business_slug=business_slug,
+                            location_slug=location_slug,
+                            published_scopes=frozenset(self._scopes),
+                            action=action,
+                            current_status=from_status,
+                        )
+                    except (ManagementTransitionRejected, ManagementForbidden) as exc:
+                        raise StaffTransitionConflict from exc
+                command = _COMMANDS[action](
+                    tenant_id=scope.tenant_id,
+                    business_id=scope.business_id,
+                    location_id=scope.location_id,
+                    order_id=parsed_order_id,
+                    idempotency_key=key,
+                )
+                execution = SqliteOrderExecution(
+                    connection,
+                    dispatcher=DomainEventDispatcher(),
+                    publisher=_OutboxOnlyPublisher(),
+                    transition_policy=self._policy,
+                )
                 try:
-                    authorize_order_transition(
-                        principal=principal,
-                        business_slug=business_slug,
-                        location_slug=location_slug,
-                        published_scopes=frozenset(self._scopes),
-                        action=action,
-                        current_status=from_status,
-                    )
-                except (ManagementTransitionRejected, ManagementForbidden) as exc:
+                    result = execution.change_status(command)
+                except (
+                    ApplicationError,
+                    IdempotencyConflictError,
+                    InvariantViolationError,
+                    StatusTransitionError,
+                    ValueError,
+                ) as exc:
                     raise StaffTransitionConflict from exc
-            command = _COMMANDS[action](
-                tenant_id=scope.tenant_id,
-                business_id=scope.business_id,
-                location_id=scope.location_id,
-                order_id=parsed_order_id,
-                idempotency_key=key,
-            )
-            execution = SqliteOrderExecution(
-                connection,
-                dispatcher=DomainEventDispatcher(),
-                publisher=_OutboxOnlyPublisher(),
-                transition_policy=self._policy,
-            )
-            try:
-                result = execution.change_status(command)
-            except (
-                ApplicationError,
-                IdempotencyConflictError,
-                InvariantViolationError,
-                StatusTransitionError,
-                ValueError,
-            ) as exc:
-                raise StaffTransitionConflict from exc
-            # La consulta del resultado confirma el destino de una ejecución
-            # nueva o replay. Nunca se devuelve un resultado de otro ámbito.
-            if (
-                result.order_id != parsed_order_id
-                or result.business_id != scope.business_id
-                or result.location_id != scope.location_id
-                or result.status != target
-            ):
-                raise StaffTransitionConflict
-            return {"id": str(result.order_id), "status": result.status.value}
+                # La consulta del resultado confirma el destino de una ejecución
+                # nueva o replay. Nunca se devuelve un resultado de otro ámbito.
+                if (
+                    result.order_id != parsed_order_id
+                    or result.business_id != scope.business_id
+                    or result.location_id != scope.location_id
+                    or result.status != target
+                ):
+                    raise StaffTransitionConflict
+                return {"id": str(result.order_id), "status": result.status.value}
+        except sqlite3.OperationalError as exc:
+            # Solo los códigos SQLite de contención son transitorios. Nunca
+            # clasificar corrupción/esquemas inexistentes como reintentables.
+            code = getattr(exc, "sqlite_errorcode", None)
+            if code is not None and (code & 0xFF) in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED):
+                raise StaffTransitionBusy from exc
+            raise
