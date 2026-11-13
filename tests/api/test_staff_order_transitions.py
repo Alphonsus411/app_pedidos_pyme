@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import sqlite3
+from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
+from threading import Barrier
 
 import pytest
 from apps.api.app.local_staff_sessions import COOKIE_NAME, LocalOpaqueStaffSessions
@@ -382,3 +384,80 @@ def test_transition_audit_sink_failure_does_not_mask_result(tmp_path) -> None:
     token = _authenticate(client, sessions, roles=frozenset({StaffRole.MANAGE_ORDERS}))
     accepted = client.post(route, json={"action": "validate"}, headers=_headers(csrf, token))
     assert accepted.status_code == 200
+
+
+@pytest.mark.parametrize("same_key", [True, False], ids=["replay", "different-keys"])
+def test_parallel_transition_same_order_is_atomic(tmp_path, same_key: bool) -> None:
+    """Two independent HTTP clients race for one SQLite order."""
+    path = str(tmp_path / "parallel-order.db")
+    base_client, sessions, csrf, order_id, _ = _setup(path)
+    token = sessions.issue_for_trusted_server(
+        StaffPrincipal(
+            subject="operator",
+            grants=(StaffGrant("first", "main", frozenset({StaffRole.MANAGE_ORDERS})),),
+        )
+    )
+    route = f"{FIRST_ROUTE}/{order_id}/transitions"
+    initial = _counts(path)
+    gate = Barrier(2)
+
+    def request_transition(index: int) -> tuple[int, dict[str, str]]:
+        # Each request gets its own client and cookie jar. The shared app uses
+        # separate SQLite connections per request, not a shared connection.
+        with TestClient(base_client.app) as client:
+            client.cookies.set(COOKIE_NAME, token, path="/")
+            key = "parallel-key-001" if same_key else f"parallel-key-00{index + 1}"
+            headers = _headers(csrf, token, key=key)
+            gate.wait(timeout=10)
+            response = client.post(route, json={"action": "validate"}, headers=headers)
+            return response.status_code, response.json()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(request_transition, index) for index in range(2)]
+        outcomes = [future.result(timeout=20) for future in futures]
+
+    statuses = sorted(status for status, _ in outcomes)
+    assert statuses == ([200, 200] if same_key else [200, 409])
+    assert all(
+        payload == {"id": order_id, "status": "validated"}
+        for status, payload in outcomes
+        if status == 200
+    )
+    assert _status(path, order_id) == "validated"
+    assert _counts(path) == (initial[0] + 1, initial[1] + 1)
+
+
+def test_parallel_transitions_remain_scoped_to_separate_businesses(tmp_path) -> None:
+    path = str(tmp_path / "parallel-businesses.db")
+    base_client, sessions, csrf, first_id, second_id = _setup(path)
+    gate = Barrier(2)
+    before = _counts(path)
+
+    def transition(business: str, order_id: str) -> tuple[int, dict[str, str]]:
+        token = sessions.issue_for_trusted_server(
+            StaffPrincipal(
+                subject=f"operator-{business}",
+                grants=(
+                    StaffGrant(business, "main", frozenset({StaffRole.MANAGE_ORDERS})),
+                ),
+            )
+        )
+        route = f"/api/v1/staff/businesses/{business}/locations/main/orders/{order_id}/transitions"
+        with TestClient(base_client.app) as client:
+            client.cookies.set(COOKIE_NAME, token, path="/")
+            headers = _headers(csrf, token, business=business, key=f"parallel-{business}-001")
+            gate.wait(timeout=10)
+            response = client.post(route, json={"action": "validate"}, headers=headers)
+            return response.status_code, response.json()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(transition, "first", first_id)
+        second = pool.submit(transition, "second", second_id)
+        responses = [first.result(timeout=20), second.result(timeout=20)]
+
+    assert responses == [
+        (200, {"id": first_id, "status": "validated"}),
+        (200, {"id": second_id, "status": "validated"}),
+    ]
+    assert _status(path, first_id) == _status(path, second_id) == "validated"
+    assert _counts(path) == (before[0] + 2, before[1] + 2)
