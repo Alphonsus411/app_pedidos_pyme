@@ -64,9 +64,8 @@ def _observe(
 ) -> str:
     """Read-only classification; never publish or overwrite an artifact."""
     with sqlite3.connect(ledger) as connection:
-        row = connection.execute(
-            "SELECT backup_id, state FROM intents WHERE sequence=?", (sequence,)
-        ).fetchone()
+        query = "SELECT backup_id, state FROM intents WHERE sequence=?"
+        row = connection.execute(query, (sequence,)).fetchone()
     published = _read_checkpoint(checkpoint)
     if row is None:
         return "orphan" if snapshot.is_file() else "absent"
