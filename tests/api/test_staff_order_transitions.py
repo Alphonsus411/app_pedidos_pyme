@@ -813,8 +813,8 @@ def test_uncertain_commit_http_audit(tmp_path, after_commit: bool) -> None:
         assert [item.status_code for item in sink.events] == [500, 200, 200, 409]
 
 
-@pytest.mark.parametrize("commit_before_restart", [False, True], ids=["rollback", "committed"])
-def test_sqlite_restarts_keep_one_transition(tmp_path, commit_before_restart: bool) -> None:
+@pytest.mark.parametrize("commit_before_restart", [False, True])
+def test_restart_integrity(tmp_path, commit_before_restart: bool) -> None:
     """New server processes must see one durable transition, never two."""
     path = str(tmp_path / "restart-lab.db")
     client, sessions, csrf, order_id, other_id = _setup(path)
