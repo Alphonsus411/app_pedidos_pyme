@@ -30,8 +30,14 @@ async function readJson(fetchImpl, path) {
   return result;
 }
 
-export function getPublicCatalog({ businessSlug, locationSlug, fetchImpl = fetch }) {
-  return readJson(fetchImpl, `${locationPath(businessSlug, locationSlug)}/catalog`);
+export function getPublicCatalog({ businessSlug, locationSlug, cursor = null, fetchImpl = fetch }) {
+  const path = `${locationPath(businessSlug, locationSlug)}/catalog`;
+  if (cursor === null) return readJson(fetchImpl, path);
+  // The cursor comes from the API response; never treat it as a URL or scope.
+  if (typeof cursor !== "string" || !/^[A-Za-z0-9_-]{1,512}$/.test(cursor)) {
+    throw new Error("Cursor de catálogo inválido");
+  }
+  return readJson(fetchImpl, `${path}?cursor=${encodeURIComponent(cursor)}`);
 }
 
 /** Preparado como contrato, pero NO se invoca desde la UI sin sesión gestionada. */

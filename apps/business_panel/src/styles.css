@@ -21,3 +21,7 @@ footer { margin-top: 30px; font-size: .8rem; color: #64748b; }
 .private-readiness select { padding: 11px 12px; background: #f1f5f9; color: #64748b; border: 1px solid #ccd8e4; border-radius: 8px; font: inherit; }
 .private-readiness select:disabled { cursor: not-allowed; opacity: .8; }
 .private-help { font-size: .84rem; margin: 4px 0 0; }
+
+.catalog + button { margin-top: 18px; border: 1px solid #1e5b84; border-radius: 8px; padding: 10px 16px; font: inherit; font-weight: 600; color: #fff; background: #1e5b84; cursor: pointer; }
+.catalog + button:focus-visible { outline: 3px solid #e4a444; outline-offset: 3px; }
+.catalog + button:disabled { opacity: .7; cursor: wait; }

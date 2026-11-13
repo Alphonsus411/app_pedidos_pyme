@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ApiRequestError, getPublicCatalog } from "./api.mjs";
 import { PRIVATE_READ_DISABLED, readableScopes } from "./privateOrders.mjs";
 
@@ -6,7 +6,10 @@ import { PRIVATE_READ_DISABLED, readableScopes } from "./privateOrders.mjs";
 const DEMO = { businessSlug: "demo", locationSlug: "main" };
 
 export function App() {
-  const [catalog, setCatalog] = useState({ state: "loading", items: [] });
+  const [catalog, setCatalog] = useState({ state: "loading", items: [], nextCursor: null });
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [pageError, setPageError] = useState(null);
+  const pageRequest = useRef(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -16,7 +19,9 @@ export function App() {
       fetchImpl: (url, options) => fetch(url, { ...options, signal: controller.signal }),
     })
       .then((data) => {
-        if (!controller.signal.aborted) setCatalog({ state: "ready", items: data.items });
+        if (!controller.signal.aborted) {
+          setCatalog({ state: "ready", items: data.items, nextCursor: data.next_cursor ?? null });
+        }
       })
       .catch((error) => {
         if (!controller.signal.aborted) {
@@ -27,8 +32,43 @@ export function App() {
           });
         }
       });
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      pageRequest.current?.abort();
+    };
   }, []);
+
+  async function loadMore() {
+    if (catalog.state !== "ready" || !catalog.nextCursor || loadingMore) return;
+    const controller = new AbortController();
+    pageRequest.current = controller;
+    setLoadingMore(true);
+    setPageError(null);
+    try {
+      const data = await getPublicCatalog({
+        ...DEMO,
+        cursor: catalog.nextCursor,
+        fetchImpl: (url, options) => fetch(url, { ...options, signal: controller.signal }),
+      });
+      if (controller.signal.aborted) return;
+      setCatalog((previous) => {
+        const seen = new Set(previous.items.map((item) => item.id));
+        const newItems = data.items.filter((item) => !seen.has(item.id));
+        return {
+          state: "ready",
+          items: [...previous.items, ...newItems],
+          nextCursor: data.next_cursor ?? null,
+        };
+      });
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        setPageError(error instanceof ApiRequestError ? error.message : "No se pudo cargar la siguiente página");
+      }
+    } finally {
+      if (!controller.signal.aborted) setLoadingMore(false);
+      if (pageRequest.current === controller) pageRequest.current = null;
+    }
+  }
 
   return (
     <main className="layout">
@@ -61,6 +101,12 @@ export function App() {
             ))}
           </ul>
         )}
+        {catalog.state === "ready" && catalog.nextCursor && (
+          <button type="button" onClick={loadMore} disabled={loadingMore} aria-busy={loadingMore}>
+            {loadingMore ? "Cargando más artículos…" : "Cargar más artículos"}
+          </button>
+        )}
+        {pageError && <p role="alert">{pageError}</p>}
       </section>
       <footer>Consulta únicamente · Sin pagos, pedidos confirmados ni operaciones privadas.</footer>
     </main>

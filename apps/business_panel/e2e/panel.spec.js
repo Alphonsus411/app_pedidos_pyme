@@ -76,3 +76,60 @@ test("mobile viewport keeps private selector disabled", async ({ page }) => {
   await expect(page.getByLabel("Negocio y ubicación autorizados")).toBeDisabled();
   assertOnlyPublicCatalog(requests);
 });
+
+test("loads a second public catalog page without contacting private endpoints", async ({ page }) => {
+  const calls = [];
+  const first = "/api/v1/public/businesses/demo/locations/main/catalog";
+  await page.route("**/api/v1/**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    calls.push({ path: url.pathname + url.search, method: request.method(), headers: await request.allHeaders() });
+    if (url.pathname !== first) {
+      await route.fulfill({ status: 418, body: "{}" });
+      return;
+    }
+    const second = url.searchParams.get("cursor") === "bmV4dC1wYWdl";
+    const payload = second
+      ? { items: [{ id: "second", name: "Segundo artículo", price: { amount: "4.25" } }], next_cursor: null }
+      : { items: [{ id: "first", name: "Primer artículo", price: { amount: "2.50" } }], next_cursor: "bmV4dC1wYWdl" };
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(payload) });
+  });
+  await page.goto("/");
+  await expect(page.getByText("Primer artículo")).toBeVisible();
+  await page.getByRole("button", { name: "Cargar más artículos" }).click();
+  await expect(page.getByText("Segundo artículo")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Cargar más artículos" })).toHaveCount(0);
+  await expect(page.getByLabel("Negocio y ubicación autorizados")).toBeDisabled();
+  const paths = calls.map((item) => item.path);
+  // React StrictMode can mount the initial public read twice in development.
+  expect(paths.filter((path) => path === first).length).toBeGreaterThanOrEqual(1);
+  expect(paths.filter((path) => path === first).length).toBeLessThanOrEqual(2);
+  expect(paths.filter((path) => path === first + "?cursor=bmV4dC1wYWdl")).toHaveLength(1);
+  expect(paths.every((path) => path === first || path === first + "?cursor=bmV4dC1wYWdl")).toBe(true);
+  expect(calls.every((item) => item.method === "GET" && !("authorization" in item.headers))).toBe(true);
+});
+
+test("pagination errors preserve loaded public items and keep private UI locked", async ({ page }) => {
+  const first = "/api/v1/public/businesses/demo/locations/main/catalog";
+  await page.route("**/api/v1/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname !== first) {
+      await route.fulfill({ status: 418, body: "{}" });
+      return;
+    }
+    if (url.search) {
+      await route.fulfill({ status: 503, contentType: "application/json", body: "{}" });
+      return;
+    }
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({ items: [{ id: "first", name: "Artículo conservado" }], next_cursor: "bmV4dA" }),
+    });
+  });
+  await page.goto("/");
+  await expect(page.getByText("Artículo conservado")).toBeVisible();
+  await page.getByRole("button", { name: "Cargar más artículos" }).click();
+  await expect(page.getByRole("alert")).toContainText("No se pudo consultar la API");
+  await expect(page.getByText("Artículo conservado")).toBeVisible();
+  await expect(page.getByLabel("Negocio y ubicación autorizados")).toBeDisabled();
+});
