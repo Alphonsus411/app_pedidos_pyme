@@ -10,7 +10,6 @@ from pathlib import Path
 import pytest
 from test_staff_order_transitions import (
     FIRST_ROUTE,
-    StaffRole,
     _authenticate,
     _counts,
     _headers,
@@ -75,6 +74,8 @@ def _verify_latest(
 
 
 def _snapshots(tmp_path: Path) -> tuple[Path, Path, Path, str, str]:
+    from apps.api.app.staff_auth import StaffRole
+
     source = tmp_path / "live.db"
     older = tmp_path / "older.db"
     newer = tmp_path / "newer.db"
