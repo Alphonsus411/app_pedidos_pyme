@@ -733,7 +733,7 @@ def test_commit_exception_recovers_with_same_key(tmp_path, after_commit: bool) -
 
 
 @pytest.mark.parametrize("after_commit", [False, True], ids=["before", "after"])
-def test_uncertain_commit_http_is_sanitized_and_audited(tmp_path, after_commit: bool) -> None:
+def test_uncertain_commit_http_audit(tmp_path, after_commit: bool) -> None:
     """The same HTTP 500 must not reveal whether SQLite committed."""
     path = str(tmp_path / "uncertain-http.db")
     armed = {"value": True}
@@ -803,7 +803,9 @@ def test_uncertain_commit_http_is_sanitized_and_audited(tmp_path, after_commit: 
         assert _counts(path) == (before[0] + 1, before[1] + 1)
 
         conflict = client.post(
-            route, json={"action": "validate"}, headers=_headers(csrf, token, key="uncertain-http-0002")
+            route,
+            json={"action": "validate"},
+            headers=_headers(csrf, token, key="uncertain-http-0002"),
         )
         assert conflict.status_code == 409
         assert _counts(path) == (before[0] + 1, before[1] + 1)
