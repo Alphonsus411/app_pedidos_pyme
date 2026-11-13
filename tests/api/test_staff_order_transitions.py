@@ -55,6 +55,7 @@ def _setup(
     *,
     allow_transitions: bool = True,
     audit_sink: StaffAuditSink | None = None,
+    transition_timeout: float = 5.0,
 ) -> tuple[TestClient, LocalOpaqueStaffSessions, StaffMutationCsrf, str, str]:
     scopes = {}
     offerings = {}
@@ -118,7 +119,7 @@ def _setup(
         staff_published_scopes=frozenset(scopes),
         staff_mutation_csrf=csrf,
         staff_order_transitions=SqliteStaffOrderTransitions(
-            connect=lambda: sqlite3.connect(path),
+            connect=lambda: sqlite3.connect(path, timeout=transition_timeout),
             scopes=scopes,
             policy=ApproveLaboratoryTransitions(allowed=allow_transitions),
         ),
@@ -459,3 +460,67 @@ def test_parallel_transitions_remain_scoped_to_separate_businesses(tmp_path) -> 
     ]
     assert _status(path, first_id) == _status(path, second_id) == "validated"
     assert _counts(path) == (before[0] + 2, before[1] + 2)
+
+
+def test_sqlite_writer_timeout_is_503_without_writes_and_recovers(tmp_path) -> None:
+    path = str(tmp_path / "busy-transition.db")
+    client, sessions, csrf, order_id, _ = _setup(path, transition_timeout=0.05)
+    token = _authenticate(client, sessions, roles=frozenset({StaffRole.MANAGE_ORDERS}))
+    route = f"{FIRST_ROUTE}/{order_id}/transitions"
+    headers = _headers(csrf, token, key="busy-transition-0001")
+    before = _counts(path)
+
+    # Hold a separate writer transaction past the request's SQLite timeout.
+    with sqlite3.connect(path) as blocker:
+        blocker.execute("BEGIN IMMEDIATE")
+        blocked = client.post(route, json={"action": "validate"}, headers=headers)
+        assert blocked.status_code == 503
+        assert blocked.headers["Retry-After"] == "1"
+        assert blocked.headers["X-Request-ID"]
+        assert blocked.json()["error"]["code"] == "service_unavailable"
+        assert "locked" not in blocked.text.lower()
+        blocker.rollback()
+
+    assert _status(path, order_id) == "draft"
+    assert _counts(path) == before
+
+    # Retry with the exact same request key, not a fresh mutation key.
+    retry = client.post(route, json={"action": "validate"}, headers=headers)
+    assert retry.status_code == 200
+    assert retry.json() == {"id": order_id, "status": "validated"}
+    assert _counts(path) == (before[0] + 1, before[1] + 1)
+    replay = client.post(route, json={"action": "validate"}, headers=headers)
+    assert replay.status_code == 200
+    assert _counts(path) == (before[0] + 1, before[1] + 1)
+
+
+def test_sqlite_contention_does_not_leak_exception_into_staff_audit(tmp_path) -> None:
+    class Sink:
+        def __init__(self) -> None:
+            self.events: list[StaffAccessAuditEvent] = []
+
+        def record(self, event: StaffAccessAuditEvent) -> None:
+            self.events.append(event)
+
+    path = str(tmp_path / "busy-audit.db")
+    sink = Sink()
+    client, sessions, csrf, order_id, _ = _setup(
+        path, audit_sink=sink, transition_timeout=0.05
+    )
+    token = _authenticate(client, sessions, roles=frozenset({StaffRole.MANAGE_ORDERS}))
+    route = f"{FIRST_ROUTE}/{order_id}/transitions"
+    with sqlite3.connect(path) as blocker:
+        blocker.execute("BEGIN IMMEDIATE")
+        result = client.post(route, json={"action": "validate"}, headers=_headers(csrf, token))
+        blocker.rollback()
+
+    assert result.status_code == 503
+    assert len(sink.events) == 1
+    event = sink.events[0]
+    assert event.action == "transition_order"
+    assert event.status_code == 503
+    assert event.request_id == result.headers["X-Request-ID"]
+    assert event.subject == "operator"
+    assert order_id not in str(event)
+    assert token not in str(event)
+    assert _status(path, order_id) == "draft"
