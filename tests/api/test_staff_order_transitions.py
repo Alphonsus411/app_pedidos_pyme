@@ -431,6 +431,7 @@ def test_parallel_transition_same_order_is_atomic(tmp_path, same_key: bool) -> N
 
     # Preserve PR #109's additional post-race verification: the winning
     # idempotency key must replay; the losing key must remain rejected.
+    base_client.cookies.set(COOKIE_NAME, token, path="/")
     for index, (status, _) in enumerate(outcomes):
         key = "parallel-key-001" if same_key else f"parallel-key-00{index + 1}"
         replay = base_client.post(
