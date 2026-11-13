@@ -10,10 +10,8 @@ from pathlib import Path
 
 import pytest
 from apps.api.app.staff_auth import StaffRole
-
 from test_staff_order_transitions import (
     FIRST_ROUTE,
-    SECOND_ROUTE,
     _authenticate,
     _counts,
     _headers,
@@ -86,7 +84,7 @@ def test_backup_restore_reconciles_without_duplicate_writes(
         business="second",
     )
     second = client.post(
-        f"{SECOND_ROUTE}/{second_id}/transitions",
+        f"/api/v1/staff/businesses/second/locations/main/orders/{second_id}/transitions",
         json={"action": "validate"},
         headers=_headers(csrf, second_token, business="second", key="backup-second-0001"),
     )
