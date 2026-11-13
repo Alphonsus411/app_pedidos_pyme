@@ -6,6 +6,7 @@ import os
 import sqlite3
 import subprocess
 import sys
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 from pathlib import Path
@@ -62,6 +63,7 @@ def _setup(
     allow_transitions: bool = True,
     audit_sink: StaffAuditSink | None = None,
     transition_timeout: float = 5.0,
+    transition_connect: Callable[[], sqlite3.Connection] | None = None,
 ) -> tuple[TestClient, LocalOpaqueStaffSessions, StaffMutationCsrf, str, str]:
     scopes = {}
     offerings = {}
@@ -119,6 +121,9 @@ def _setup(
     )["id"]
     sessions = LocalOpaqueStaffSessions()
     csrf = StaffMutationCsrf(secret=b"s" * 32, allowed_origins=[ORIGIN])
+    connect = transition_connect
+    if connect is None:
+        connect = lambda: sqlite3.connect(path, timeout=transition_timeout)
     app = create_app(
         staff_audit_sink=audit_sink,
         staff_session_reader=sessions,
@@ -126,7 +131,7 @@ def _setup(
         staff_mutation_csrf=csrf,
         staff_orders=SqliteStaffOrders(connect=lambda: sqlite3.connect(path), scopes=scopes),
         staff_order_transitions=SqliteStaffOrderTransitions(
-            connect=lambda: sqlite3.connect(path, timeout=transition_timeout),
+            connect=connect,
             scopes=scopes,
             policy=ApproveLaboratoryTransitions(allowed=allow_transitions),
         ),
