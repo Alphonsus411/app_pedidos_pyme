@@ -121,9 +121,10 @@ def _setup(
     )["id"]
     sessions = LocalOpaqueStaffSessions()
     csrf = StaffMutationCsrf(secret=b"s" * 32, allowed_origins=[ORIGIN])
-    connect = transition_connect
-    if connect is None:
-        connect = lambda: sqlite3.connect(path, timeout=transition_timeout)
+    def default_connect() -> sqlite3.Connection:
+        return sqlite3.connect(path, timeout=transition_timeout)
+
+    connect = transition_connect or default_connect
     app = create_app(
         staff_audit_sink=audit_sink,
         staff_session_reader=sessions,
