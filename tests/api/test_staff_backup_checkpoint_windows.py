@@ -15,7 +15,8 @@ from test_staff_checkpoint_monotonic import (
 
 def _create_source(path: Path) -> None:
     with sqlite3.connect(path) as connection:
-        connection.execute("CREATE TABLE synthetic_orders(id INTEGER PRIMARY KEY)")
+        sql = "CREATE TABLE synthetic_orders(id INTEGER PRIMARY KEY)"
+        connection.execute(sql)
         connection.execute("INSERT INTO synthetic_orders(id) VALUES (1)")
 
 
@@ -31,20 +32,15 @@ def _init_intents(path: Path) -> None:
 
 def _register(path: Path, sequence: int, backup_id: str) -> None:
     with sqlite3.connect(path) as connection:
-        connection.execute(
-            "INSERT INTO intents(sequence, backup_id, state) "
-            "VALUES (?, ?, 'pending')",
-            (sequence, backup_id),
-        )
+        sql = "INSERT INTO intents(sequence, backup_id, state) VALUES (?, ?, 'pending')"
+        connection.execute(sql, (sequence, backup_id))
 
 
 def _finalize(path: Path, sequence: int, backup_id: str) -> None:
     with sqlite3.connect(path) as connection:
-        cursor = connection.execute(
-            "UPDATE intents SET state='confirmed' "
-            "WHERE sequence=? AND backup_id=? AND state='pending'",
-            (sequence, backup_id),
-        )
+        sql = "UPDATE intents SET state='confirmed' "
+        sql += "WHERE sequence=? AND backup_id=? AND state='pending'"
+        cursor = connection.execute(sql, (sequence, backup_id))
         if cursor.rowcount != 1:
             raise ValueError("Expected one pending backup intent")
 
@@ -84,7 +80,9 @@ def _observe(
     if published is not None and published != expected:
         return "checkpoint_mismatch"
     if row[1] == "confirmed":
-        return "confirmed" if published == expected else "unconfirmed_checkpoint"
+        if published == expected:
+            return "confirmed"
+        return "unconfirmed_checkpoint"
     if published == expected:
         return "published_not_finalized"
     return "pending_unpublished"
@@ -141,14 +139,15 @@ def test_publish_then_finalize_retries(tmp_path: Path) -> None:
     _snapshot(source, snapshot)
     _publish_checkpoint(checkpoint, 1, "backup-one")
     assert _state(ledger, checkpoint, snapshot) == "published_not_finalized"
-    assert _publish_checkpoint(checkpoint, 1, "backup-one") == (1, "backup-one")
+    published = _publish_checkpoint(checkpoint, 1, "backup-one")
+    assert published == (1, "backup-one")
     with pytest.raises(ValueError):
         _publish_checkpoint(checkpoint, 1, "conflicting-backup")
     _finalize(ledger, 1, "backup-one")
     assert _state(ledger, checkpoint, snapshot) == "confirmed"
 
 
-def test_orphan_and_missing_confirmed_artifact_fail_closed(tmp_path: Path) -> None:
+def test_orphan_and_missing_backup(tmp_path: Path) -> None:
     source, ledger, checkpoint, snapshot = _laboratory(tmp_path)
     _snapshot(source, snapshot)
     assert _state(ledger, checkpoint, snapshot) == "orphan"
