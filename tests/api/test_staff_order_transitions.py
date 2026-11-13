@@ -729,3 +729,81 @@ def test_commit_exception_recovers_with_same_key(tmp_path, after_commit: bool) -
     second = client.post(route, json={"action": "validate"}, headers=headers)
     assert second.status_code == 200
     assert _counts(path) == (before[0] + 1, before[1] + 1)
+
+
+@pytest.mark.parametrize("after_commit", [False, True], ids=["before", "after"])
+def test_uncertain_commit_http_is_sanitized_and_audited(tmp_path, after_commit: bool) -> None:
+    """The same HTTP 500 must not reveal whether SQLite committed."""
+    path = str(tmp_path / "uncertain-http.db")
+    armed = {"value": True}
+
+    class FaultyConnection(sqlite3.Connection):
+        def commit(self) -> None:
+            count = getattr(self, "_commit_count", 0) + 1
+            self._commit_count = count
+            if count == 2 and armed["value"]:
+                armed["value"] = False
+                if after_commit:
+                    super().commit()
+                raise sqlite3.OperationalError("synthetic confidential commit error")
+            super().commit()
+
+    class Sink:
+        def __init__(self) -> None:
+            self.events: list[StaffAccessAuditEvent] = []
+
+        def record(self, event: StaffAccessAuditEvent) -> None:
+            self.events.append(event)
+
+    sink = Sink()
+    base, sessions, csrf, order_id, foreign_id = _setup(
+        path,
+        audit_sink=sink,
+        transition_connect=lambda: sqlite3.connect(path, factory=FaultyConnection),
+    )
+    token = _authenticate(base, sessions, roles=frozenset({StaffRole.MANAGE_ORDERS}))
+    route = f"{FIRST_ROUTE}/{order_id}/transitions"
+    headers = _headers(csrf, token, key="uncertain-http-0001")
+    before = _counts(path)
+
+    with TestClient(base.app, raise_server_exceptions=False) as client:
+        client.cookies.set(COOKIE_NAME, token, path="/")
+        failed = client.post(route, json={"action": "validate"}, headers=headers)
+        assert failed.status_code == 500
+        assert failed.json()["error"]["code"] == "internal_error"
+        assert failed.json()["error"]["message"] == "Internal server error"
+        assert failed.headers["X-Request-ID"]
+        assert "sqlite" not in failed.text.lower()
+        assert "commit" not in failed.text.lower()
+        assert "synthetic" not in failed.text.lower()
+        assert failed.headers.get("Retry-After") is None
+
+        assert len(sink.events) == 1
+        event = sink.events[0]
+        assert event.action == "transition_order"
+        assert event.status_code == 500
+        assert event.subject == "operator"
+        assert event.business_slug == "first" and event.location_slug == "main"
+        assert event.request_id == failed.headers["X-Request-ID"]
+        for sensitive in (order_id, foreign_id, token, "uncertain-http-0001"):
+            assert sensitive not in str(event)
+
+        delta = int(after_commit)
+        assert _status(path, order_id) == ("validated" if delta else "draft")
+        assert _status(path, foreign_id) == "draft"
+        assert _counts(path) == (before[0] + delta, before[1] + delta)
+
+        recovered = client.post(route, json={"action": "validate"}, headers=headers)
+        assert recovered.status_code == 200
+        assert recovered.json() == {"id": order_id, "status": "validated"}
+        assert _counts(path) == (before[0] + 1, before[1] + 1)
+        replay = client.post(route, json={"action": "validate"}, headers=headers)
+        assert replay.status_code == 200
+        assert _counts(path) == (before[0] + 1, before[1] + 1)
+
+        conflict = client.post(
+            route, json={"action": "validate"}, headers=_headers(csrf, token, key="uncertain-http-0002")
+        )
+        assert conflict.status_code == 409
+        assert _counts(path) == (before[0] + 1, before[1] + 1)
+        assert [item.status_code for item in sink.events] == [500, 200, 200, 409]
