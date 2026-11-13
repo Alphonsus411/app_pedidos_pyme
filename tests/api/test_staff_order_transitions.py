@@ -822,7 +822,8 @@ def test_restart_integrity(tmp_path, commit_before_restart: bool) -> None:
     key = "restart-transition-0001"
     worker = Path(__file__).with_name("staff_transition_process_worker.py")
     root = Path(__file__).resolve().parents[2]
-    env = {**os.environ, "PYTHONPATH": str(root) + os.pathsep + os.environ.get("PYTHONPATH", "")}
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(root) + os.pathsep + env.get("PYTHONPATH", "")
 
     def run_worker(mode: str) -> None:
         completed = subprocess.run(
@@ -845,7 +846,8 @@ def test_restart_integrity(tmp_path, commit_before_restart: bool) -> None:
             assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
 
     if commit_before_restart:
-        token = _authenticate(client, sessions, roles=frozenset({StaffRole.MANAGE_ORDERS}))
+        roles = frozenset({StaffRole.MANAGE_ORDERS})
+        token = _authenticate(client, sessions, roles=roles)
         response = client.post(
             f"{FIRST_ROUTE}/{order_id}/transitions",
             json={"action": "validate"},
@@ -871,7 +873,5 @@ def test_restart_integrity(tmp_path, commit_before_restart: bool) -> None:
 
     with sqlite3.connect(path) as connection:
         # Independent connections observe persisted rows without duplicates.
-        row = connection.execute(
-            "SELECT COUNT(*) FROM idempotency WHERE key=?", (key,)
-        ).fetchone()
-        assert row[0] == 1
+        result = connection.execute("SELECT key FROM idempotency WHERE key=?", (key,))
+        assert len(result.fetchall()) == 1
