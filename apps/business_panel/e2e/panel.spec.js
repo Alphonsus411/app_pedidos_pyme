@@ -170,7 +170,7 @@ test("public item detail expands from the already fetched catalog without new re
   const detail = page.getByRole("region", { name: "Detalle de Artículo de detalle" });
   await expect(detail).toBeVisible();
   await expect(detail.getByText("Texto sintético")).toBeVisible();
-  await expect(detail.getByText(/12,50\\s*€/)).toBeVisible();
+  await expect(detail.getByText(/12,50\s*€/)).toBeVisible();
   await expect(detail.getByText("Disponible", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Ocultar detalle" }).click();
   await expect(detail).toHaveCount(0);
