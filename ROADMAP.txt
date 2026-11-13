@@ -1014,3 +1014,8 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
   [PRUEBAS] Tests Node de divisas/datos ausentes, Playwright sintético de descripciones/disponibilidad y Playwright real FastAPI+SQLite sintéticos de importe 12.5000 EUR -> 12,50 €. Se mantienen el selector staff bloqueado y únicamente GET públicos.
   [DOCUMENTACIÓN] docs/F4_03_PRESENTACION_CATALOGO_PUBLICO_LAB.md. Gates: frontend npm test/Chromium/Chromium con API real/build y CI Python 3.11/3.12 pytest/Ruff/mypy.
   [LÍMITES] Solo presentación pública, no disponibilidad real, sin reescribir API, dominio, esquema, autenticación, pedidos ni workflows, y sin despliegues. SQLite solo desarrollo/tests. Pendiente revisión/merge.
+
+145. REGISTRO 2026-11-13 — F4.04 detalle público de artículo en laboratorio
+  [IMPLEMENTADO EN RAMA] feat/f4-public-item-detail-lab. Expansión local de datos ya obtenidos por GET público versionado del catálogo; sin endpoint individual nuevo, sin peticiones adicionales, sin mutaciones ni acceso privado.
+  [PRUEBAS] Playwright Chromium sintético para expandir/ocultar, mostrar datos API y conservar bloqueo staff. Gates CI Python/frontend pendientes de verificación.
+  [DOCUMENTACIÓN] docs/F4_04_DETALLE_PUBLICO_ARTICULO_LAB.md. SQLite solo desarrollo/tests; sin despliegue ni preparación productiva. Pendiente revisión y merge.
