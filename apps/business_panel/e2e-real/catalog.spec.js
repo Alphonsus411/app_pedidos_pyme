@@ -19,7 +19,7 @@ test("Chromium renders real FastAPI / SQLite catalogue without private calls", a
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Panel de negocio" })).toBeVisible();
   await expect(page.getByText("Artículo sintético F3.8")).toBeVisible();
-  await expect(page.getByText("12.5000")).toBeVisible();
+  await expect(page.getByText(/12,50\s*€/)).toBeVisible();
   await expect(page.getByLabel("Negocio y ubicación autorizados")).toBeDisabled();
   await expect(page.getByText("Sesión de personal no configurada")).toBeVisible();
   // React StrictMode puede efectuar dos GET legítimos en desarrollo.
