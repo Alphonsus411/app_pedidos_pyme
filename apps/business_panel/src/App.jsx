@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { ApiRequestError, getPublicCatalog } from "./api.mjs";
+import { displayAvailability, displayDescription, displayPrice } from "./catalogPresentation.mjs";
 import { PRIVATE_READ_DISABLED, readableScopes } from "./privateOrders.mjs";
 
 // Ámbito sintético de la demo: no representa permisos de un trabajador.
@@ -96,7 +97,9 @@ export function App() {
             {catalog.items.map((item, index) => (
               <li key={item.id ?? index}>
                 <strong>{item.name ?? "Artículo sin nombre"}</strong>
-                <span>{item.base_price?.amount ?? item.price?.amount ?? "Precio no disponible"}</span>
+                {displayDescription(item) && <p className="catalog-description">{displayDescription(item)}</p>}
+                <span>{displayPrice(item)}</span>
+                {displayAvailability(item) && <small className="catalog-availability">{displayAvailability(item)}</small>}
               </li>
             ))}
           </ul>
