@@ -6,6 +6,7 @@ import os
 import sqlite3
 import subprocess
 import sys
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 from pathlib import Path
@@ -61,6 +62,7 @@ def _setup(
     allow_transitions: bool = True,
     audit_sink: StaffAuditSink | None = None,
     transition_timeout: float = 5.0,
+    transition_connect: Callable[[], sqlite3.Connection] | None = None,
 ) -> tuple[TestClient, LocalOpaqueStaffSessions, StaffMutationCsrf, str, str]:
     scopes = {}
     offerings = {}
@@ -125,7 +127,7 @@ def _setup(
         staff_mutation_csrf=csrf,
         staff_orders=SqliteStaffOrders(connect=lambda: sqlite3.connect(path), scopes=scopes),
         staff_order_transitions=SqliteStaffOrderTransitions(
-            connect=lambda: sqlite3.connect(path, timeout=transition_timeout),
+            connect=transition_connect or (lambda: sqlite3.connect(path, timeout=transition_timeout)),
             scopes=scopes,
             policy=ApproveLaboratoryTransitions(allowed=allow_transitions),
         ),
@@ -660,3 +662,67 @@ def test_subprocess_interruption_reconciles_without_duplicate_outbox(
     replay = client.post(route, json={"action": "validate"}, headers=headers)
     assert replay.status_code == 200
     assert _counts(path) == (before[0] + 1, before[1] + 1)
+
+
+@pytest.mark.parametrize("raise_after_commit", [False, True], ids=["pre-commit", "post-commit"])
+def test_uncertain_commit_error_requires_same_key_reconciliation(
+    tmp_path, raise_after_commit: bool
+) -> None:
+    """Inject an exception at the SQLite commit boundary, not a physical crash."""
+    path = str(tmp_path / "uncertain-commit.db")
+    armed = {"value": True}
+
+    class FaultyCommitConnection(sqlite3.Connection):
+        def commit(self) -> None:
+            count = getattr(self, "_lab_commit_count", 0) + 1
+            self._lab_commit_count = count
+            # The first commit validates the existing SQLite schema. The second
+            # is the transition's UoW: inject once and then restore normal I/O.
+            if count == 2 and armed["value"]:
+                armed["value"] = False
+                if raise_after_commit:
+                    super().commit()
+                raise sqlite3.OperationalError("synthetic uncertain commit")
+            super().commit()
+
+    def connect() -> sqlite3.Connection:
+        return sqlite3.connect(path, factory=FaultyCommitConnection)
+
+    base, sessions, csrf, order_id, foreign_id = _setup(
+        path, transition_connect=connect
+    )
+    token = _authenticate(base, sessions, roles=frozenset({StaffRole.MANAGE_ORDERS}))
+    route = f"{FIRST_ROUTE}/{order_id}/transitions"
+    headers = _headers(csrf, token, key="uncertain-commit-0001")
+    before = _counts(path)
+    with TestClient(base.app, raise_server_exceptions=False) as client:
+        client.cookies.set(COOKIE_NAME, token, path="/")
+        uncertain = client.post(route, json={"action": "validate"}, headers=headers)
+        assert uncertain.status_code == 500
+        assert uncertain.json()["error"]["code"] == "internal_error"
+        assert uncertain.headers["X-Request-ID"]
+        assert "sqlite" not in uncertain.text.lower()
+        assert "commit" not in uncertain.text.lower()
+
+        # 500 does not tell a caller whether commit succeeded.
+        delta = 1 if raise_after_commit else 0
+        assert _status(path, order_id) == ("validated" if delta else "draft")
+        assert _status(path, foreign_id) == "draft"
+        assert _counts(path) == (before[0] + delta, before[1] + delta)
+
+        retry = client.post(route, json={"action": "validate"}, headers=headers)
+        assert retry.status_code == 200
+        assert retry.json() == {"id": order_id, "status": "validated"}
+        assert _counts(path) == (before[0] + 1, before[1] + 1)
+        replay = client.post(route, json={"action": "validate"}, headers=headers)
+        assert replay.status_code == 200
+        assert _counts(path) == (before[0] + 1, before[1] + 1)
+
+        # New key must never be substituted as a recovery mechanism.
+        conflict = client.post(
+            route,
+            json={"action": "validate"},
+            headers=_headers(csrf, token, key="uncertain-commit-0002"),
+        )
+        assert conflict.status_code == 409
+        assert _counts(path) == (before[0] + 1, before[1] + 1)
