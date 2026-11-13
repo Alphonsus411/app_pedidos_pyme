@@ -8,11 +8,9 @@ import json
 from pathlib import Path
 
 import pytest
-
-
-staff = __import__("test_staff_order_transitions")
-digest_support = __import__("test_staff_sqlite_backup_digest")
-backup_support = __import__("test_staff_sqlite_backup_restore")
+from test_staff_order_transitions import _counts, _setup, _status
+from test_staff_sqlite_backup_digest import _check_manifest, _manifest
+from test_staff_sqlite_backup_restore import _backup, _verify_database
 
 
 _KEY = b"synthetic-rollback-hmac-key-material-32bytes"
@@ -28,7 +26,7 @@ def _sign_backup(path: Path, backup_id: str, sequence: int) -> dict[str, str | i
     if not backup_id or type(sequence) is not int or sequence < 1:
         raise ValueError("Invalid backup identity or sequence")
     manifest = {
-        **digest_support._manifest(path),
+        **_manifest(path),
         "key_id": "synthetic-key",
         "backup_id": backup_id,
         "sequence": sequence,
@@ -65,25 +63,28 @@ def _verify_latest(
         raise ValueError("Backup MAC mismatch")
     if number != trusted_sequence or identity != trusted_backup_id:
         raise ValueError("Stale or unexpected backup checkpoint")
-    digest_support._check_manifest(path, manifest)
+    _check_manifest(path, manifest)
 
 
 def _snapshots(tmp_path: Path) -> tuple[Path, Path, Path, str, str]:
+    from apps.api.app.staff_auth import StaffRole
+    from test_staff_order_transitions import FIRST_ROUTE, _authenticate, _headers
+
     source = tmp_path / "live.db"
     older = tmp_path / "older.db"
     newer = tmp_path / "newer.db"
-    client, sessions, csrf, order_id, other_id = staff._setup(str(source))
-    backup_support._backup(source, older)
-    roles = frozenset({staff.StaffRole.MANAGE_ORDERS})
-    token = staff._authenticate(client, sessions, roles=roles)
-    route = f"{staff.FIRST_ROUTE}/{order_id}/transitions"
+    client, sessions, csrf, order_id, other_id = _setup(str(source))
+    _backup(source, older)
+    roles = frozenset({StaffRole.MANAGE_ORDERS})
+    token = _authenticate(client, sessions, roles=roles)
+    route = f"{FIRST_ROUTE}/{order_id}/transitions"
     response = client.post(
         route,
         json={"action": "validate"},
-        headers=staff._headers(csrf, token, key="rollback-test-0001"),
+        headers=_headers(csrf, token, key="rollback-test-0001"),
     )
     assert response.status_code == 200
-    backup_support._backup(source, newer)
+    _backup(source, newer)
     return older, newer, source, order_id, other_id
 
 
@@ -95,19 +96,19 @@ def test_valid_old_hmac_is_rejected_after_newer_checkpoint(tmp_path: Path) -> No
     _verify_latest(older, first, trusted_sequence=1, trusted_backup_id="backup-one")
     _verify_latest(newer, second, trusted_sequence=2, trusted_backup_id="backup-two")
     destination = tmp_path / "destination.db"
-    backup_support._backup(newer, destination)
+    _backup(newer, destination)
     before = destination.read_bytes()
-    counts = staff._counts(str(destination))
+    counts = _counts(str(destination))
 
     with pytest.raises(ValueError, match="Stale"):
         _verify_latest(older, first, trusted_sequence=2, trusted_backup_id="backup-two")
 
     assert destination.read_bytes() == before
-    backup_support._verify_database(destination)
-    assert staff._counts(str(destination)) == counts
-    assert staff._status(str(destination), order_id) == "validated"
-    assert staff._status(str(destination), other_id) == "draft"
-    assert staff._status(str(source), order_id) == "validated"
+    _verify_database(destination)
+    assert _counts(str(destination)) == counts
+    assert _status(str(destination), order_id) == "validated"
+    assert _status(str(destination), other_id) == "draft"
+    assert _status(str(source), order_id) == "validated"
 
 
 @pytest.mark.parametrize("tamper", ("sequence", "backup-id", "missing-checkpoint"))
