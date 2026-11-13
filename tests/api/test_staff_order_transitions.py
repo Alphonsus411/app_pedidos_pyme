@@ -811,3 +811,68 @@ def test_uncertain_commit_http_audit(tmp_path, after_commit: bool) -> None:
         assert conflict.status_code == 409
         assert _counts(path) == (before[0] + 1, before[1] + 1)
         assert [item.status_code for item in sink.events] == [500, 200, 200, 409]
+
+
+@pytest.mark.parametrize("commit_before_restart", [False, True], ids=["rollback", "committed"])
+def test_sqlite_integrity_and_replay_across_process_restarts(
+    tmp_path, commit_before_restart: bool
+) -> None:
+    """New server processes must see one durable transition, never two."""
+    path = str(tmp_path / "restart-lab.db")
+    client, sessions, csrf, order_id, other_id = _setup(path)
+    before = _counts(path)
+    key = "restart-transition-0001"
+    worker = Path(__file__).with_name("staff_transition_process_worker.py")
+    root = Path(__file__).resolve().parents[2]
+    env = {**os.environ, "PYTHONPATH": str(root) + os.pathsep + os.environ.get("PYTHONPATH", "")}
+
+    def run_worker(mode: str) -> None:
+        completed = subprocess.run(
+            [sys.executable, str(worker), mode, path, order_id, key],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+            cwd=root,
+            env=env,
+        )
+        expected = 17 if mode == "before" else 18
+        assert completed.returncode == expected, completed.stderr
+
+    def assert_database_health() -> None:
+        with sqlite3.connect(path) as connection:
+            # Integrity is checked with a fresh connection after child exit.
+            assert connection.execute("PRAGMA integrity_check").fetchall() == [("ok",)]
+            assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+            assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
+
+    if commit_before_restart:
+        token = _authenticate(client, sessions, roles=frozenset({StaffRole.MANAGE_ORDERS}))
+        response = client.post(
+            f"{FIRST_ROUTE}/{order_id}/transitions",
+            json={"action": "validate"},
+            headers=_headers(csrf, token, key=key),
+        )
+        assert response.status_code == 200
+    else:
+        # An aborted writer process leaves a recoverable, uncommitted draft.
+        run_worker("before")
+        assert _status(path, order_id) == "draft"
+        assert _counts(path) == before
+
+    assert_database_health()
+    # Two distinct new Python processes re-compose the staff HTTP adapter
+    # and issue the same idempotent POST, without sharing session memory.
+    run_worker("after")
+    assert_database_health()
+    run_worker("after")
+    assert_database_health()
+    assert _status(path, order_id) == "validated"
+    assert _status(path, other_id) == "draft"
+    assert _counts(path) == (before[0] + 1, before[1] + 1)
+
+    with sqlite3.connect(path) as connection:
+        # Independent connections observe persisted rows without duplicates.
+        assert connection.execute(
+            "SELECT COUNT(*) FROM idempotency WHERE key=?", (key,)
+        ).fetchone()[0] <= 1
