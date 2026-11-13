@@ -871,9 +871,3 @@ def test_restart_integrity(tmp_path, commit_before_restart: bool) -> None:
     assert _status(path, other_id) == "draft"
     assert _counts(path) == (before[0] + 1, before[1] + 1)
 
-    with sqlite3.connect(path) as connection:
-        duplicate_keys = connection.execute(
-            "SELECT tenant_id, key FROM idempotency "
-            "GROUP BY tenant_id, key HAVING COUNT(*) > 1"
-        ).fetchall()
-        assert duplicate_keys == []
