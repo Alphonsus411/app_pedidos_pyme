@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 
 import pytest
+from apps.api.app.staff_auth import StaffRole
 from test_staff_order_transitions import (
     FIRST_ROUTE,
     _authenticate,
@@ -18,7 +19,6 @@ from test_staff_order_transitions import (
 )
 from test_staff_sqlite_backup_digest import _check_manifest, _manifest
 from test_staff_sqlite_backup_restore import _backup, _verify_database
-from apps.api.app.staff_auth import StaffRole
 
 
 _KEY = b"synthetic-rollback-hmac-key-material-32bytes"
