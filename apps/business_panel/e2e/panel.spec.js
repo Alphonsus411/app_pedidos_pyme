@@ -59,7 +59,7 @@ test("renders explicit public description and availability without inventing met
   await page.goto("/");
   await expect(page.getByText("Descripción proporcionada por la API")).toBeVisible();
   await expect(page.getByText(/12,50\s*€/)).toBeVisible();
-  await expect(page.getByText("No disponible")).toBeVisible();
+  await expect(page.getByText("No disponible", { exact: true })).toBeVisible();
   await expect(page.getByText("Precio no disponible")).toBeVisible();
   await expect(page.getByText("Disponible", { exact: true })).toHaveCount(0);
   await expect(page.getByLabel("Negocio y ubicación autorizados")).toBeDisabled();
