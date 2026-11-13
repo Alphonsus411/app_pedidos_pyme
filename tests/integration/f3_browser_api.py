@@ -48,6 +48,20 @@ def run_lab(database: Path) -> None:
                     location_ids=frozenset({first_location}),
                 )
             )
+            # 51 active public offerings force an actual second HTTP page
+            # with the existing API default limit=50. Entirely synthetic.
+            for number in range(1, 51):
+                repository.save(
+                    Offering(
+                        id=OfferingId.generate(),
+                        tenant_id=first_tenant,
+                        business_id=first_business,
+                        name=f"Artículo sintético adicional {number:02d}",
+                        status=CatalogItemStatus.ACTIVE,
+                        base_price=Money("3.25", "EUR"),
+                        location_ids=frozenset({first_location}),
+                    )
+                )
             repository.save(
                 Offering(
                     id=OfferingId.generate(),
