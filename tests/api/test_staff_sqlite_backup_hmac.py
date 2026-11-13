@@ -145,7 +145,8 @@ def _sign_backup(path: Path, backup_id: str, sequence: int) -> dict[str, str | i
         "backup_id": backup_id,
         "sequence": sequence,
     }
-    manifest["mac"] = hmac.new(_KEY, _canonical(manifest), hashlib.sha256).hexdigest()
+    computed_mac = hmac.new(_KEY, _canonical(manifest), hashlib.sha256)
+    manifest["mac"] = computed_mac.hexdigest()
     return manifest
 
 
@@ -236,9 +237,7 @@ def test_rollback_metadata_cannot_be_forged(tmp_path: Path, tamper: str) -> None
 
     checkpoint = None if tamper == "missing-checkpoint" else 2
     with pytest.raises(ValueError):
-        _verify_latest(
-            newer, signed, trusted_sequence=checkpoint, trusted_backup_id="backup-two"
-        )
+        _verify_latest(newer, signed, trusted_sequence=checkpoint, trusted_backup_id="backup-two")
 
 
 def test_equal_sequence_rejects_different_signed_backup_id(tmp_path: Path) -> None:
