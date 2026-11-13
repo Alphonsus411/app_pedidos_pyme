@@ -12,6 +12,7 @@ import pytest
 from apps.api.app.staff_auth import StaffRole
 from test_staff_order_transitions import (
     FIRST_ROUTE,
+    SECOND_ROUTE,
     _authenticate,
     _counts,
     _headers,
@@ -55,7 +56,9 @@ def test_backup_restore_reconciles_without_duplicate_writes(
     first_headers = _headers(csrf, first_token, key=key)
 
     if snapshot_after_commit:
-        first = client.post(first_route, json={"action": "validate"}, headers=first_headers)
+        first = client.post(
+            first_route, json={"action": "validate"}, headers=first_headers
+        )
         assert first.status_code == 200
 
     _backup(source, snapshot)
@@ -75,9 +78,13 @@ def test_backup_restore_reconciles_without_duplicate_writes(
         )
         assert first.status_code == 200
     second_token = _authenticate(client, sessions, roles=roles, business="second")
-    second_route = f"/api/v1/staff/businesses/second/locations/main/orders/{second_id}/transitions"
-    second_headers = _headers(csrf, second_token, business="second", key="backup-second-0001")
-    second = client.post(second_route, json={"action": "validate"}, headers=second_headers)
+    second_route = f"{SECOND_ROUTE}/{second_id}/transitions"
+    second_headers = _headers(
+        csrf, second_token, business="second", key="backup-second-0001"
+    )
+    second = client.post(
+        second_route, json={"action": "validate"}, headers=second_headers
+    )
     assert second.status_code == 200
     assert _status(str(source), first_id) == "validated"
     assert _status(str(source), second_id) == "validated"
