@@ -32,9 +32,7 @@ def _validate_candidate(path: Path) -> None:
 def _restore_in_test(candidate: Path, destination: Path) -> None:
     """Test-only staging: do not replace a destination before verification."""
     _validate_candidate(candidate)
-    handle, name = tempfile.mkstemp(
-        prefix="sqlite-restore-", suffix=".db", dir=destination.parent
-    )
+    handle, name = tempfile.mkstemp(dir=destination.parent, prefix="sqlite-")
     os.close(handle)
     staging = Path(name)
     try:
@@ -49,14 +47,7 @@ def _restore_in_test(candidate: Path, destination: Path) -> None:
 
 @pytest.mark.parametrize(
     "damage",
-    [
-        "missing",
-        "empty",
-        "invalid-header",
-        "truncated",
-        "missing-schema",
-        "wrong-version",
-    ],
+    ("missing", "empty", "invalid-header", "truncated", "missing-schema", "wrong-version"),
 )
 def test_bad_backup_preserves_destination(tmp_path: Path, damage: str) -> None:
     source = tmp_path / "source.db"
@@ -90,7 +81,7 @@ def test_bad_backup_preserves_destination(tmp_path: Path, damage: str) -> None:
     assert _counts(str(destination)) == before_counts
     assert _status(str(destination), order_id) == "draft"
     assert _status(str(destination), other_id) == "draft"
-    assert list(tmp_path.glob("sqlite-restore-*.db")) == []
+    assert list(tmp_path.glob("sqlite-*")) == []
 
 
 def test_valid_backup_restores_to_staging_then_replaces(tmp_path: Path) -> None:
@@ -106,4 +97,4 @@ def test_valid_backup_restores_to_staging_then_replaces(tmp_path: Path) -> None:
     assert _status(str(destination), first_id) == "draft"
     assert _status(str(destination), other_id) == "draft"
     assert _counts(str(destination)) == _counts(str(candidate))
-    assert list(tmp_path.glob("sqlite-restore-*.db")) == []
+    assert list(tmp_path.glob("sqlite-*")) == []
