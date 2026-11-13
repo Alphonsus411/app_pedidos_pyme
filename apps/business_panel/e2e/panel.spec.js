@@ -100,7 +100,12 @@ test("loads a second public catalog page without contacting private endpoints", 
   await expect(page.getByText("Segundo artículo")).toBeVisible();
   await expect(page.getByRole("button", { name: "Cargar más artículos" })).toHaveCount(0);
   await expect(page.getByLabel("Negocio y ubicación autorizados")).toBeDisabled();
-  expect(calls.map((item) => item.path)).toEqual([first, first + "?cursor=bmV4dC1wYWdl"]);
+  const paths = calls.map((item) => item.path);
+  // React StrictMode can mount the initial public read twice in development.
+  expect(paths.filter((path) => path === first).length).toBeGreaterThanOrEqual(1);
+  expect(paths.filter((path) => path === first).length).toBeLessThanOrEqual(2);
+  expect(paths.filter((path) => path === first + "?cursor=bmV4dC1wYWdl")).toHaveLength(1);
+  expect(paths.every((path) => path === first || path === first + "?cursor=bmV4dC1wYWdl")).toBe(true);
   expect(calls.every((item) => item.method === "GET" && !("authorization" in item.headers))).toBe(true);
 });
 
