@@ -8,14 +8,7 @@ import json
 from pathlib import Path
 
 import pytest
-from test_staff_order_transitions import (
-    FIRST_ROUTE,
-    _authenticate,
-    _counts,
-    _headers,
-    _setup,
-    _status,
-)
+import test_staff_order_transitions as staff
 from test_staff_sqlite_backup_digest import _check_manifest, _manifest
 from test_staff_sqlite_backup_restore import _backup, _verify_database
 
@@ -79,15 +72,15 @@ def _snapshots(tmp_path: Path) -> tuple[Path, Path, Path, str, str]:
     source = tmp_path / "live.db"
     older = tmp_path / "older.db"
     newer = tmp_path / "newer.db"
-    client, sessions, csrf, order_id, other_id = _setup(str(source))
+    client, sessions, csrf, order_id, other_id = staff._setup(str(source))
     _backup(source, older)
     roles = frozenset({StaffRole.MANAGE_ORDERS})
-    token = _authenticate(client, sessions, roles=roles)
-    route = f"{FIRST_ROUTE}/{order_id}/transitions"
+    token = staff._authenticate(client, sessions, roles=roles)
+    route = f"{staff.FIRST_ROUTE}/{order_id}/transitions"
     response = client.post(
         route,
         json={"action": "validate"},
-        headers=_headers(csrf, token, key="rollback-test-0001"),
+        headers=staff._headers(csrf, token, key="rollback-test-0001"),
     )
     assert response.status_code == 200
     _backup(source, newer)
@@ -104,17 +97,17 @@ def test_valid_old_hmac_is_rejected_after_newer_checkpoint(tmp_path: Path) -> No
     destination = tmp_path / "destination.db"
     _backup(newer, destination)
     before = destination.read_bytes()
-    counts = _counts(str(destination))
+    counts = staff._counts(str(destination))
 
     with pytest.raises(ValueError, match="Stale"):
         _verify_latest(older, first, trusted_sequence=2, trusted_backup_id="backup-two")
 
     assert destination.read_bytes() == before
     _verify_database(destination)
-    assert _counts(str(destination)) == counts
-    assert _status(str(destination), order_id) == "validated"
-    assert _status(str(destination), other_id) == "draft"
-    assert _status(str(source), order_id) == "validated"
+    assert staff._counts(str(destination)) == counts
+    assert staff._status(str(destination), order_id) == "validated"
+    assert staff._status(str(destination), other_id) == "draft"
+    assert staff._status(str(source), order_id) == "validated"
 
 
 @pytest.mark.parametrize("tamper", ("sequence", "backup-id", "missing-checkpoint"))
