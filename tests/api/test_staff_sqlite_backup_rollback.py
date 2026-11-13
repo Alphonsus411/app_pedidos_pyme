@@ -4,16 +4,15 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import importlib
 import json
 from pathlib import Path
 
 import pytest
 
 
-staff = importlib.import_module("test_staff_order_transitions")
-digest_support = importlib.import_module("test_staff_sqlite_backup_digest")
-backup_support = importlib.import_module("test_staff_sqlite_backup_restore")
+staff = __import__("test_staff_order_transitions")
+digest_support = __import__("test_staff_sqlite_backup_digest")
+backup_support = __import__("test_staff_sqlite_backup_restore")
 
 
 _KEY = b"synthetic-rollback-hmac-key-material-32bytes"
