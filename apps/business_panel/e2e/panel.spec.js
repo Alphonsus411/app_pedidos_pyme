@@ -43,6 +43,29 @@ test("rendered catalog and disabled staff controls use public GET only", async (
   expect(await page.context().cookies()).toEqual([]);
 });
 
+test("renders explicit public description and availability without inventing metadata", async ({ page }) => {
+  const requests = await watchApi(page, {
+    items: [
+      {
+        id: "described", name: "Artículo descrito",
+        description: "Descripción proporcionada por la API",
+        price: { amount: "12.5000", currency: "EUR" },
+        available: false,
+      },
+      { id: "unknown", name: "Artículo sin metadatos de precio" },
+    ],
+    next_cursor: null,
+  });
+  await page.goto("/");
+  await expect(page.getByText("Descripción proporcionada por la API")).toBeVisible();
+  await expect(page.getByText(/12,50\\s*€/)).toBeVisible();
+  await expect(page.getByText("No disponible")).toBeVisible();
+  await expect(page.getByText("Precio no disponible")).toBeVisible();
+  await expect(page.getByText("Disponible", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Negocio y ubicación autorizados")).toBeDisabled();
+  assertOnlyPublicCatalog(requests);
+});
+
 test("empty public catalog never unlocks staff access", async ({ page }) => {
   const requests = await watchApi(page);
   await page.goto("/");
