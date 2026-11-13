@@ -688,9 +688,7 @@ def test_uncertain_commit_error_requires_same_key_reconciliation(
     def connect() -> sqlite3.Connection:
         return sqlite3.connect(path, factory=FaultyCommitConnection)
 
-    base, sessions, csrf, order_id, foreign_id = _setup(
-        path, transition_connect=connect
-    )
+    base, sessions, csrf, order_id, foreign_id = _setup(path, transition_connect=connect)
     token = _authenticate(base, sessions, roles=frozenset({StaffRole.MANAGE_ORDERS}))
     route = f"{FIRST_ROUTE}/{order_id}/transitions"
     headers = _headers(csrf, token, key="uncertain-commit-0001")
