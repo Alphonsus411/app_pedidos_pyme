@@ -68,9 +68,7 @@ def test_backup_restore_replay(tmp_path: Path, snapshot_after_commit: bool) -> N
     # The live system continues evolving AFTER snapshot creation.
     # This must not mutate either backup or restored copy.
     if not snapshot_after_commit:
-        first = client.post(
-            first_route, json={"action": "validate"}, headers=first_headers
-        )
+        first = client.post(first_route, json=payload, headers=first_headers)
         assert first.status_code == 200
     second_token = _authenticate(client, sessions, roles=roles, business="second")
     second_route = f"{SECOND_ROUTE}/{second_id}/transitions"
