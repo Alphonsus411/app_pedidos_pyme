@@ -8,6 +8,7 @@ import pytest
 from apps.api.app.local_staff_sessions import COOKIE_NAME
 from apps.api.app.staff_auth import StaffRole
 from fastapi.testclient import TestClient
+
 from test_staff_order_transitions import (
     FIRST_ROUTE,
     _authenticate,
