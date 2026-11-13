@@ -8,7 +8,7 @@ Un respaldo SQLite antiguo puede conservar un HMAC-SHA256 perfectamente válido.
 
 ## Experimento
 
-El archivo `tests/api/test_staff_sqlite_backup_rollback.py` ensaya un identificador de respaldo (`backup_id`) y una secuencia positiva (`sequence`) incluidos en los campos autenticados del manifiesto HMAC. Se utiliza serialización JSON canónica y comparación `hmac.compare_digest`, y después se comprueba el SHA-256 y tamaño del archivo.
+El archivo `tests/api/test_staff_sqlite_backup_hmac.py` ensaya un identificador de respaldo (`backup_id`) y una secuencia positiva (`sequence`) incluidos en los campos autenticados del manifiesto HMAC. Se utiliza serialización JSON canónica y comparación `hmac.compare_digest`, y después se comprueba el SHA-256 y tamaño del archivo.
 
 Se construyen dos copias sintéticas: la primera antes de validar un pedido y la segunda después. Ambas poseen HMAC correctos. El validador de laboratorio recibe por **parámetros separados** un checkpoint confiable externo (`trusted_sequence`, `trusted_backup_id`) y rechaza la copia más antigua cuando el checkpoint autorizado señala la más reciente. Además, prueba que una secuencia alterada, un identificador alterado o uno diferente pero correctamente firmado para la misma secuencia no se aceptan. Sin checkpoint externo disponible, el validador falla de forma cerrada. El destino y los datos originales permanecen intactos.
 
