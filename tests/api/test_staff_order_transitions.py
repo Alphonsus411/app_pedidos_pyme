@@ -665,9 +665,7 @@ def test_subprocess_interruption_reconciles_without_duplicate_outbox(
 
 
 @pytest.mark.parametrize("raise_after_commit", [False, True], ids=["pre-commit", "post-commit"])
-def test_uncertain_commit_error_requires_same_key_reconciliation(
-    tmp_path, raise_after_commit: bool
-) -> None:
+def test_commit_uncertainty_replays_once(tmp_path, raise_after_commit: bool) -> None:
     """Inject an exception at the SQLite commit boundary, not a physical crash."""
     path = str(tmp_path / "uncertain-commit.db")
     armed = {"value": True}
