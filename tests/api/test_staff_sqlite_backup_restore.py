@@ -41,9 +41,7 @@ def _backup(source: Path, destination: Path) -> None:
 
 
 @pytest.mark.parametrize("snapshot_after_commit", [False, True])
-def test_backup_restore_reconciles_without_duplicate_writes(
-    tmp_path: Path, snapshot_after_commit: bool
-) -> None:
+def test_backup_restore_replay(tmp_path: Path, snapshot_after_commit: bool) -> None:
     source = tmp_path / "live.db"
     snapshot = tmp_path / "snapshot.db"
     restored = tmp_path / "restored.db"
