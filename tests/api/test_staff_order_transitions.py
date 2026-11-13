@@ -121,6 +121,7 @@ def _setup(
     )["id"]
     sessions = LocalOpaqueStaffSessions()
     csrf = StaffMutationCsrf(secret=b"s" * 32, allowed_origins=[ORIGIN])
+
     def default_connect() -> sqlite3.Connection:
         return sqlite3.connect(path, timeout=transition_timeout)
 
