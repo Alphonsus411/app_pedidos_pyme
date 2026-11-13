@@ -811,4 +811,3 @@ def test_uncertain_commit_http_audit(tmp_path, after_commit: bool) -> None:
         assert conflict.status_code == 409
         assert _counts(path) == (before[0] + 1, before[1] + 1)
         assert [item.status_code for item in sink.events] == [500, 200, 200, 409]
-
