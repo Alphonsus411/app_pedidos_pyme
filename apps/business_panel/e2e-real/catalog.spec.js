@@ -43,12 +43,41 @@ test("two synthetic businesses stay isolated in real HTTP API via browser fetch"
     return responses;
   }, [FIRST, SECOND, "/api/v1/public/businesses/demo/locations/unknown/catalog"]);
   expect(result.map((x) => x.status)).toEqual([200, 200, 404]);
-  expect(result[0].body.items.map((x) => x.name)).toEqual(["Artículo sintético F3.8"]);
+  expect(result[0].body.items).toHaveLength(50);
+  expect(result[0].body.items.map((x) => x.name)).toContain("Artículo sintético F3.8");
+  expect(typeof result[0].body.next_cursor).toBe("string");
   expect(result[1].body.items.map((x) => x.name)).toEqual(["Artículo exclusivo segundo negocio"]);
   expect(result[0].body.items[0].name).not.toEqual(result[1].body.items[0].name);
   expect(result[0].body.items[0]).not.toHaveProperty("tenant_id");
   expect(result[1].body.items[0]).not.toHaveProperty("business_id");
   await expect(page.getByLabel("Negocio y ubicación autorizados")).toBeDisabled();
+});
+
+test("real FastAPI cursor loads page two in Chromium without private requests", async ({ page }) => {
+  const calls = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname.startsWith("/api/")) {
+      calls.push({
+        path: url.pathname,
+        search: url.search,
+        method: request.method(),
+        authorization: request.headers()["authorization"],
+      });
+    }
+  });
+  await page.goto("/");
+  await expect(page.getByText("Artículo sintético F3.8")).toBeVisible();
+  await expect(page.locator(".catalog li")).toHaveCount(50);
+  await page.getByRole("button", { name: "Cargar más artículos" }).click();
+  await expect(page.locator(".catalog li")).toHaveCount(51);
+  await expect(page.getByText("Artículo sintético adicional 50")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Cargar más artículos" })).toHaveCount(0);
+  await expect(page.getByLabel("Negocio y ubicación autorizados")).toBeDisabled();
+  const publicCalls = calls.filter((call) => call.path === FIRST);
+  expect(publicCalls.some((call) => call.search.startsWith("?cursor="))).toBe(true);
+  expect(calls.every((call) => call.path === FIRST && call.method === "GET"
+    && call.authorization === undefined)).toBe(true);
 });
 
 test("private API remains disabled and inaccessible without credentials", async ({ page }) => {
