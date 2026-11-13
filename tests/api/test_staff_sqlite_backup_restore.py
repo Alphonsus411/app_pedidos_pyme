@@ -52,21 +52,18 @@ def test_backup_restore_replay(tmp_path: Path, snapshot_after_commit: bool) -> N
     first_token = _authenticate(client, sessions, roles=roles)
     first_route = f"{FIRST_ROUTE}/{first_id}/transitions"
     first_headers = _headers(csrf, first_token, key=key)
+    payload = {"action": "validate"}
 
     if snapshot_after_commit:
-        first = client.post(
-            first_route, json={"action": "validate"}, headers=first_headers
-        )
+        first = client.post(first_route, json=payload, headers=first_headers)
         assert first.status_code == 200
 
     _backup(source, snapshot)
     snapshot_status = "validated" if snapshot_after_commit else "draft"
     snapshot_delta = int(snapshot_after_commit)
     assert _status(str(snapshot), first_id) == snapshot_status
-    assert _counts(str(snapshot)) == (
-        initial[0] + snapshot_delta,
-        initial[1] + snapshot_delta,
-    )
+    snapshot_counts = (initial[0] + snapshot_delta, initial[1] + snapshot_delta)
+    assert _counts(str(snapshot)) == snapshot_counts
 
     # The live system continues evolving AFTER snapshot creation.
     # This must not mutate either backup or restored copy.
@@ -77,12 +74,9 @@ def test_backup_restore_replay(tmp_path: Path, snapshot_after_commit: bool) -> N
         assert first.status_code == 200
     second_token = _authenticate(client, sessions, roles=roles, business="second")
     second_route = f"{SECOND_ROUTE}/{second_id}/transitions"
-    second_headers = _headers(
-        csrf, second_token, business="second", key="backup-second-0001"
-    )
-    second = client.post(
-        second_route, json={"action": "validate"}, headers=second_headers
-    )
+    second_key = "backup-second-0001"
+    second_headers = _headers(csrf, second_token, business="second", key=second_key)
+    second = client.post(second_route, json=payload, headers=second_headers)
     assert second.status_code == 200
     assert _status(str(source), first_id) == "validated"
     assert _status(str(source), second_id) == "validated"
@@ -94,10 +88,7 @@ def test_backup_restore_replay(tmp_path: Path, snapshot_after_commit: bool) -> N
     _verify_database(restored)
     assert _status(str(restored), first_id) == snapshot_status
     assert _status(str(restored), second_id) == "draft"
-    assert _counts(str(restored)) == (
-        initial[0] + snapshot_delta,
-        initial[1] + snapshot_delta,
-    )
+    assert _counts(str(restored)) == snapshot_counts
 
     # Reconstruct an independent staff HTTP app and SQLite connection in a
     # fresh Python process after restoring the snapshot to a new file.
