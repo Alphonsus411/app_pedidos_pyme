@@ -8,9 +8,9 @@ import json
 from pathlib import Path
 
 import pytest
-from apps.api.app.staff_auth import StaffRole
 from test_staff_order_transitions import (
     FIRST_ROUTE,
+    StaffRole,
     _authenticate,
     _counts,
     _headers,
