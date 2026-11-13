@@ -120,6 +120,9 @@ def _setup(
     )["id"]
     sessions = LocalOpaqueStaffSessions()
     csrf = StaffMutationCsrf(secret=b"s" * 32, allowed_origins=[ORIGIN])
+    def open_transition_connection() -> sqlite3.Connection:
+        return sqlite3.connect(path, timeout=transition_timeout)
+
     app = create_app(
         staff_audit_sink=audit_sink,
         staff_session_reader=sessions,
@@ -127,7 +130,7 @@ def _setup(
         staff_mutation_csrf=csrf,
         staff_orders=SqliteStaffOrders(connect=lambda: sqlite3.connect(path), scopes=scopes),
         staff_order_transitions=SqliteStaffOrderTransitions(
-            connect=transition_connect or (lambda: sqlite3.connect(path, timeout=transition_timeout)),
+            connect=transition_connect or open_transition_connection,
             scopes=scopes,
             policy=ApproveLaboratoryTransitions(allowed=allow_transitions),
         ),
