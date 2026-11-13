@@ -91,6 +91,10 @@ def _observe(
     return "pending_unpublished"
 
 
+def _state(ledger: Path, checkpoint: Path, snapshot: Path) -> str:
+    return _observe(ledger, checkpoint, snapshot, 1, "backup-one")
+
+
 def _laboratory(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
     source = tmp_path / "source.db"
     ledger = tmp_path / "intents.db"
@@ -105,64 +109,66 @@ def _laboratory(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
 def test_backup_publication_windows_are_not_conflated(tmp_path: Path) -> None:
     source, ledger, checkpoint, snapshot = _laboratory(tmp_path)
     _register(ledger, 1, "backup-one")
-    assert _observe(ledger, checkpoint, snapshot, 1, "backup-one") == "missing_artifact"
+    assert _state(ledger, checkpoint, snapshot) == "missing_artifact"
     _snapshot(source, snapshot)
-    assert _observe(ledger, checkpoint, snapshot, 1, "backup-one") == "pending_unpublished"
+    assert _state(ledger, checkpoint, snapshot) == "pending_unpublished"
     _publish_checkpoint(checkpoint, 1, "backup-one")
-    assert _observe(ledger, checkpoint, snapshot, 1, "backup-one") == "published_not_finalized"
+    assert _state(ledger, checkpoint, snapshot) == "published_not_finalized"
     _finalize(ledger, 1, "backup-one")
-    assert _observe(ledger, checkpoint, snapshot, 1, "backup-one") == "confirmed"
+    assert _state(ledger, checkpoint, snapshot) == "confirmed"
     with sqlite3.connect(snapshot) as connection:
-        assert connection.execute("SELECT COUNT(*) FROM synthetic_orders").fetchone()[0] == 1
+        count = connection.execute("SELECT COUNT(*) FROM synthetic_orders").fetchone()[0]
+        assert count == 1
 
 
-def test_failure_before_checkpoint_publish_leaves_pending_for_review(tmp_path: Path) -> None:
+def test_checkpoint_failure_preserves_pending(tmp_path: Path) -> None:
     source, ledger, checkpoint, snapshot = _laboratory(tmp_path)
     _register(ledger, 1, "backup-one")
     _snapshot(source, snapshot)
     with pytest.raises(RuntimeError, match="Injected failure"):
         _publish_checkpoint(checkpoint, 1, "backup-one", inject_failure=True)
     assert _read_checkpoint(checkpoint) is None
-    assert _observe(ledger, checkpoint, snapshot, 1, "backup-one") == "pending_unpublished"
+    assert _state(ledger, checkpoint, snapshot) == "pending_unpublished"
     # Explicit operator-driven retry, not an automatic observer side effect.
     _publish_checkpoint(checkpoint, 1, "backup-one")
-    assert _observe(ledger, checkpoint, snapshot, 1, "backup-one") == "published_not_finalized"
+    assert _state(ledger, checkpoint, snapshot) == "published_not_finalized"
     _finalize(ledger, 1, "backup-one")
-    assert _observe(ledger, checkpoint, snapshot, 1, "backup-one") == "confirmed"
+    assert _state(ledger, checkpoint, snapshot) == "confirmed"
 
 
-def test_failure_after_publication_is_recoverable_with_same_identity(tmp_path: Path) -> None:
+def test_publish_then_finalize_retries(tmp_path: Path) -> None:
     source, ledger, checkpoint, snapshot = _laboratory(tmp_path)
     _register(ledger, 1, "backup-one")
     _snapshot(source, snapshot)
     _publish_checkpoint(checkpoint, 1, "backup-one")
-    assert _observe(ledger, checkpoint, snapshot, 1, "backup-one") == "published_not_finalized"
+    assert _state(ledger, checkpoint, snapshot) == "published_not_finalized"
     assert _publish_checkpoint(checkpoint, 1, "backup-one") == (1, "backup-one")
     with pytest.raises(ValueError):
         _publish_checkpoint(checkpoint, 1, "conflicting-backup")
     _finalize(ledger, 1, "backup-one")
-    assert _observe(ledger, checkpoint, snapshot, 1, "backup-one") == "confirmed"
+    assert _state(ledger, checkpoint, snapshot) == "confirmed"
 
 
 def test_orphan_and_missing_confirmed_artifact_fail_closed(tmp_path: Path) -> None:
     source, ledger, checkpoint, snapshot = _laboratory(tmp_path)
     _snapshot(source, snapshot)
-    assert _observe(ledger, checkpoint, snapshot, 1, "backup-one") == "orphan"
+    assert _state(ledger, checkpoint, snapshot) == "orphan"
     assert _read_checkpoint(checkpoint) is None
     _register(ledger, 1, "backup-one")
     _publish_checkpoint(checkpoint, 1, "backup-one")
     _finalize(ledger, 1, "backup-one")
     snapshot.unlink()
-    assert _observe(ledger, checkpoint, snapshot, 1, "backup-one") == "missing_artifact"
+    assert _state(ledger, checkpoint, snapshot) == "missing_artifact"
     assert _read_checkpoint(checkpoint) == (1, "backup-one")
 
 
-def test_invalid_and_mismatched_artifacts_never_advance_checkpoint(tmp_path: Path) -> None:
+def test_invalid_or_mismatched_artifacts(tmp_path: Path) -> None:
     _source, ledger, checkpoint, snapshot = _laboratory(tmp_path)
     _register(ledger, 1, "backup-one")
     snapshot.write_bytes(b"not-a-sqlite-backup")
-    assert _observe(ledger, checkpoint, snapshot, 1, "backup-one") == "invalid_artifact"
-    assert _observe(ledger, checkpoint, snapshot, 1, "different") == "identity_mismatch"
+    assert _state(ledger, checkpoint, snapshot) == "invalid_artifact"
+    observed = _observe(ledger, checkpoint, snapshot, 1, "different")
+    assert observed == "identity_mismatch"
     assert _read_checkpoint(checkpoint) is None
     with sqlite3.connect(ledger) as connection:
         row = connection.execute("SELECT state FROM intents").fetchone()
