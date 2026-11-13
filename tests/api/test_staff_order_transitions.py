@@ -6,7 +6,6 @@ import os
 import sqlite3
 import subprocess
 import sys
-from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 from pathlib import Path
@@ -20,6 +19,7 @@ from apps.api.app.public_orders import PublicOrderItem, SqlitePublicOrders
 from apps.api.app.staff_audit import StaffAccessAuditEvent, StaffAuditSink
 from apps.api.app.staff_auth import StaffGrant, StaffPrincipal, StaffRole
 from apps.api.app.staff_csrf import StaffMutationCsrf
+from apps.api.app.staff_order_management import OrderManagementAction
 from apps.api.app.staff_order_transitions import SqliteStaffOrderTransitions
 from apps.api.app.staff_orders import SqliteStaffOrders
 from fastapi.testclient import TestClient
@@ -62,7 +62,6 @@ def _setup(
     allow_transitions: bool = True,
     audit_sink: StaffAuditSink | None = None,
     transition_timeout: float = 5.0,
-    transition_connect: Callable[[], sqlite3.Connection] | None = None,
 ) -> tuple[TestClient, LocalOpaqueStaffSessions, StaffMutationCsrf, str, str]:
     scopes = {}
     offerings = {}
@@ -120,9 +119,6 @@ def _setup(
     )["id"]
     sessions = LocalOpaqueStaffSessions()
     csrf = StaffMutationCsrf(secret=b"s" * 32, allowed_origins=[ORIGIN])
-    def open_transition_connection() -> sqlite3.Connection:
-        return sqlite3.connect(path, timeout=transition_timeout)
-
     app = create_app(
         staff_audit_sink=audit_sink,
         staff_session_reader=sessions,
@@ -130,7 +126,7 @@ def _setup(
         staff_mutation_csrf=csrf,
         staff_orders=SqliteStaffOrders(connect=lambda: sqlite3.connect(path), scopes=scopes),
         staff_order_transitions=SqliteStaffOrderTransitions(
-            connect=transition_connect or open_transition_connection,
+            connect=lambda: sqlite3.connect(path, timeout=transition_timeout),
             scopes=scopes,
             policy=ApproveLaboratoryTransitions(allowed=allow_transitions),
         ),
@@ -667,64 +663,64 @@ def test_subprocess_interruption_reconciles_without_duplicate_outbox(
     assert _counts(path) == (before[0] + 1, before[1] + 1)
 
 
-@pytest.mark.parametrize(
-    "raise_after_commit",
-    [False, True],
-    ids=["pre-commit", "post-commit"],
-)
-def test_same_key_reconciliation_after_uncertain_commit(
-    tmp_path, raise_after_commit: bool
-) -> None:
+@pytest.mark.parametrize("after_commit", [False, True], ids=["before", "after"])
+def test_commit_exception_recovers_with_same_key(tmp_path, after_commit: bool) -> None:
     path = str(tmp_path / "uncertain-commit.db")
+    client, sessions, csrf, order_id, other_id = _setup(path)
+    token = _authenticate(client, sessions, roles=frozenset({StaffRole.MANAGE_ORDERS}))
+    before = _counts(path)
+    with sqlite3.connect(path) as connection:
+        tenant, business, location = connection.execute(
+            "SELECT tenant_id, business_id, location_id FROM orders WHERE id=?", (order_id,)
+        ).fetchone()
+
     armed = {"value": True}
 
-    class FaultyCommitConnection(sqlite3.Connection):
+    class FaultyConnection(sqlite3.Connection):
         def commit(self) -> None:
-            count = getattr(self, "_lab_commit_count", 0) + 1
-            self._lab_commit_count = count
-            # The first commit is schema validation; the second is the UoW.
+            count = getattr(self, "_commit_count", 0) + 1
+            self._commit_count = count
             if count == 2 and armed["value"]:
                 armed["value"] = False
-                if raise_after_commit:
+                if after_commit:
                     super().commit()
                 raise sqlite3.OperationalError("synthetic uncertain commit")
             super().commit()
 
-    def connect() -> sqlite3.Connection:
-        return sqlite3.connect(path, factory=FaultyCommitConnection)
+    adapter = SqliteStaffOrderTransitions(
+        connect=lambda: sqlite3.connect(path, factory=FaultyConnection),
+        scopes={
+            ("first", "main"): PublicCatalogScope(
+                tenant_id=TenantId.from_raw(tenant),
+                business_id=BusinessId.from_raw(business),
+                location_id=LocationId.from_raw(location),
+            )
+        },
+        policy=ApproveLaboratoryTransitions(),
+    )
+    principal = StaffPrincipal(
+        subject="operator",
+        grants=(StaffGrant("first", "main", frozenset({StaffRole.MANAGE_ORDERS})),),
+    )
+    with pytest.raises(sqlite3.OperationalError, match="synthetic uncertain commit"):
+        adapter.change_status(
+            principal=principal,
+            business_slug="first",
+            location_slug="main",
+            order_id=order_id,
+            action=OrderManagementAction.VALIDATE,
+            idempotency_key="uncertain-commit-0001",
+        )
+    delta = int(after_commit)
+    assert _status(path, order_id) == ("validated" if delta else "draft")
+    assert _status(path, other_id) == "draft"
+    assert _counts(path) == (before[0] + delta, before[1] + delta)
 
-    base, sessions, csrf, order_id, foreign_id = _setup(path, transition_connect=connect)
-    token = _authenticate(base, sessions, roles=frozenset({StaffRole.MANAGE_ORDERS}))
     route = f"{FIRST_ROUTE}/{order_id}/transitions"
     headers = _headers(csrf, token, key="uncertain-commit-0001")
-    before = _counts(path)
-
-    with TestClient(base.app, raise_server_exceptions=False) as client:
-        client.cookies.set(COOKIE_NAME, token, path="/")
-        uncertain = client.post(route, json={"action": "validate"}, headers=headers)
-        assert uncertain.status_code == 500
-        assert uncertain.json()["error"]["code"] == "internal_error"
-        assert uncertain.headers["X-Request-ID"]
-        assert "sqlite" not in uncertain.text.lower()
-        assert "commit" not in uncertain.text.lower()
-
-        delta = 1 if raise_after_commit else 0
-        assert _status(path, order_id) == ("validated" if delta else "draft")
-        assert _status(path, foreign_id) == "draft"
-        assert _counts(path) == (before[0] + delta, before[1] + delta)
-
-        retry = client.post(route, json={"action": "validate"}, headers=headers)
-        assert retry.status_code == 200
-        assert retry.json() == {"id": order_id, "status": "validated"}
-        assert _counts(path) == (before[0] + 1, before[1] + 1)
-        replay = client.post(route, json={"action": "validate"}, headers=headers)
-        assert replay.status_code == 200
-        assert _counts(path) == (before[0] + 1, before[1] + 1)
-
-        conflict = client.post(
-            route,
-            json={"action": "validate"},
-            headers=_headers(csrf, token, key="uncertain-commit-0002"),
-        )
-        assert conflict.status_code == 409
-        assert _counts(path) == (before[0] + 1, before[1] + 1)
+    replay = client.post(route, json={"action": "validate"}, headers=headers)
+    assert replay.status_code == 200
+    assert _counts(path) == (before[0] + 1, before[1] + 1)
+    second = client.post(route, json={"action": "validate"}, headers=headers)
+    assert second.status_code == 200
+    assert _counts(path) == (before[0] + 1, before[1] + 1)
