@@ -93,3 +93,31 @@ test("private API remains disabled and inaccessible without credentials", async 
   expect(result).toEqual({ session: 503, orders: 503 });
   await expect(page.getByLabel("Negocio y ubicación autorizados")).toBeDisabled();
 });
+
+
+test("real API item detail expands without another request or private access", async ({ page }) => {
+  const calls = [];
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (path.startsWith("/api/")) {
+      calls.push({ path, method: request.method(), authorization: request.headers()["authorization"] });
+    }
+  });
+  await page.goto("/");
+  const item = page.locator(".catalog li").filter({ hasText: "Artículo sintético F3.8" });
+  await expect(item).toHaveCount(1);
+  await item.getByRole("button", { name: "Ver detalle" }).click();
+  const detail = item.getByRole("region", { name: "Detalle de Artículo sintético F3.8" });
+  await expect(detail).toBeVisible();
+  await expect(detail.getByText(/12,50\s*€/)).toBeVisible();
+  await expect(detail.getByText("Disponible", { exact: true })).toHaveCount(0);
+  const countAfterOpen = calls.length;
+  await item.getByRole("button", { name: "Ocultar detalle" }).click();
+  await expect(detail).toHaveCount(0);
+  expect(calls).toHaveLength(countAfterOpen);
+  expect(calls.length).toBeGreaterThan(0);
+  expect(calls.every((call) => call.path === FIRST && call.method === "GET"
+    && call.authorization === undefined)).toBe(true);
+  await expect(page.getByLabel("Negocio y ubicación autorizados")).toBeDisabled();
+  expect(await page.evaluate(() => Object.keys(localStorage))).toEqual([]);
+});
