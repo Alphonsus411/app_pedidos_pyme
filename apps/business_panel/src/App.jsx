@@ -123,7 +123,7 @@ export function App() {
           </ul>
         )}
         {catalog.state === "ready" && catalog.nextCursor && (
-          <button type="button" onClick={loadMore} disabled={loadingMore} aria-busy={loadingMore}>
+          <button type="button" onClick={loadMore} aria-disabled={loadingMore} aria-busy={loadingMore}>
             {loadingMore ? "Cargando más artículos…" : "Cargar más artículos"}
           </button>
         )}
