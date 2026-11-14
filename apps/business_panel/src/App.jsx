@@ -99,7 +99,7 @@ export function App() {
               <li key={item.id ?? index}>
                 <strong>{item.name ?? "Artículo sin nombre"}</strong>
                 {typeof item.id === "string" && (
-                  <button type="button" onClick={() => setSelectedItemId((current) => current === item.id ? null : item.id)} aria-expanded={selectedItemId === item.id}>
+                  <button type="button" onClick={() => setSelectedItemId((current) => current === item.id ? null : item.id)} aria-expanded={selectedItemId === item.id} aria-controls={`catalog-detail-${index}`}>
                     {selectedItemId === item.id ? "Ocultar detalle" : "Ver detalle"}
                   </button>
                 )}
@@ -107,7 +107,7 @@ export function App() {
                 <span>{displayPrice(item)}</span>
                 {displayAvailability(item) && <small className="catalog-availability">{displayAvailability(item)}</small>}
                 {selectedItemId === item.id && typeof item.id === "string" && (
-                  <section aria-label={`Detalle de ${item.name ?? "artículo"}`} className="catalog-detail">
+                  <section id={`catalog-detail-${index}`} aria-label={`Detalle de ${item.name ?? "artículo"}`} className="catalog-detail">
                     <h3>{item.name ?? "Artículo sin nombre"}</h3>
                     {displayDescription(item) && <p>{displayDescription(item)}</p>}
                     <p>{displayPrice(item)}</p>

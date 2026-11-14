@@ -178,3 +178,26 @@ test("public item detail expands from the already fetched catalog without new re
   assertOnlyPublicCatalog(requests);
   expect(await page.evaluate(() => Object.keys(localStorage))).toEqual([]);
 });
+
+test("detail toggle exposes its controlled region to keyboard navigation", async ({ page }) => {
+  const requests = await watchApi(page, {
+    items: [{ id: "keyboard", name: "Artículo teclado", price: { amount: "3.50", currency: "EUR" } }],
+    next_cursor: null,
+  });
+  await page.goto("/");
+  const button = page.getByRole("button", { name: "Ver detalle" });
+  await expect(button).toHaveAttribute("aria-expanded", "false");
+  const controlledId = await button.getAttribute("aria-controls");
+  expect(controlledId).toMatch(/^catalog-detail-[0-9]+$/);
+  await button.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("button", { name: "Ocultar detalle" })).toHaveAttribute("aria-expanded", "true");
+  const region = page.locator('[id="' + controlledId + '"]');
+  await expect(region).toHaveAttribute("aria-label", "Detalle de Artículo teclado");
+  await expect(region).toBeVisible();
+  await page.keyboard.press("Enter");
+  await expect(region).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Ver detalle" })).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByLabel("Negocio y ubicación autorizados")).toBeDisabled();
+  assertOnlyPublicCatalog(requests);
+});
