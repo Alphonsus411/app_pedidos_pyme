@@ -1019,3 +1019,8 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
   [IMPLEMENTADO EN RAMA] feat/f4-public-item-detail-lab. Expansión local de datos ya obtenidos por GET público versionado del catálogo; sin endpoint individual nuevo, sin peticiones adicionales, sin mutaciones ni acceso privado.
   [PRUEBAS] Playwright Chromium sintético para expandir/ocultar, mostrar datos API y conservar bloqueo staff. Gates CI Python/frontend pendientes de verificación.
   [DOCUMENTACIÓN] docs/F4_04_DETALLE_PUBLICO_ARTICULO_LAB.md. SQLite solo desarrollo/tests; sin despliegue ni preparación productiva. Pendiente revisión y merge.
+
+146. REGISTRO 2026-11-14 — F4.05 prueba E2E real de detalle público de artículo
+  [IMPLEMENTADO EN RAMA] feat/f4-real-api-item-detail-e2e-lab desde master con F4.04 integrada (#125). Playwright Chromium + FastAPI y SQLite temporal sintética verifica expansión/cierre del detalle desde la respuesta del catálogo, sin peticiones adicionales, sin Authorization y con selector staff deshabilitado.
+  [DOCUMENTACIÓN] docs/F4_05_DETALLE_PUBLICO_E2E_REAL_LAB.md. Pendiente CI Python 3.11/3.12 y frontend (Node/Chromium/API real/build), revisión y merge.
+  [LÍMITES] Solo pruebas y documentación; sin cambios de dominio, API, esquema, frontend productivo, identidad, pedidos o despliegues. SQLite exclusivamente desarrollo/tests.
