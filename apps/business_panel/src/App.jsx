@@ -13,6 +13,15 @@ export function App() {
   const [pageAnnouncement, setPageAnnouncement] = useState("");
   const [selectedItemId, setSelectedItemId] = useState(null);
   const pageRequest = useRef(null);
+  const finalPageFocusPending = useRef(false);
+  const pageStatusRef = useRef(null);
+
+  useEffect(() => {
+    if (finalPageFocusPending.current && catalog.state === "ready" && !catalog.nextCursor) {
+      finalPageFocusPending.current = false;
+      pageStatusRef.current?.focus();
+    }
+  }, [catalog.state, catalog.nextCursor]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -56,6 +65,7 @@ export function App() {
       });
       if (controller.signal.aborted) return;
       setPageAnnouncement(`${data.items.length} artículos recibidos de la API.`);
+      finalPageFocusPending.current = !data.next_cursor;
       setCatalog((previous) => {
         const seen = new Set(previous.items.map((item) => item.id));
         const newItems = data.items.filter((item) => !seen.has(item.id));
@@ -69,6 +79,7 @@ export function App() {
       if (!controller.signal.aborted) {
         setPageError(error instanceof ApiRequestError ? error.message : "No se pudo cargar la siguiente página");
         setPageAnnouncement("");
+        finalPageFocusPending.current = false;
       }
     } finally {
       if (!controller.signal.aborted) setLoadingMore(false);
@@ -127,7 +138,7 @@ export function App() {
             {loadingMore ? "Cargando más artículos…" : "Cargar más artículos"}
           </button>
         )}
-        <p role="status" aria-live="polite" aria-atomic="true" className="catalog-page-status">{pageAnnouncement}</p>
+        <p ref={pageStatusRef} tabIndex={-1} role="status" aria-live="polite" aria-atomic="true" className="catalog-page-status">{pageAnnouncement}</p>
         {pageError && <p role="alert">{pageError}</p>}
       </section>
       <footer>Consulta únicamente · Sin pagos, pedidos confirmados ni operaciones privadas.</footer>
