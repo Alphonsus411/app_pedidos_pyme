@@ -156,3 +156,25 @@ test("pagination errors preserve loaded public items and keep private UI locked"
   await expect(page.getByText("Artículo conservado")).toBeVisible();
   await expect(page.getByLabel("Negocio y ubicación autorizados")).toBeDisabled();
 });
+
+
+test("public item detail expands from the already fetched catalog without new requests", async ({ page }) => {
+  const requests = await watchApi(page, {
+    items: [{ id: "detail-one", name: "Artículo de detalle", description: "Texto sintético", price: { amount: "12.5000", currency: "EUR" } }],
+    next_cursor: null,
+  });
+  await page.goto("/");
+  const toggle = page.getByRole("button", { name: "Ver detalle" });
+  await expect(toggle).toBeVisible();
+  await toggle.click();
+  const detail = page.getByRole("region", { name: "Detalle de Artículo de detalle" });
+  await expect(detail).toBeVisible();
+  await expect(detail.getByText("Texto sintético")).toBeVisible();
+  await expect(detail.getByText(/12,50\s*€/)).toBeVisible();
+  await expect(detail.getByText("Disponible", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Ocultar detalle" }).click();
+  await expect(detail).toHaveCount(0);
+  await expect(page.getByLabel("Negocio y ubicación autorizados")).toBeDisabled();
+  assertOnlyPublicCatalog(requests);
+  expect(await page.evaluate(() => Object.keys(localStorage))).toEqual([]);
+});

@@ -10,6 +10,7 @@ export function App() {
   const [catalog, setCatalog] = useState({ state: "loading", items: [], nextCursor: null });
   const [loadingMore, setLoadingMore] = useState(false);
   const [pageError, setPageError] = useState(null);
+  const [selectedItemId, setSelectedItemId] = useState(null);
   const pageRequest = useRef(null);
 
   useEffect(() => {
@@ -97,9 +98,22 @@ export function App() {
             {catalog.items.map((item, index) => (
               <li key={item.id ?? index}>
                 <strong>{item.name ?? "Artículo sin nombre"}</strong>
+                {typeof item.id === "string" && (
+                  <button type="button" onClick={() => setSelectedItemId((current) => current === item.id ? null : item.id)} aria-expanded={selectedItemId === item.id}>
+                    {selectedItemId === item.id ? "Ocultar detalle" : "Ver detalle"}
+                  </button>
+                )}
                 {displayDescription(item) && <p className="catalog-description">{displayDescription(item)}</p>}
                 <span>{displayPrice(item)}</span>
                 {displayAvailability(item) && <small className="catalog-availability">{displayAvailability(item)}</small>}
+                {selectedItemId === item.id && typeof item.id === "string" && (
+                  <section aria-label={`Detalle de ${item.name ?? "artículo"}`} className="catalog-detail">
+                    <h3>{item.name ?? "Artículo sin nombre"}</h3>
+                    {displayDescription(item) && <p>{displayDescription(item)}</p>}
+                    <p>{displayPrice(item)}</p>
+                    {displayAvailability(item) && <p>{displayAvailability(item)}</p>}
+                  </section>
+                )}
               </li>
             ))}
           </ul>
