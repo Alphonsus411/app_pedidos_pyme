@@ -201,3 +201,32 @@ test("detail toggle exposes its controlled region to keyboard navigation", async
   await expect(page.getByLabel("Negocio y ubicación autorizados")).toBeDisabled();
   assertOnlyPublicCatalog(requests);
 });
+
+
+test("keyboard pagination announces new results and retains focus when more pages exist", async ({ page }) => {
+  const calls = [];
+  await page.route("**/api/v1/**", async (route) => {
+    const url = new URL(route.request().url());
+    calls.push({ path: url.pathname, method: route.request().method() });
+    if (url.pathname !== "/api/v1/public/businesses/demo/locations/main/catalog") {
+      await route.fulfill({ status: 418, body: "{}" });
+      return;
+    }
+    const isSecond = url.searchParams.has("cursor");
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify(isSecond
+        ? { items: [{ id: "second-a11y", name: "Segundo accesible" }], next_cursor: "dGhpcmQ" }
+        : { items: [{ id: "first-a11y", name: "Primero accesible" }], next_cursor: "c2Vjb25k" }),
+    });
+  });
+  await page.goto("/");
+  const more = page.getByRole("button", { name: "Cargar más artículos" });
+  await more.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByText("Segundo accesible")).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "1 artículos recibidos de la API." })).toBeVisible();
+  await expect(more).toBeFocused();
+  await expect(page.getByLabel("Negocio y ubicación autorizados")).toBeDisabled();
+  expect(calls.every((call) => call.path === "/api/v1/public/businesses/demo/locations/main/catalog" && call.method === "GET")).toBe(true);
+});
