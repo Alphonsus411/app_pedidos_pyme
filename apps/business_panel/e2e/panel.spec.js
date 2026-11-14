@@ -230,3 +230,37 @@ test("keyboard pagination announces new results and retains focus when more page
   await expect(page.getByLabel("Negocio y ubicación autorizados")).toBeDisabled();
   expect(calls.every((call) => call.path === "/api/v1/public/businesses/demo/locations/main/catalog" && call.method === "GET")).toBe(true);
 });
+
+
+test("final catalog page restores keyboard focus to the pagination status", async ({ page }) => {
+  const calls = [];
+  await page.route("**/api/v1/**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    calls.push({ path: url.pathname, method: request.method(), authorization: (await request.allHeaders()).authorization });
+    if (url.pathname !== "/api/v1/public/businesses/demo/locations/main/catalog") {
+      await route.fulfill({ status: 418, body: "{}" });
+      return;
+    }
+    const final = url.searchParams.has("cursor");
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify(final
+        ? { items: [{ id: "final", name: "Último artículo" }], next_cursor: null }
+        : { items: [{ id: "initial", name: "Primer artículo" }], next_cursor: "bmV4dA" }),
+    });
+  });
+  await page.goto("/");
+  const button = page.getByRole("button", { name: "Cargar más artículos" });
+  await button.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByText("Último artículo")).toBeVisible();
+  await expect(button).toHaveCount(0);
+  const status = page.locator(".catalog-page-status");
+  await expect(status).toHaveText("1 artículos recibidos de la API.");
+  await expect(status).toBeFocused();
+  await expect(page.getByLabel("Negocio y ubicación autorizados")).toBeDisabled();
+  expect(calls.length).toBeGreaterThan(0);
+  expect(calls.every((call) => call.path === "/api/v1/public/businesses/demo/locations/main/catalog"
+    && call.method === "GET" && call.authorization === undefined)).toBe(true);
+});
