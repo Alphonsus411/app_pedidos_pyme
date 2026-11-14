@@ -10,6 +10,7 @@ export function App() {
   const [catalog, setCatalog] = useState({ state: "loading", items: [], nextCursor: null });
   const [loadingMore, setLoadingMore] = useState(false);
   const [pageError, setPageError] = useState(null);
+  const [pageAnnouncement, setPageAnnouncement] = useState("");
   const [selectedItemId, setSelectedItemId] = useState(null);
   const pageRequest = useRef(null);
 
@@ -46,6 +47,7 @@ export function App() {
     pageRequest.current = controller;
     setLoadingMore(true);
     setPageError(null);
+    setPageAnnouncement("Cargando más artículos…");
     try {
       const data = await getPublicCatalog({
         ...DEMO,
@@ -53,6 +55,7 @@ export function App() {
         fetchImpl: (url, options) => fetch(url, { ...options, signal: controller.signal }),
       });
       if (controller.signal.aborted) return;
+      setPageAnnouncement(`${data.items.length} artículos recibidos de la API.`);
       setCatalog((previous) => {
         const seen = new Set(previous.items.map((item) => item.id));
         const newItems = data.items.filter((item) => !seen.has(item.id));
@@ -65,6 +68,7 @@ export function App() {
     } catch (error) {
       if (!controller.signal.aborted) {
         setPageError(error instanceof ApiRequestError ? error.message : "No se pudo cargar la siguiente página");
+        setPageAnnouncement("");
       }
     } finally {
       if (!controller.signal.aborted) setLoadingMore(false);
@@ -83,7 +87,7 @@ export function App() {
       <PrivateReadiness />
 
 
-      <section className="panel" aria-labelledby="catalog-title" aria-live="polite">
+      <section className="panel" aria-labelledby="catalog-title">
         <div className="section-heading">
           <h2 id="catalog-title">Vista pública del catálogo</h2>
           <span>Negocio sintético: demo / main</span>
@@ -123,6 +127,7 @@ export function App() {
             {loadingMore ? "Cargando más artículos…" : "Cargar más artículos"}
           </button>
         )}
+        <p role="status" aria-live="polite" aria-atomic="true" className="catalog-page-status">{pageAnnouncement}</p>
         {pageError && <p role="alert">{pageError}</p>}
       </section>
       <footer>Consulta únicamente · Sin pagos, pedidos confirmados ni operaciones privadas.</footer>
