@@ -225,7 +225,7 @@ test("keyboard pagination announces new results and retains focus when more page
   await more.focus();
   await page.keyboard.press("Enter");
   await expect(page.getByText("Segundo accesible")).toBeVisible();
-  await expect(page.getByRole("status").filter({ hasText: "1 artículos recibidos de la API." })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "1 artículos nuevos añadidos al catálogo." })).toBeVisible();
   await expect(more).toBeFocused();
   await expect(page.getByLabel("Negocio y ubicación autorizados")).toBeDisabled();
   expect(calls.every((call) => call.path === "/api/v1/public/businesses/demo/locations/main/catalog" && call.method === "GET")).toBe(true);
@@ -257,10 +257,66 @@ test("final catalog page restores keyboard focus to the pagination status", asyn
   await expect(page.getByText("Último artículo")).toBeVisible();
   await expect(button).toHaveCount(0);
   const status = page.locator(".catalog-page-status");
-  await expect(status).toHaveText("1 artículos recibidos de la API.");
+  await expect(status).toHaveText("1 artículos nuevos añadidos al catálogo.");
   await expect(status).toBeFocused();
   await expect(page.getByLabel("Negocio y ubicación autorizados")).toBeDisabled();
   expect(calls.length).toBeGreaterThan(0);
   expect(calls.every((call) => call.path === "/api/v1/public/businesses/demo/locations/main/catalog"
     && call.method === "GET" && call.authorization === undefined)).toBe(true);
+});
+
+test("duplicate and empty pages do not invent new catalog entries", async ({ page }) => {
+  const calls = [];
+  await page.route("**/api/v1/**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    calls.push({ path: url.pathname, method: request.method(), authorization: (await request.allHeaders()).authorization });
+    if (url.pathname !== "/api/v1/public/businesses/demo/locations/main/catalog") {
+      await route.fulfill({ status: 418, body: "{}" });
+      return;
+    }
+    const cursor = url.searchParams.get("cursor");
+    const payload = cursor === "c2Vjb25k"
+      ? { items: [{ id: "same", name: "Único artículo" }, { id: "same", name: "Único artículo" }], next_cursor: "dGhpcmQ" }
+      : cursor === "dGhpcmQ"
+        ? { items: [], next_cursor: null }
+        : { items: [{ id: "same", name: "Único artículo" }], next_cursor: "c2Vjb25k" };
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(payload) });
+  });
+  await page.goto("/");
+  const more = page.getByRole("button", { name: "Cargar más artículos" });
+  await expect(page.getByText("Único artículo")).toHaveCount(1);
+  await more.click();
+  await expect(page.locator(".catalog-page-status")).toHaveText("No hay artículos nuevos en esta página.");
+  await expect(page.getByText("Único artículo")).toHaveCount(1);
+  await more.click();
+  await expect(more).toHaveCount(0);
+  await expect(page.locator(".catalog-page-status")).toHaveText("No hay artículos nuevos en esta página.");
+  await expect(page.getByText("Único artículo")).toHaveCount(1);
+  expect(calls.every((call) => call.path === "/api/v1/public/businesses/demo/locations/main/catalog"
+    && call.method === "GET" && call.authorization === undefined)).toBe(true);
+});
+
+test("repeated cursor stops pagination rather than looping", async ({ page }) => {
+  const calls = [];
+  await page.route("**/api/v1/**", async (route) => {
+    const url = new URL(route.request().url());
+    calls.push(url.pathname);
+    if (url.pathname !== "/api/v1/public/businesses/demo/locations/main/catalog") {
+      await route.fulfill({ status: 418, body: "{}" });
+      return;
+    }
+    const second = url.searchParams.has("cursor");
+    await route.fulfill({ status: 200, contentType: "application/json",
+      body: JSON.stringify(second
+        ? { items: [], next_cursor: "c2Vjb25k" }
+        : { items: [{ id: "one", name: "Artículo estable" }], next_cursor: "c2Vjb25k" }),
+    });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Cargar más artículos" }).click();
+  await expect(page.getByRole("button", { name: "Cargar más artículos" })).toHaveCount(0);
+  await expect(page.getByText("Artículo estable")).toBeVisible();
+  expect(calls.length).toBeGreaterThan(0);
+  expect(calls.every((path) => path === "/api/v1/public/businesses/demo/locations/main/catalog")).toBe(true);
 });

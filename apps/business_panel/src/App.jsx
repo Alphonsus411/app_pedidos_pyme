@@ -64,17 +64,23 @@ export function App() {
         fetchImpl: (url, options) => fetch(url, { ...options, signal: controller.signal }),
       });
       if (controller.signal.aborted) return;
-      setPageAnnouncement(`${data.items.length} artículos recibidos de la API.`);
-      finalPageFocusPending.current = !data.next_cursor;
-      setCatalog((previous) => {
-        const seen = new Set(previous.items.map((item) => item.id));
-        const newItems = data.items.filter((item) => !seen.has(item.id));
-        return {
-          state: "ready",
-          items: [...previous.items, ...newItems],
-          nextCursor: data.next_cursor ?? null,
-        };
+      const seen = new Set(catalog.items.map((item) => item.id));
+      const newItems = data.items.filter((item) => {
+        if (seen.has(item.id)) return false;
+        seen.add(item.id);
+        return true;
       });
+      const nextCursor = data.next_cursor && data.next_cursor !== catalog.nextCursor
+        ? data.next_cursor : null;
+      setPageAnnouncement(newItems.length === 0
+        ? "No hay artículos nuevos en esta página."
+        : `${newItems.length} artículos nuevos añadidos al catálogo.`);
+      finalPageFocusPending.current = !nextCursor;
+      setCatalog((previous) => ({
+        state: "ready",
+        items: [...previous.items, ...newItems],
+        nextCursor,
+      }));
     } catch (error) {
       if (!controller.signal.aborted) {
         setPageError(error instanceof ApiRequestError ? error.message : "No se pudo cargar la siguiente página");
