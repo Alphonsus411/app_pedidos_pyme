@@ -1039,3 +1039,8 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
   [IMPLEMENTADO EN RAMA] feat/f4-pagination-end-focus-lab desde master con F4.07 integrada (#128). Al agotarse el cursor tras carga adicional, el foco se traslada a región de estado tras el render; no se mueve en carga inicial, con más páginas ni en errores.
   [PRUEBAS] Playwright Chromium sintético de teclado, última página, foco, GET públicos sin Authorization. docs/F4_08_FOCO_FINAL_PAGINACION_LAB.md. CI Python y frontend pendientes.
   [LÍMITES] Sin cambios de API, dominio, esquema, identidad, pagos ni despliegues; SQLite solo desarrollo/pruebas. No certificación WCAG.
+
+150. REGISTRO 2026-11-15 — F4.09 robustez de paginación pública
+  [IMPLEMENTADO EN RAMA] feat/f4-pagination-robustness-lab desde master con F4.08 integrada (#129). Deduplicación por id en la página y respecto al catálogo previo; anuncios de nuevos artículos reales, páginas sin novedades y bloqueo de cursor idéntico al solicitado.
+  [PRUEBAS] Playwright sintético: duplicados, páginas vacías, cursor repetido y regresión de foco; CI Python 3.11/3.12 y frontend pendiente. docs/F4_09_ROBUSTEZ_PAGINACION_LAB.md.
+  [LÍMITES] No detección de ciclos de cursor de varios pasos. Sin cambios de API, dominio, persistencia, identidad, pagos ni despliegues; SQLite solo desarrollo/pruebas.
