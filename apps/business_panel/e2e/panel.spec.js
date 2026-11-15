@@ -320,3 +320,53 @@ test("repeated cursor stops pagination rather than looping", async ({ page }) =>
   expect(calls.length).toBeGreaterThan(0);
   expect(calls.every((path) => path === "/api/v1/public/businesses/demo/locations/main/catalog")).toBe(true);
 });
+
+
+test("transient pagination failure allows explicit keyboard retry without losing items", async ({ page }) => {
+  const calls = [];
+  let attempts = 0;
+  await page.route("**/api/v1/**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    calls.push({ path: url.pathname, cursor: url.searchParams.get("cursor"),
+      method: request.method(), authorization: (await request.allHeaders()).authorization });
+    if (url.pathname !== "/api/v1/public/businesses/demo/locations/main/catalog") {
+      await route.fulfill({ status: 418, body: "{}" });
+      return;
+    }
+    if (url.searchParams.has("cursor")) {
+      attempts += 1;
+      if (attempts === 1) {
+        await route.fulfill({ status: 503, contentType: "application/json", body: "{}" });
+        return;
+      }
+      await route.fulfill({ status: 200, contentType: "application/json",
+        body: JSON.stringify({ items: [{ id: "recovered", name: "Artículo recuperado" }], next_cursor: null }) });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: "application/json",
+      body: JSON.stringify({ items: [{ id: "kept", name: "Artículo conservado" }], next_cursor: "bmV4dA" }) });
+  });
+  await page.goto("/");
+  await expect(page.getByText("Artículo conservado")).toBeVisible();
+  const more = page.getByRole("button", { name: "Cargar más artículos" });
+  await more.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("alert")).toContainText("No se pudo consultar la API");
+  await expect(page.getByText("Artículo conservado")).toBeVisible();
+  await expect(more).toBeFocused();
+  await expect(more).toHaveAttribute("aria-disabled", "false");
+  await page.keyboard.press("Enter");
+  await expect(page.getByText("Artículo recuperado")).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(page.getByText("Artículo conservado")).toHaveCount(1);
+  await expect(page.getByText("Artículo recuperado")).toHaveCount(1);
+  await expect(more).toHaveCount(0);
+  await expect(page.locator(".catalog-page-status")).toBeFocused();
+  expect(attempts).toBe(2);
+  expect(calls.filter((call) => call.cursor === "bmV4dA")).toHaveLength(2);
+  expect(calls.every((call) => call.path === "/api/v1/public/businesses/demo/locations/main/catalog"
+    && call.method === "GET" && call.authorization === undefined)).toBe(true);
+  await expect(page.getByLabel("Negocio y ubicación autorizados")).toBeDisabled();
+  expect(await page.evaluate(() => Object.keys(localStorage))).toEqual([]);
+});
