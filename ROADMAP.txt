@@ -1049,3 +1049,8 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
   [IMPLEMENTADO EN RAMA] feat/f4-pagination-retry-regression-lab desde master tras F4.09 (#130). Playwright sintético verifica 503 en cursor, conservación de artículos y foco, reintento manual con Enter, recuperación, eliminación de alerta, dos GET al mismo cursor sin Authorization, bloqueo staff y almacenamiento local vacío.
   [DOCUMENTACIÓN] docs/F4_10_REINTENTO_PAGINACION_LAB.md. CI Python y frontend pendientes; PR borrador hasta verificación.
   [LÍMITES] Solo pruebas/documentación, sin reintentos automáticos ni cambios de API, dominio, persistencia, autenticación o despliegues. SQLite solo desarrollo/pruebas.
+
+152. REGISTRO 2026-11-15 — F4.11 propuesta de cierre de calidad del catálogo público
+  [IMPLEMENTADO EN RAMA] docs/f4-public-catalog-quality-gate desde master tras F4.10 (#131). Matriz de aceptación y evidencias de F4.01–F4.10; inventario de riesgos, bloqueos productivos y procedimiento reproducible de CI.
+  [DOCUMENTACIÓN] docs/F4_11_CIERRE_CALIDAD_CATALOGO_PUBLICO_LAB.md. Candidato a gate exclusivamente de laboratorio, condicionado a CI verde de la PR y revisión humana.
+  [LÍMITES] No se declara producción, conformidad WCAG ni cierre de identidad, transacciones o persistencia real. Sin cambios de código, API, SQLite, workflows o despliegues.

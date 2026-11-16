@@ -11,6 +11,7 @@ on:
   pull_request:
     paths:
       - "apps/business_panel/**"
+      - "docs/F4_11_CIERRE_CALIDAD_CATALOGO_PUBLICO_LAB.md"
       - ".github/workflows/business-panel.yml"
 
 jobs:
