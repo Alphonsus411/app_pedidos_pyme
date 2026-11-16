@@ -1054,3 +1054,9 @@ Nota de trazabilidad: fechas registran hitos o esta revisión, no compromisos fu
   [IMPLEMENTADO EN RAMA] docs/f4-public-catalog-quality-gate desde master tras F4.10 (#131). Matriz de aceptación y evidencias de F4.01–F4.10; inventario de riesgos, bloqueos productivos y procedimiento reproducible de CI.
   [DOCUMENTACIÓN] docs/F4_11_CIERRE_CALIDAD_CATALOGO_PUBLICO_LAB.md. Candidato a gate exclusivamente de laboratorio, condicionado a CI verde de la PR y revisión humana.
   [LÍMITES] No se declara producción, conformidad WCAG ni cierre de identidad, transacciones o persistencia real. Sin cambios de código, API, SQLite, workflows o despliegues.
+
+153. REGISTRO 2026-11-16 — F5.01 diseño de identidad y autorización por ámbito
+  [IMPLEMENTADO EN RAMA] docs/f5-identity-authz-contract-lab desde master tras F4.11 (#132). Contrato documental de principal, sesión revocable, pertenencia a negocio/ubicación, permisos, auditoría y denegación por defecto.
+  [ACEPTACIÓN] Matriz 401/403/404, revocación, aislamiento multiempresa, acceso solo por API HTTP, CSRF y pruebas negativas propuestas.
+  [DOCUMENTACIÓN] docs/F5_01_CONTRATO_IDENTIDAD_AUTORIZACION_LAB.md. No se implementa autenticación, sesiones, migraciones ni endpoints privados; pendiente de CI y revisión.
+  [LÍMITES] SQLite solo desarrollo/pruebas; sin pagos, despliegues ni cambios de código de ejecución.
